@@ -1,0 +1,45 @@
+# SPDX-FileCopyrightText: 2020-2026 Akseli Mansikkamäki
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ouluspin"
+version = "0.1.0"
+description = "A Python library for theoretical molecular magnetism: pseudospin Hamiltonians and magnetic properties from ab initio data"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "GPL-3.0-or-later" }
+authors = [
+    { name = "Akseli Mansikkamäki", email = "akseli.mansikkamaki@gmail.com" },
+]
+keywords = [
+    "molecular magnetism",
+    "pseudospin Hamiltonian",
+    "magnetic anisotropy",
+    "quantum chemistry",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Fortran",
+    "Topic :: Scientific/Engineering :: Chemistry",
+    "Topic :: Scientific/Engineering :: Physics",
+]
+dependencies = [
+    "numpy",
+    "scipy",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# The compiled Fortran extension module (built separately with make; see
+# src/fortran) is shipped as package data so that it is included in
+# installations when present.
+[tool.setuptools.package-data]
+"ouluspin._fortran" = ["*.so"]

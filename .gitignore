@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+
+# Fortran build artifacts
+src/fortran/*.o
+src/fortran/*.mod
+src/fortran/*.so
+src/fortran/make.inc
+
+# The compiled extension module (built locally with make)
+src/ouluspin/_fortran/*.so
+
+# Local scrap calculations (large data files; not part of the library)
+test_runs/
+
+# Claude Code / assistant files (not part of the published library)
+CLAUDE.md
+.claude/
+
+# Internal development notes (not part of the published library)
+to-do.txt

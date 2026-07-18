@@ -1,0 +1,561 @@
+!    -*- f90 -*-
+! Note: the context of this file is case sensitive.
+
+python module cg_product__user__routines 
+    interface cg_product_user_interface 
+        function f(p,n_par) result (f_value) ! in :fortran_utils:cg_utils.f90:cg_utils:cg_product:unknown_interface
+            integer dimension(n_par) :: p
+            integer, optional,intent(in),check(shape(p, 0) == n_par),depend(p) :: n_par=shape(p, 0)
+            real(kind=8) :: f_value
+        end function f
+    end interface cg_product_user_interface
+end python module cg_product__user__routines
+python module fortran_utils ! in 
+    interface  ! in :fortran_utils
+        module num_utils ! in :fortran_utils:num_utils.f90
+            integer, parameter,optional :: real64=kind(1.d0)
+            integer, parameter,optional :: int64=selected_int_kind(16)
+            integer, parameter,optional :: real128=selected_real_kind(30)
+            integer, parameter,optional :: relevant_primes=100
+            complex(kind=8), optional,depend(real64) :: imaginary_unit=cmplx(0.0,1.0,kind=real64)
+            real(kind=8), parameter,optional :: pi=3.1415926535897932384626433d0
+            real(kind=8), parameter,optional :: dp_zero=0.0
+            real(kind=8), parameter,optional :: dp_one=1.0
+            real(kind=8), parameter,optional :: small_number=1e-06
+            real(kind=8), parameter,optional :: very_small_number=1e-09
+            real(kind=8), parameter,optional :: really_small_number=1e-12
+            integer, parameter,optional :: cfp_max_terms=120
+            real(kind=8), parameter,optional :: cfp_projector_tolerance=1e-08
+            real(kind=8), parameter,optional :: cfp_degeneracy_tolerance=1e-07
+            real(kind=8), parameter,optional :: cfp_drop_tolerance=1e-08
+        end module num_utils
+        module math_utils ! in :fortran_utils:math_utils.f90
+            use num_utils
+            function real_close_to(a,b) result (test_result) ! in :fortran_utils:math_utils.f90:math_utils
+                real(kind=8) intent(in) :: a
+                real(kind=8) intent(in) :: b
+                logical :: test_result
+            end function real_close_to
+            function complex_close_to(a,b) result (test_result) ! in :fortran_utils:math_utils.f90:math_utils
+                complex(kind=8) intent(in) :: a
+                complex(kind=8) intent(in) :: b
+                logical :: test_result
+            end function complex_close_to
+            function real_is_zero(a) result (test_result) ! in :fortran_utils:math_utils.f90:math_utils
+                real(kind=8) intent(in) :: a
+                logical :: test_result
+            end function real_is_zero
+            function complex_is_zero(a) result (test_result) ! in :fortran_utils:math_utils.f90:math_utils
+                complex(kind=8) intent(in) :: a
+                logical :: test_result
+            end function complex_is_zero
+            function factorial(n) result (answer) ! in :fortran_utils:math_utils.f90:math_utils
+                integer intent(in) :: n
+                integer(kind=8) :: answer
+            end function factorial
+            function triangular_condition(j1,j2,j) result (holds) ! in :fortran_utils:math_utils.f90:math_utils
+                integer intent(in) :: j1
+                integer intent(in) :: j2
+                integer intent(in) :: j
+                logical :: holds
+            end function triangular_condition
+            function generate_list_of_primes(number_of_primes) result (list_of_primes) ! in :fortran_utils:math_utils.f90:math_utils
+                integer intent(in) :: number_of_primes
+                integer dimension(number_of_primes) :: list_of_primes
+            end function generate_list_of_primes
+            function largest_prime(n) result (max_index) ! in :fortran_utils:math_utils.f90:math_utils
+                integer intent(in) :: n
+                integer :: max_index
+            end function largest_prime
+            function evaluate_power_of_primes(power_of_primes,max_index) result (pp_value) ! in :fortran_utils:math_utils.f90:math_utils
+                integer dimension(max_index),intent(in) :: power_of_primes
+                integer, optional,intent(in),check(shape(power_of_primes, 0) == max_index),depend(power_of_primes) :: max_index=shape(power_of_primes, 0)
+                real(kind=8) :: pp_value
+            end function evaluate_power_of_primes
+            function power_of_primes_factorial(n,max_index) result (power_of_primes) ! in :fortran_utils:math_utils.f90:math_utils
+                integer intent(in) :: n
+                integer intent(in) :: max_index
+                integer dimension(max_index) :: power_of_primes
+            end function power_of_primes_factorial
+            function levi_civita(i,j,k) result (l) ! in :fortran_utils:math_utils.f90:math_utils
+                integer intent(in) :: i
+                integer intent(in) :: j
+                integer intent(in) :: k
+                integer :: l
+            end function levi_civita
+        end module math_utils
+        module matrix_utils ! in :fortran_utils:matrix_utils.f90
+            use num_utils
+            use math_utils
+            subroutine commutator(a,b,c,n_basis) ! in :fortran_utils:matrix_utils.f90:matrix_utils
+                complex(kind=8) dimension(n_basis,n_basis),intent(in) :: a
+                complex(kind=8) dimension(n_basis,n_basis),intent(in),depend(n_basis) :: b
+                complex(kind=8) dimension(n_basis,n_basis),intent(out),depend(n_basis) :: c
+                integer, optional,intent(in),check(shape(a, 0) == n_basis),depend(a) :: n_basis=shape(a, 0)
+            end subroutine commutator
+            function check_hermicity(a,n_basis) result (test_value) ! in :fortran_utils:matrix_utils.f90:matrix_utils
+                complex(kind=8) dimension(n_basis,n_basis),intent(in) :: a
+                integer, optional,intent(in),check(shape(a, 0) == n_basis),depend(a) :: n_basis=shape(a, 0)
+                logical :: test_value
+            end function check_hermicity
+            subroutine external_diagonalize_complex_matrix(matrix,eigenvalues,eigenvectors,n_basis) ! in :fortran_utils:matrix_utils.f90:matrix_utils
+                complex(kind=8) dimension(n_basis,n_basis),intent(in) :: matrix
+                real(kind=8) dimension(n_basis),intent(out),depend(n_basis) :: eigenvalues
+                complex(kind=8) dimension(n_basis,n_basis),intent(out),depend(n_basis) :: eigenvectors
+                integer, optional,intent(in),check(shape(matrix, 0) == n_basis),depend(matrix) :: n_basis=shape(matrix, 0)
+            end subroutine external_diagonalize_complex_matrix
+            subroutine diagonalize_complex_matrix(matrix,eigenvalues,n_basis,compute_eigenvectors) ! in :fortran_utils:matrix_utils.f90:matrix_utils
+                complex(kind=8) dimension(n_basis,n_basis),intent(inout) :: matrix
+                real(kind=8) dimension(n_basis),intent(out),depend(n_basis) :: eigenvalues
+                integer, optional,intent(in),check(shape(matrix, 0) == n_basis),depend(matrix) :: n_basis=shape(matrix, 0)
+                logical intent(in) :: compute_eigenvectors
+            end subroutine diagonalize_complex_matrix
+            subroutine diagonalize_real_symmetric_matrix(matrix,eigenvalues,n_basis,compute_eigenvectors) ! in :fortran_utils:matrix_utils.f90:matrix_utils
+                real(kind=8) dimension(n_basis,n_basis),intent(inout) :: matrix
+                real(kind=8) dimension(n_basis),intent(out),depend(n_basis) :: eigenvalues
+                integer, optional,intent(in),check(shape(matrix, 0) == n_basis),depend(matrix) :: n_basis=shape(matrix, 0)
+                logical intent(in) :: compute_eigenvectors
+            end subroutine diagonalize_real_symmetric_matrix
+            subroutine basis_transformation(c,a,b,n_basis,direction) ! in :fortran_utils:matrix_utils.f90:matrix_utils
+                complex(kind=8) dimension(n_basis,n_basis),intent(in) :: c
+                complex(kind=8) dimension(n_basis,n_basis),intent(in),depend(n_basis) :: a
+                complex(kind=8) dimension(n_basis,n_basis),intent(out),depend(n_basis) :: b
+                integer, optional,intent(in),check(shape(c, 0) == n_basis),depend(c) :: n_basis=shape(c, 0)
+                integer intent(in) :: direction
+            end subroutine basis_transformation
+            subroutine spectral_representation(eig,c,n_basis,matrix) ! in :fortran_utils:matrix_utils.f90:matrix_utils
+                real(kind=8) dimension(n_basis),intent(in) :: eig
+                complex(kind=8) dimension(n_basis,n_basis),intent(in),depend(n_basis) :: c
+                integer, optional,intent(in),check(shape(eig, 0) == n_basis),depend(eig) :: n_basis=shape(eig, 0)
+                complex(kind=8) dimension(n_basis,n_basis),intent(out),depend(n_basis) :: matrix
+            end subroutine spectral_representation
+            subroutine rotate_vector_operator_matrix(v_init,v_final,r,n_basis) ! in :fortran_utils:matrix_utils.f90:matrix_utils
+                complex(kind=8) dimension(3,n_basis,n_basis),intent(in) :: v_init
+                complex(kind=8) dimension(3,n_basis,n_basis),intent(out),depend(n_basis) :: v_final
+                real(kind=8) dimension(3,3),intent(in) :: r
+                integer, optional,intent(in),check(shape(v_init, 1) == n_basis),depend(v_init) :: n_basis=shape(v_init, 1)
+            end subroutine rotate_vector_operator_matrix
+            subroutine squared_vector_operator(vector_operator,scalar_operator,n_basis) ! in :fortran_utils:matrix_utils.f90:matrix_utils
+                complex(kind=8) dimension(3,n_basis,n_basis),intent(in) :: vector_operator
+                complex(kind=8) dimension(n_basis,n_basis),intent(out),depend(n_basis) :: scalar_operator
+                integer, optional,intent(in),check(shape(vector_operator, 1) == n_basis),depend(vector_operator) :: n_basis=shape(vector_operator, 1)
+            end subroutine squared_vector_operator
+            subroutine hadamard_product(a,b,c,n_basis) ! in :fortran_utils:matrix_utils.f90:matrix_utils
+                complex(kind=8) dimension(n_basis,n_basis),intent(in) :: a
+                complex(kind=8) dimension(n_basis,n_basis),intent(in),depend(n_basis) :: b
+                complex(kind=8) dimension(n_basis,n_basis),intent(out),depend(n_basis) :: c
+                integer, optional,intent(in),check(shape(a, 0) == n_basis),depend(a) :: n_basis=shape(a, 0)
+            end subroutine hadamard_product
+            subroutine phase_matrix(input_matrix,output_matrix,n_basis) ! in :fortran_utils:matrix_utils.f90:matrix_utils
+                complex(kind=8) dimension(n_basis,n_basis),intent(in) :: input_matrix
+                real(kind=8) dimension(n_basis,n_basis),intent(out),depend(n_basis) :: output_matrix
+                integer, optional,intent(in),check(shape(input_matrix, 0) == n_basis),depend(input_matrix) :: n_basis=shape(input_matrix, 0)
+            end subroutine phase_matrix
+            subroutine complex_matrix_product(a,b,c,conj_a,conj_b,n_basis) ! in :fortran_utils:matrix_utils.f90:matrix_utils
+                complex(kind=8) dimension(n_basis,n_basis),intent(in) :: a
+                complex(kind=8) dimension(n_basis,n_basis),intent(in),depend(n_basis) :: b
+                complex(kind=8) dimension(n_basis,n_basis),intent(out),depend(n_basis) :: c
+                character*1 intent(in) :: conj_a
+                character*1 intent(in) :: conj_b
+                integer, optional,intent(in),check(shape(a, 0) == n_basis),depend(a) :: n_basis=shape(a, 0)
+            end subroutine complex_matrix_product
+        end module matrix_utils
+        module angm_utils ! in :fortran_utils:angm_utils.f90
+            use num_utils
+            use math_utils
+            use matrix_utils
+            function wigner_small_d(j,m1,m2,angle) result (d_value) ! in :fortran_utils:angm_utils.f90:angm_utils
+                integer intent(in) :: j
+                integer intent(in) :: m1
+                integer intent(in) :: m2
+                real(kind=8) intent(in) :: angle
+                real(kind=8) :: d_value
+            end function wigner_small_d
+            function old_wigner_small_d(j,m1,m2,angle) result (d_value) ! in :fortran_utils:angm_utils.f90:angm_utils
+                integer intent(in) :: j
+                integer intent(in) :: m1
+                integer intent(in) :: m2
+                real(kind=8) intent(in) :: angle
+                real(kind=8) :: d_value
+            end function old_wigner_small_d
+            function wigner_big_d(j,m1,m2,alpha,beta,gamma) result (d_value) ! in :fortran_utils:angm_utils.f90:angm_utils
+                integer intent(in) :: j
+                integer intent(in) :: m1
+                integer intent(in) :: m2
+                real(kind=8) intent(in) :: alpha
+                real(kind=8) intent(in) :: beta
+                real(kind=8) intent(in) :: gamma
+                complex(kind=8) :: d_value
+            end function wigner_big_d
+            function wigner_6j(j1,j2,j3,l1,l2,l3) result (sixj) ! in :fortran_utils:angm_utils.f90:angm_utils
+                integer intent(in) :: j1
+                integer intent(in) :: j2
+                integer intent(in) :: j3
+                integer intent(in) :: l1
+                integer intent(in) :: l2
+                integer intent(in) :: l3
+                real(kind=8) :: sixj
+            end function wigner_6j
+            function wigner_9j(j1,j2,j3,j4,j5,j6,j7,j8,j9) result (ninej) ! in :fortran_utils:angm_utils.f90:angm_utils
+                integer intent(in) :: j1
+                integer intent(in) :: j2
+                integer intent(in) :: j3
+                integer intent(in) :: j4
+                integer intent(in) :: j5
+                integer intent(in) :: j6
+                integer intent(in) :: j7
+                integer intent(in) :: j8
+                integer intent(in) :: j9
+                real(kind=8) :: ninej
+            end function wigner_9j
+            subroutine coupled_basis(j_array,m_array,coupled_j_array,coupled_m_array,n_basis,n_sites) ! in :fortran_utils:angm_utils.f90:angm_utils
+                integer dimension(n_basis,n_sites),intent(in) :: j_array
+                integer dimension(n_basis,n_sites),intent(in),depend(n_sites,n_basis) :: m_array
+                integer dimension(n_basis,n_sites),intent(out),depend(n_sites,n_basis) :: coupled_j_array
+                integer dimension(n_basis,n_sites),intent(out),depend(n_sites,n_basis) :: coupled_m_array
+                integer, optional,intent(in),check(shape(j_array, 0) == n_basis),depend(j_array) :: n_basis=shape(j_array, 0)
+                integer, optional,intent(in),check(shape(j_array, 1) == n_sites),depend(j_array) :: n_sites=shape(j_array, 1)
+            end subroutine coupled_basis
+        end module angm_utils
+        module cg_utils ! in :fortran_utils:cg_utils.f90
+            use num_utils
+            use math_utils
+            function old_cg(j1,m1,j2,m2,j,m) result (coeff) ! in :fortran_utils:cg_utils.f90:cg_utils
+                integer intent(in) :: j1
+                integer intent(in) :: m1
+                integer intent(in) :: j2
+                integer intent(in) :: m2
+                integer intent(in) :: j
+                integer intent(in) :: m
+                real(kind=8) :: coeff
+            end function old_cg
+            function cg(j1,m1,j2,m2,j,m) result (coeff) ! in :fortran_utils:cg_utils.f90:cg_utils
+                integer intent(in) :: j1
+                integer intent(in) :: m1
+                integer intent(in) :: j2
+                integer intent(in) :: m2
+                integer intent(in) :: j
+                integer intent(in) :: m
+                real(kind=8) :: coeff
+            end function cg
+            function cg_by_m_recursion(j1,m1,j2,m2,j,m) result (rec_coeff) ! in :fortran_utils:cg_utils.f90:cg_utils
+                integer intent(in) :: j1
+                integer intent(in) :: m1
+                integer intent(in) :: j2
+                integer intent(in) :: m2
+                integer intent(in) :: j
+                integer intent(in) :: m
+                real(kind=8) :: rec_coeff
+            end function cg_by_m_recursion
+            function cg_is_allowed(j1,m1,j2,m2,j,m) result (allowed) ! in :fortran_utils:cg_utils.f90:cg_utils
+                integer intent(in) :: j1
+                integer intent(in) :: m1
+                integer intent(in) :: j2
+                integer intent(in) :: m2
+                integer intent(in) :: j
+                integer intent(in) :: m
+                logical :: allowed
+            end function cg_is_allowed
+            function partial_cg_product(p,cg_map,cg_level,level,n_par,n_cg) result (prod) ! in :fortran_utils:cg_utils.f90:cg_utils
+                integer dimension(n_par),intent(in) :: p
+                integer dimension(n_cg,6),intent(in) :: cg_map
+                integer dimension(n_cg),intent(in),depend(n_cg) :: cg_level
+                integer intent(in) :: level
+                integer, optional,intent(in),check(shape(p, 0) == n_par),depend(p) :: n_par=shape(p, 0)
+                integer, optional,intent(in),check(shape(cg_map, 0) == n_cg),depend(cg_map) :: n_cg=shape(cg_map, 0)
+                real(kind=8) :: prod
+            end function partial_cg_product
+            subroutine cg_product(param_ranges,phase_vector,f,cg_map,f_first,total_sum,n_par,n_cg) ! in :fortran_utils:cg_utils.f90:cg_utils
+                use cg_product__user__routines
+                integer dimension(n_par,2),intent(in) :: param_ranges
+                integer dimension(n_par),intent(in),depend(n_par) :: phase_vector
+                external f
+                integer dimension(n_cg,6),intent(in) :: cg_map
+                logical intent(in) :: f_first
+                real(kind=8) intent(out) :: total_sum
+                integer, optional,intent(in),check(shape(param_ranges, 0) == n_par),depend(param_ranges) :: n_par=shape(param_ranges, 0)
+                integer, optional,intent(in),check(shape(cg_map, 0) == n_cg),depend(cg_map) :: n_cg=shape(cg_map, 0)
+            end subroutine cg_product
+            function special_cg(j,k) result (coeff) ! in :fortran_utils:cg_utils.f90:cg_utils
+                integer intent(in) :: j
+                integer intent(in) :: k
+                real(kind=8) :: coeff
+            end function special_cg
+        end module cg_utils
+        module iwahara_utils ! in :fortran_utils:iwahara_utils.f90
+            use num_utils
+            use math_utils
+            use matrix_utils
+            use cg_utils
+            function iwahara_operator(j1,m1,j2,m2,k,q) result (matrix_element) ! in :fortran_utils:iwahara_utils.f90:iwahara_utils
+                integer intent(in) :: j1
+                integer intent(in) :: m1
+                integer intent(in) :: j2
+                integer intent(in) :: m2
+                integer intent(in) :: k
+                integer intent(in) :: q
+                real(kind=8) :: matrix_element
+            end function iwahara_operator
+            subroutine construct_iwahara_operator_matrix_for_one_rank(j_array,m_array,k_vector,q_vector,n_basis,n_sites,operator_matrix,only_triangle) ! in :fortran_utils:iwahara_utils.f90:iwahara_utils
+                integer dimension(n_basis,n_sites),intent(in) :: j_array
+                integer dimension(n_basis,n_sites),intent(in),depend(n_sites,n_basis) :: m_array
+                integer dimension(n_sites),intent(in),depend(n_sites) :: k_vector
+                integer dimension(n_sites),intent(in),depend(n_sites) :: q_vector
+                integer, optional,intent(in),check(shape(j_array, 0) == n_basis),depend(j_array) :: n_basis=shape(j_array, 0)
+                integer, optional,intent(in),check(shape(j_array, 1) == n_sites),depend(j_array) :: n_sites=shape(j_array, 1)
+                complex(kind=8) dimension(n_basis,n_basis),intent(out),depend(n_basis) :: operator_matrix
+                logical intent(in) :: only_triangle
+            end subroutine construct_iwahara_operator_matrix_for_one_rank
+            subroutine construct_general_iwahara_operator_matrix(j_array,m_array,k_array,q_array,parameters,n_basis,n_sites,n_ranks,operator_matrix,only_triangle) ! in :fortran_utils:iwahara_utils.f90:iwahara_utils
+                integer dimension(n_basis,n_sites),intent(in) :: j_array
+                integer dimension(n_basis,n_sites),intent(in),depend(n_sites,n_basis) :: m_array
+                integer dimension(n_ranks,n_sites),intent(in),depend(n_sites) :: k_array
+                integer dimension(n_ranks,n_sites),intent(in),depend(n_ranks,n_sites) :: q_array
+                complex(kind=8) dimension(n_ranks),intent(in),depend(n_ranks) :: parameters
+                integer, optional,intent(in),check(shape(j_array, 0) == n_basis),depend(j_array) :: n_basis=shape(j_array, 0)
+                integer, optional,intent(in),check(shape(j_array, 1) == n_sites),depend(j_array) :: n_sites=shape(j_array, 1)
+                integer, optional,intent(in),check(shape(k_array, 0) == n_ranks),depend(k_array) :: n_ranks=shape(k_array, 0)
+                complex(kind=8) dimension(n_basis,n_basis),intent(out),depend(n_basis) :: operator_matrix
+                logical intent(in) :: only_triangle
+            end subroutine construct_general_iwahara_operator_matrix
+            subroutine diagonalize_general_iwahara_operator_matrix(j_array,m_array,k_array,q_array,parameters,n_basis,n_sites,n_ranks,eigenvalues,eigenvectors) ! in :fortran_utils:iwahara_utils.f90:iwahara_utils
+                integer dimension(n_basis,n_sites),intent(in) :: j_array
+                integer dimension(n_basis,n_sites),intent(in),depend(n_sites,n_basis) :: m_array
+                integer dimension(n_ranks,n_sites),intent(in),depend(n_sites) :: k_array
+                integer dimension(n_ranks,n_sites),intent(in),depend(n_ranks,n_sites) :: q_array
+                complex(kind=8) dimension(n_ranks),intent(in),depend(n_ranks) :: parameters
+                integer, optional,intent(in),check(shape(j_array, 0) == n_basis),depend(j_array) :: n_basis=shape(j_array, 0)
+                integer, optional,intent(in),check(shape(j_array, 1) == n_sites),depend(j_array) :: n_sites=shape(j_array, 1)
+                integer, optional,intent(in),check(shape(k_array, 0) == n_ranks),depend(k_array) :: n_ranks=shape(k_array, 0)
+                real(kind=8) dimension(n_basis),intent(out),depend(n_basis) :: eigenvalues
+                complex(kind=8) dimension(n_basis,n_basis),intent(out),depend(n_basis) :: eigenvectors
+            end subroutine diagonalize_general_iwahara_operator_matrix
+            subroutine construct_iwahara_chibotaru_tensor_from_matrix(matrix,j_array,m_array,k_array,q_array,parameters,n_basis,n_sites,n_ranks) ! in :fortran_utils:iwahara_utils.f90:iwahara_utils
+                complex(kind=8) dimension(n_basis,n_basis),intent(in) :: matrix
+                integer dimension(n_basis,n_sites),intent(in),depend(n_basis) :: j_array
+                integer dimension(n_basis,n_sites),intent(in),depend(n_sites,n_basis) :: m_array
+                integer dimension(n_ranks,n_sites),intent(in),depend(n_sites) :: k_array
+                integer dimension(n_ranks,n_sites),intent(in),depend(n_ranks,n_sites) :: q_array
+                complex(kind=8) dimension(n_ranks),intent(out),depend(n_ranks) :: parameters
+                integer, optional,intent(in),check(shape(matrix, 0) == n_basis),depend(matrix) :: n_basis=shape(matrix, 0)
+                integer, optional,intent(in),check(shape(j_array, 1) == n_sites),depend(j_array) :: n_sites=shape(j_array, 1)
+                integer, optional,intent(in),check(shape(k_array, 0) == n_ranks),depend(k_array) :: n_ranks=shape(k_array, 0)
+            end subroutine construct_iwahara_chibotaru_tensor_from_matrix
+        end module iwahara_utils
+        module cfp_utils ! in :fortran_utils:cfp_utils.f90
+            use num_utils
+            use math_utils
+            use matrix_utils
+            use angm_utils
+            integer, private,parameter,optional :: max_shell_l=3
+            integer, private,parameter,optional,depend(max_shell_l) :: max_electrons=14
+            integer, private,parameter,optional :: max_block_terms=40
+            integer, private,parameter,optional :: max_blocks=150
+            integer, private,parameter,optional :: max_orbital_l=16
+            logical, private,save,optional,dimension(4) :: shell_built=.false.
+            integer, private,save,optional,dimension(4,1 + 4 * maxshell) :: n_terms_store=0
+            integer, private,save,optional,dimension(120,4,1 + 4 * maxshell) :: two_s_store=0
+            integer, private,save,optional,dimension(120,4,1 + 4 * maxshell) :: two_ll_store=0
+            integer, private,save,optional,dimension(120,4,1 + 4 * maxshell) :: seniority_store=0
+            integer, private,save,optional,dimension(120,4,1 + 4 * maxshell) :: w_store=0
+            integer, private,save,optional,dimension(120,4,1 + 4 * maxshell) :: g12_store=0
+            real(kind=8), private,save,dimension(120,120,4,4 * maxshell) :: coeff_store
+            real, private :: validate_configuration
+            real, private :: validate_tensor_rank
+            real, private :: ensure_shell
+            real, private :: build_shell
+            real, private :: build_level
+            real, private :: find_term
+            real, private :: pair_overlap_factor
+            real, private :: phase_factor
+            real, private :: binomial_coefficient
+            real, private :: u_tensor_element_by_index
+            real, private :: v11_tensor_element_by_index
+            function cfp(two_l,n,two_s,two_ll,seniority,w,two_s_parent,two_ll_parent,seniority_parent,w_parent) result (coefficient) ! in :fortran_utils:cfp_utils.f90:cfp_utils
+                integer intent(in) :: two_l
+                integer intent(in) :: n
+                integer intent(in) :: two_s
+                integer intent(in) :: two_ll
+                integer intent(in) :: seniority
+                integer intent(in) :: w
+                integer intent(in) :: two_s_parent
+                integer intent(in) :: two_ll_parent
+                integer intent(in) :: seniority_parent
+                integer intent(in) :: w_parent
+                real(kind=8) :: coefficient
+            end function cfp
+            function cfp_number_of_terms(two_l,n) result (number_of_terms) ! in :fortran_utils:cfp_utils.f90:cfp_utils
+                integer intent(in) :: two_l
+                integer intent(in) :: n
+                integer :: number_of_terms
+            end function cfp_number_of_terms
+            subroutine cfp_terms(two_l,n,number_of_terms,two_s_array,two_ll_array,seniority_array,w_array,g2_casimir_x12_array) ! in :fortran_utils:cfp_utils.f90:cfp_utils
+                integer intent(in) :: two_l
+                integer intent(in) :: n
+                integer intent(in) :: number_of_terms
+                integer dimension(number_of_terms),intent(out),depend(number_of_terms) :: two_s_array
+                integer dimension(number_of_terms),intent(out),depend(number_of_terms) :: two_ll_array
+                integer dimension(number_of_terms),intent(out),depend(number_of_terms) :: seniority_array
+                integer dimension(number_of_terms),intent(out),depend(number_of_terms) :: w_array
+                integer dimension(number_of_terms),intent(out),depend(number_of_terms) :: g2_casimir_x12_array
+            end subroutine cfp_terms
+            subroutine cfp_full_table(two_l,n,n_daughter_terms,n_parent_terms,table) ! in :fortran_utils:cfp_utils.f90:cfp_utils
+                integer intent(in) :: two_l
+                integer intent(in) :: n
+                integer intent(in) :: n_daughter_terms
+                integer intent(in) :: n_parent_terms
+                real(kind=8) dimension(n_daughter_terms,n_parent_terms),intent(out),depend(n_daughter_terms,n_parent_terms) :: table
+            end subroutine cfp_full_table
+            subroutine cfp_build_tables(two_l) ! in :fortran_utils:cfp_utils.f90:cfp_utils
+                integer intent(in) :: two_l
+            end subroutine cfp_build_tables
+            function cfp_u_tensor_element(two_l,n,two_s,two_ll,seniority,w,two_s_2,two_ll_2,seniority_2,w_2,two_k) result (element) ! in :fortran_utils:cfp_utils.f90:cfp_utils
+                integer intent(in) :: two_l
+                integer intent(in) :: n
+                integer intent(in) :: two_s
+                integer intent(in) :: two_ll
+                integer intent(in) :: seniority
+                integer intent(in) :: w
+                integer intent(in) :: two_s_2
+                integer intent(in) :: two_ll_2
+                integer intent(in) :: seniority_2
+                integer intent(in) :: w_2
+                integer intent(in) :: two_k
+                real(kind=8) :: element
+            end function cfp_u_tensor_element
+            subroutine cfp_u_tensor_matrix(two_l,n,two_k,number_of_terms,matrix) ! in :fortran_utils:cfp_utils.f90:cfp_utils
+                integer intent(in) :: two_l
+                integer intent(in) :: n
+                integer intent(in) :: two_k
+                integer intent(in) :: number_of_terms
+                real(kind=8) dimension(number_of_terms,number_of_terms),intent(out),depend(number_of_terms) :: matrix
+            end subroutine cfp_u_tensor_matrix
+            function cfp_v11_tensor_element(two_l,n,two_s,two_ll,seniority,w,two_s_2,two_ll_2,seniority_2,w_2) result (element) ! in :fortran_utils:cfp_utils.f90:cfp_utils
+                integer intent(in) :: two_l
+                integer intent(in) :: n
+                integer intent(in) :: two_s
+                integer intent(in) :: two_ll
+                integer intent(in) :: seniority
+                integer intent(in) :: w
+                integer intent(in) :: two_s_2
+                integer intent(in) :: two_ll_2
+                integer intent(in) :: seniority_2
+                integer intent(in) :: w_2
+                real(kind=8) :: element
+            end function cfp_v11_tensor_element
+            subroutine cfp_v11_tensor_matrix(two_l,n,number_of_terms,matrix) ! in :fortran_utils:cfp_utils.f90:cfp_utils
+                integer intent(in) :: two_l
+                integer intent(in) :: n
+                integer intent(in) :: number_of_terms
+                real(kind=8) dimension(number_of_terms,number_of_terms),intent(out),depend(number_of_terms) :: matrix
+            end subroutine cfp_v11_tensor_matrix
+        end module cfp_utils
+        module statmech_utils ! in :fortran_utils:statmech_utils.f90
+            use num_utils
+            use math_utils
+            use matrix_utils
+            function boltzmann_factor(t,e,k_b) result (factor) ! in :fortran_utils:statmech_utils.f90:statmech_utils
+                real(kind=8) intent(in) :: t
+                real(kind=8) intent(in) :: e
+                real(kind=8) intent(in) :: k_b
+                real(kind=8) :: factor
+            end function boltzmann_factor
+            function canonical_partition_function(t,e,k_b,n_basis) result (function_value) ! in :fortran_utils:statmech_utils.f90:statmech_utils
+                real(kind=8) intent(in) :: t
+                real(kind=8) dimension(n_basis),intent(in) :: e
+                real(kind=8) intent(in) :: k_b
+                integer, optional,intent(in),check(shape(e, 0) == n_basis),depend(e) :: n_basis=shape(e, 0)
+                real(kind=8) :: function_value
+            end function canonical_partition_function
+            subroutine equilibrium_expectation_value(a,eig,c,t_list,k_b,n_points,n_basis,value_list,normalize) ! in :fortran_utils:statmech_utils.f90:statmech_utils
+                complex(kind=8) dimension(n_basis,n_basis),intent(in) :: a
+                real(kind=8) dimension(n_basis),intent(in),depend(n_basis) :: eig
+                complex(kind=8) dimension(n_basis,n_basis),intent(in),depend(n_basis) :: c
+                real(kind=8) dimension(n_points),intent(in) :: t_list
+                real(kind=8) intent(in) :: k_b
+                integer, optional,intent(in),check(shape(t_list, 0) == n_points),depend(t_list) :: n_points=shape(t_list, 0)
+                integer, optional,intent(in),check(shape(a, 0) == n_basis),depend(a) :: n_basis=shape(a, 0)
+                real(kind=8) dimension(n_points),intent(out),depend(n_points) :: value_list
+                logical intent(in) :: normalize
+            end subroutine equilibrium_expectation_value
+        end module statmech_utils
+        module powder_magnetization_utils ! in :fortran_utils:powder_magnetization_utils.f90
+            use num_utils
+            use matrix_utils
+            use statmech_utils
+            subroutine diagonalize_hamiltonian(hamiltonian,magnetic_moment,eigenvalues,eigenvectors,b,n_basis,compute_eigenvectors,translate_eigenvalues) ! in :fortran_utils:powder_magnetization_utils.f90:powder_magnetization_utils
+                complex(kind=8) dimension(n_basis,n_basis),intent(in) :: hamiltonian
+                complex(kind=8) dimension(3,n_basis,n_basis),intent(in),depend(n_basis) :: magnetic_moment
+                real(kind=8) dimension(n_basis),intent(out),depend(n_basis) :: eigenvalues
+                complex(kind=8) dimension(n_basis,n_basis),intent(out),depend(n_basis) :: eigenvectors
+                real(kind=8) dimension(3),intent(in) :: b
+                integer, optional,intent(in),check(shape(hamiltonian, 0) == n_basis),depend(hamiltonian) :: n_basis=shape(hamiltonian, 0)
+                logical intent(in) :: compute_eigenvectors
+                logical intent(in) :: translate_eigenvalues
+            end subroutine diagonalize_hamiltonian
+            subroutine powder_magnetization(hamiltonian,magnetic_moment,t,b,m_scalar,grid_vectors,grid_weights,k_b,n_basis,n_grid_points,n_t_points) ! in :fortran_utils:powder_magnetization_utils.f90:powder_magnetization_utils
+                complex(kind=8) dimension(n_basis,n_basis),intent(in) :: hamiltonian
+                complex(kind=8) dimension(3,n_basis,n_basis),intent(in),depend(n_basis) :: magnetic_moment
+                real(kind=8) dimension(n_t_points),intent(in) :: t
+                real(kind=8) intent(in) :: b
+                real(kind=8) dimension(n_t_points),intent(out),depend(n_t_points) :: m_scalar
+                real(kind=8) dimension(n_grid_points,3),intent(in) :: grid_vectors
+                real(kind=8) dimension(n_grid_points),intent(in),depend(n_grid_points) :: grid_weights
+                real(kind=8) intent(in) :: k_b
+                integer, optional,intent(in),check(shape(hamiltonian, 0) == n_basis),depend(hamiltonian) :: n_basis=shape(hamiltonian, 0)
+                integer, optional,intent(in),check(shape(grid_vectors, 0) == n_grid_points),depend(grid_vectors) :: n_grid_points=shape(grid_vectors, 0)
+                integer, optional,intent(in),check(shape(t, 0) == n_t_points),depend(t) :: n_t_points=shape(t, 0)
+            end subroutine powder_magnetization
+            subroutine free_rotation_magnetization(hamiltonian,magnetic_moment,t_list,b,m_scalar,grid_vectors,grid_weights,k_b,n_basis,n_grid_points,n_t_points) ! in :fortran_utils:powder_magnetization_utils.f90:powder_magnetization_utils
+                complex(kind=8) dimension(n_basis,n_basis),intent(in) :: hamiltonian
+                complex(kind=8) dimension(3,n_basis,n_basis),intent(in),depend(n_basis) :: magnetic_moment
+                real(kind=8) dimension(n_t_points),intent(in) :: t_list
+                real(kind=8) intent(in) :: b
+                real(kind=8) dimension(n_t_points),intent(out),depend(n_t_points) :: m_scalar
+                real(kind=8) dimension(n_grid_points,3),intent(in) :: grid_vectors
+                real(kind=8) dimension(n_grid_points),intent(in),depend(n_grid_points) :: grid_weights
+                real(kind=8) intent(in) :: k_b
+                integer, optional,intent(in),check(shape(hamiltonian, 0) == n_basis),depend(hamiltonian) :: n_basis=shape(hamiltonian, 0)
+                integer, optional,intent(in),check(shape(grid_vectors, 0) == n_grid_points),depend(grid_vectors) :: n_grid_points=shape(grid_vectors, 0)
+                integer, optional,intent(in),check(shape(t_list, 0) == n_t_points),depend(t_list) :: n_t_points=shape(t_list, 0)
+            end subroutine free_rotation_magnetization
+            subroutine maximum_magnetization(hamiltonian,magnetic_moment,t_list,b,maximum_m,maximum_vectors,grid_vectors,k_b,n_basis,n_grid_points,n_t_points) ! in :fortran_utils:powder_magnetization_utils.f90:powder_magnetization_utils
+                complex(kind=8) dimension(n_basis,n_basis),intent(in) :: hamiltonian
+                complex(kind=8) dimension(3,n_basis,n_basis),intent(in),depend(n_basis) :: magnetic_moment
+                real(kind=8) dimension(n_t_points),intent(in) :: t_list
+                real(kind=8) intent(in) :: b
+                real(kind=8) dimension(n_t_points),intent(out),depend(n_t_points) :: maximum_m
+                real(kind=8) dimension(n_t_points,3),intent(out),depend(n_t_points) :: maximum_vectors
+                real(kind=8) dimension(n_grid_points,3),intent(in) :: grid_vectors
+                real(kind=8) intent(in) :: k_b
+                integer, optional,intent(in),check(shape(hamiltonian, 0) == n_basis),depend(hamiltonian) :: n_basis=shape(hamiltonian, 0)
+                integer, optional,intent(in),check(shape(grid_vectors, 0) == n_grid_points),depend(grid_vectors) :: n_grid_points=shape(grid_vectors, 0)
+                integer, optional,intent(in),check(shape(t_list, 0) == n_t_points),depend(t_list) :: n_t_points=shape(t_list, 0)
+            end subroutine maximum_magnetization
+        end module powder_magnetization_utils
+        module pseudospin_utils ! in :fortran_utils:pseudospin_utils.f90
+            use num_utils
+            use math_utils
+            use matrix_utils
+            subroutine pseudospin_transformation(h_full,mu_full,h_eff,n_full_basis,n_eff_basis) ! in :fortran_utils:pseudospin_utils.f90:pseudospin_utils
+                complex(kind=8) dimension(n_full_basis,n_full_basis),intent(in) :: h_full
+                complex(kind=8) dimension(n_full_basis,n_full_basis),intent(in),depend(n_full_basis) :: mu_full
+                complex(kind=8) dimension(n_eff_basis,n_eff_basis),intent(out),depend(n_eff_basis) :: h_eff
+                integer, optional,intent(in),check(shape(h_full, 0) == n_full_basis),depend(h_full) :: n_full_basis=shape(h_full, 0)
+                integer intent(in) :: n_eff_basis
+            end subroutine pseudospin_transformation
+        end module pseudospin_utils
+        module grid_utils ! in :fortran_utils:grid_utils.f90
+            use num_utils
+            subroutine generate_lebedev_laikov_grid(n_grid_points,vectors,weights) ! in :fortran_utils:grid_utils.f90:grid_utils
+                integer intent(in) :: n_grid_points
+                real(kind=8) dimension(n_grid_points,3),intent(out),depend(n_grid_points) :: vectors
+                real(kind=8) dimension(n_grid_points),intent(out),depend(n_grid_points) :: weights
+            end subroutine generate_lebedev_laikov_grid
+        end module grid_utils
+    end interface 
+end python module fortran_utils
+
+! This file was auto-generated with f2py (version:1.22.3).
+! See:
+! https://web.archive.org/web/20140822061353/http://cens.ioc.ee/projects/f2py2e

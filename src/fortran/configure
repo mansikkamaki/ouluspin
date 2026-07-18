@@ -1,0 +1,249 @@
+#!/bin/sh
+# SPDX-FileCopyrightText: 2020-2026 Akseli Mansikkamäki
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+#
+# Configuration script for building the fortran_utils extension module of
+# the OuluSpin library. It detects a Fortran compiler, a Python interpreter
+# with numpy (which provides f2py) and a LAPACK/BLAS library, and writes
+# the results to make.inc, which is included by the Makefile. After running
+# this script, build the module with
+#
+#     make
+#
+# The detected settings can be overridden with environment variables or
+# command-line options (options take precedence):
+#
+#     FC=<compiler>        ./configure --fc=<compiler>
+#     PYTHON=<python3>     ./configure --python=<python3>
+#     LAPACK_LIBS='...'    ./configure --lapack-libs='...'
+#     ONEAPI_ROOT=<dir>    ./configure --oneapi-root=<dir>
+#
+# Supported compilers: ifort (Intel classic), ifx (Intel oneAPI; requires
+# numpy >= 1.26) and gfortran. The generated make.inc is a plain text file
+# and can be edited by hand; see make.inc.example for the documented
+# variables.
+
+ONEAPI_ROOT="${ONEAPI_ROOT:-/opt/intel/oneapi}"
+FC="${FC:-}"
+PYTHON="${PYTHON:-}"
+LAPACK_LIBS="${LAPACK_LIBS:-}"
+
+usage() {
+    cat <<EOF
+Usage: ./configure [options]
+
+Options:
+  --fc=<compiler>       Fortran compiler (default: autodetect ifort,
+                        gfortran, ifx -- in this order)
+  --python=<python3>    Python interpreter providing numpy/f2py (default:
+                        \$OULUSPIN_PYTHON, then the Intel Python under the
+                        oneAPI installation, then python3)
+  --lapack-libs='...'   Linker flags for LAPACK/BLAS (default: Intel MKL if
+                        found, then OpenBLAS, then reference LAPACK/BLAS)
+  --oneapi-root=<dir>   Root of an Intel oneAPI installation (default:
+                        \$ONEAPI_ROOT or /opt/intel/oneapi)
+  -h, --help            Show this help and exit
+EOF
+}
+
+fail() {
+    echo "configure: ERROR: $1" >&2
+    exit 1
+}
+
+for arg in "$@"; do
+    case $arg in
+        --fc=*)          FC="${arg#--fc=}" ;;
+        --python=*)      PYTHON="${arg#--python=}" ;;
+        --lapack-libs=*) LAPACK_LIBS="${arg#--lapack-libs=}" ;;
+        --oneapi-root=*) ONEAPI_ROOT="${arg#--oneapi-root=}" ;;
+        -h|--help)       usage; exit 0 ;;
+        *)               usage; fail "unknown option: $arg" ;;
+    esac
+done
+
+# ---------------------------------------------------------------------------
+# Python interpreter with numpy/f2py.
+# ---------------------------------------------------------------------------
+if [ -z "$PYTHON" ]; then
+    if [ -n "${OULUSPIN_PYTHON:-}" ] && [ -x "${OULUSPIN_PYTHON}" ]; then
+        PYTHON="$OULUSPIN_PYTHON"
+    elif [ -x "$ONEAPI_ROOT/intelpython/latest/bin/python3" ]; then
+        PYTHON="$ONEAPI_ROOT/intelpython/latest/bin/python3"
+    else
+        PYTHON="$(command -v python3 2>/dev/null)"
+    fi
+fi
+[ -n "$PYTHON" ] || fail "no Python interpreter found; set PYTHON or use --python="
+"$PYTHON" -c "import sys" >/dev/null 2>&1 || fail "cannot run $PYTHON"
+
+NUMPY_VERSION="$("$PYTHON" -c 'import numpy; print(numpy.__version__)' 2>/dev/null)" \
+    || fail "$PYTHON cannot import numpy (numpy provides f2py, which is needed for the build)"
+
+# numpy >= 1.26 builds f2py extensions with meson instead of the removed
+# numpy.distutils; the f2py flags written to make.inc differ accordingly.
+F2PY_BACKEND="$("$PYTHON" -c 'import numpy
+v = tuple(int(x) for x in numpy.__version__.split(".")[:2])
+print("meson" if v >= (1, 26) else "distutils")')"
+
+# ---------------------------------------------------------------------------
+# Fortran compiler.
+# ---------------------------------------------------------------------------
+if [ -z "$FC" ]; then
+    for candidate in \
+        ifort \
+        "$ONEAPI_ROOT/compiler/latest/linux/bin/intel64/ifort" \
+        "$ONEAPI_ROOT/compiler/latest/bin/ifort" \
+        gfortran \
+        ifx \
+        "$ONEAPI_ROOT/compiler/latest/bin/ifx"
+    do
+        if command -v "$candidate" >/dev/null 2>&1; then
+            FC="$candidate"
+            break
+        fi
+    done
+fi
+[ -n "$FC" ] || fail "no Fortran compiler found (looked for ifort, gfortran, ifx); set FC or use --fc="
+command -v "$FC" >/dev/null 2>&1 || fail "Fortran compiler not found: $FC"
+
+FC_PATH="$(command -v "$FC")"
+FC_NAME="$(basename "$FC_PATH")"
+FC_DIR="$(dirname "$FC_PATH")"
+
+# The Intel compilers need their own runtime libraries (e.g. libimf.so) on
+# LD_LIBRARY_PATH during linking; locate the directory so that make works
+# without sourcing the oneAPI setvars.sh.
+FC_LIBDIR=""
+case $FC_NAME in
+    ifort*|ifx*)
+        for d in \
+            "$FC_DIR/../../compiler/lib/intel64_lin" \
+            "$FC_DIR/../../compiler/lib/intel64" \
+            "$FC_DIR/../../compiler/lib" \
+            "$FC_DIR/../../lib" \
+            "$ONEAPI_ROOT/compiler/latest/linux/compiler/lib/intel64_lin" \
+            "$ONEAPI_ROOT/compiler/latest/lib"
+        do
+            if [ -f "$d/libimf.so" ]; then
+                FC_LIBDIR="$(cd "$d" && pwd)"
+                break
+            fi
+        done
+        if [ -z "$FC_LIBDIR" ]; then
+            echo "configure: WARNING: could not locate the Intel compiler" \
+                 "runtime libraries (libimf.so); if linking fails, source" \
+                 "the oneAPI setvars.sh before running make" >&2
+        fi
+        ;;
+esac
+
+OPTFLAGS="-O3 -funroll-loops"
+case $FC_NAME in
+    ifort*)
+        # -heap-arrays avoids stack overflows with automatic arrays and
+        # -stand f18 enforces the Fortran 2018 standard.
+        F2PY_FCOMPILER="intelem"
+        F90FLAGS="-heap-arrays -stand f18"
+        F77FLAGS="-O3"
+        ;;
+    ifx*)
+        F2PY_FCOMPILER=""
+        F90FLAGS="-heap-arrays -stand f18"
+        F77FLAGS="-O3"
+        if [ "$F2PY_BACKEND" = "distutils" ]; then
+            fail "ifx is not supported by the numpy.distutils backend of \
+f2py (numpy $NUMPY_VERSION); use ifort or gfortran, or a numpy >= 1.26"
+        fi
+        ;;
+    *)
+        # gfortran (or compatible). -std=legacy is needed for the old
+        # Fortran 77 Lebedev--Laikov source.
+        F2PY_FCOMPILER="gnu95"
+        F90FLAGS="-std=f2018"
+        F77FLAGS="-O3 -std=legacy"
+        ;;
+esac
+
+# ---------------------------------------------------------------------------
+# LAPACK/BLAS libraries (zgemm, zheev, ddot). Preference order: Intel MKL,
+# OpenBLAS, reference LAPACK/BLAS.
+# ---------------------------------------------------------------------------
+if [ -z "$LAPACK_LIBS" ]; then
+    MKL_DIR=""
+    for d in \
+        "${MKLROOT:-}/lib/intel64" \
+        "${MKLROOT:-}/lib" \
+        "$ONEAPI_ROOT/mkl/latest/lib/intel64" \
+        "$ONEAPI_ROOT/mkl/latest/lib"
+    do
+        if [ -n "$d" ] && [ -f "$d/libmkl_rt.so" ]; then
+            MKL_DIR="$d"
+            break
+        fi
+    done
+    if [ -n "$MKL_DIR" ]; then
+        LAPACK_LIBS="-L$MKL_DIR -lmkl_rt"
+    elif ldconfig -p 2>/dev/null | grep -q libopenblas; then
+        LAPACK_LIBS="-lopenblas"
+    elif ldconfig -p 2>/dev/null | grep -q liblapack; then
+        LAPACK_LIBS="-llapack -lblas"
+    else
+        echo "configure: WARNING: no LAPACK/BLAS library found;" \
+             "defaulting to '-llapack -lblas'" >&2
+        LAPACK_LIBS="-llapack -lblas"
+    fi
+fi
+
+# ---------------------------------------------------------------------------
+# Write make.inc.
+# ---------------------------------------------------------------------------
+{
+    echo "# Build configuration for the fortran_utils extension module."
+    echo "# Generated by ./configure; edit by hand or re-run ./configure"
+    echo "# (see make.inc.example for the documented variables)."
+    echo ""
+    echo "FC = $FC_PATH"
+    echo "PYTHON = $PYTHON"
+    echo ""
+    echo "F77FLAGS = $F77FLAGS"
+    echo "F90FLAGS = $F90FLAGS"
+    echo "OPTFLAGS = $OPTFLAGS"
+    echo ""
+    echo "LAPACK_LIBS = $LAPACK_LIBS"
+    echo ""
+    RUNTIME_LIBDIRS=""
+    [ -n "$FC_LIBDIR" ] && RUNTIME_LIBDIRS="$FC_LIBDIR"
+    if [ -n "${MKL_DIR:-}" ]; then
+        RUNTIME_LIBDIRS="${RUNTIME_LIBDIRS:+$RUNTIME_LIBDIRS:}$MKL_DIR"
+    fi
+    if [ -n "$RUNTIME_LIBDIRS" ]; then
+        echo "# Runtime library directories of the Intel toolchain, needed"
+        echo "# during linking (libimf.so and friends) and when importing"
+        echo "# the module in the test target (libmkl_rt.so)."
+        echo "export LD_LIBRARY_PATH := $RUNTIME_LIBDIRS:\$(LD_LIBRARY_PATH)"
+        echo ""
+    fi
+    if [ "$F2PY_BACKEND" = "distutils" ]; then
+        echo "# numpy.distutils backend of f2py (numpy < 1.26): the compiler"
+        echo "# is selected with --fcompiler and invoked by name, so its"
+        echo "# directory is put on PATH."
+        echo "export PATH := $FC_DIR:\$(PATH)"
+        echo "F2PY_FLAGS = --fcompiler=$F2PY_FCOMPILER" \
+             "--opt=\"\$(OPTFLAGS)\" --f90flags=\"\$(F90FLAGS)\""
+    else
+        echo "# meson backend of f2py (numpy >= 1.26): the compiler and the"
+        echo "# flags are passed through the FC and FFLAGS environment"
+        echo "# variables."
+        echo "export FC := $FC_PATH"
+        echo "export FFLAGS := \$(OPTFLAGS) \$(F90FLAGS)"
+        echo "F2PY_FLAGS = --backend meson"
+    fi
+} > make.inc
+
+echo "configure: Python interpreter:  $PYTHON (numpy $NUMPY_VERSION)"
+echo "configure: f2py backend:        $F2PY_BACKEND"
+echo "configure: Fortran compiler:    $FC_PATH"
+echo "configure: LAPACK/BLAS:         $LAPACK_LIBS"
+echo "configure: wrote make.inc -- now run 'make'"
