@@ -34,15 +34,23 @@ reference for the individual classes.
 The physical system is described by a pseudospin Hamiltonian constructed
 in terms of products of equivalent operators,
 
-    H = sum_{k1,k2,...} sum_{q1,q2,...} B^{q1,q2,...}_{k1,k2,...}
-        O_{k1,q1}(S_1) O_{k2,q2}(S_2) ...
+$$
+\tilde H
+= \sum_{k_1,k_2,\cdots}\sum_{q_1,q_2,\cdots}
+X_{k_1,q_1,k_2,q_2,\cdots}
+\hat O_{k_1,q_1}(\mathbf{\tilde{S}}_1)
+\otimes\hat O_{k_2,q_2}(\mathbf{\tilde{S}}_2)
+\otimes\cdots
+$$
 
-where `k` and `q` are the ranks and components of the operators and
-`S_1, S_2, ...` are pseudospin operators acting on the individual spin
-sites. The individual equivalent operators are chosen as those described by
-Iwahara and Chibotaru [2], whose matrix elements can be evaluated as a
-ratio of two Clebsch–Gordan coefficients. Chibotaru–Ungur equivalent
-operators [1] and Cartesian tensor forms are also supported as input.
+where $k_i$ and $q_i$ are the ranks and components of the equivalent
+operators $\hat O_{k_i,q_i}(\mathbf{\tilde{S}}_i)$ and
+$\mathbf{\tilde S}_i$ are pseudospin operators acting on the individual
+spin sites $i$. The individual equivalent operators are chosen as those
+described by Iwahara and Chibotaru [2], whose matrix elements can be
+evaluated as a ratio of two Clebsch–Gordan coefficients. Chibotaru–Ungur
+equivalent operators [1] and Cartesian tensor forms are also supported
+as input.
 
 A typical workflow is:
 
@@ -142,7 +150,7 @@ from ouluspin.systems import electron_exchange_system
 units = units_module.EnergyUnitSystem('wavenumber')
 
 # Read the Hamiltonian and magnetic moment operator matrices.
-calculation = orca.OrcaAnisoFile('DyCp2.anisofile', units)
+calculation = orca.OrcaAnisoFile('Dy_complex.anisofile', units)
 
 hamiltonian = pseudospin_operators.GeneralOperatorMatrix(
     calculation.hamiltonian(),
