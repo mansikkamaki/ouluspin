@@ -11,6 +11,8 @@ matrices) from the outputs of quantum-chemistry codes.
 
 Subpackages and modules
     units                  Energy unit systems and physical constants.
+    result_table           Structured representation of the result tables
+                           printed by the library.
     tensors                Spherical and Cartesian tensor structures
                            (Iwahara--Chibotaru, Chibotaru--Ungur, mixed and
                            Cartesian tensors, rotations).
@@ -41,6 +43,7 @@ that needs it is actually called.
 __version__ = "0.1.0"
 
 from ouluspin import units
+from ouluspin import result_table
 from ouluspin import tensors
 from ouluspin import pseudospin_operators
 from ouluspin import properties
@@ -49,6 +52,7 @@ from ouluspin import qc
 from ouluspin import systems
 
 from ouluspin.units import EnergyUnitSystem
+from ouluspin.result_table import ResultTable
 from ouluspin.tensors import (
     ChibotaruUngurSphericalTensor,
     IwaharaChibotaruSphericalTensor,
@@ -86,6 +90,7 @@ __all__ = [
     "__version__",
     # Modules and subpackages.
     "units",
+    "result_table",
     "tensors",
     "pseudospin_operators",
     "properties",
@@ -94,6 +99,8 @@ __all__ = [
     "systems",
     # Units.
     "EnergyUnitSystem",
+    # Result tables.
+    "ResultTable",
     # Tensors.
     "ChibotaruUngurSphericalTensor",
     "IwaharaChibotaruSphericalTensor",

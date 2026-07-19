@@ -14,6 +14,7 @@ import numpy.linalg as la
 from ouluspin import pseudospin_operators
 from ouluspin import properties
 from ouluspin import tensors
+from ouluspin import result_table
 from ouluspin._fortran import fortran_utils as fu
 
 from ouluspin import _debug as output
@@ -468,10 +469,18 @@ class AbInitioElectronExchangeSystem:
         Construct and return the PseudoSpinDoublet instance of the doublet
         spanned by the two pseudospin eigenstates given in the states
         tuple, with the g-tensor reported in the input axis frame.
+    pseudospin_doublet_list(doublets) : list of PseudoSpinDoublet
+        Construct and return the PseudoSpinDoublet instances of one or
+        several pseudospin doublets, with the g-tensors reported in the
+        input axis frame. Already constructed doublets are passed through
+        unchanged.
+    pseudospin_doublet_summary_table(doublets) : ResultTable
+        Construct and return a compound table of one or several pseudospin
+        doublets with one line per doublet.
     pseudospin_doublet_table(doublets) : str
         Construct and return a tabulation string of one or several
-        pseudospin doublets, with the g-tensor axes given in the input
-        axis frame.
+        pseudospin doublets, each tabulated in full, with the g-tensor axes
+        given in the input axis frame.
 
     Class methods
     -------------
@@ -863,60 +872,128 @@ class AbInitioElectronExchangeSystem:
                                                    rotation=self.input_frame_rotation)
 
 
-    def pseudospin_doublet_table(self, doublets):
-        """Construct and return a human-readable tabulation string of one
-        or several pseudospin doublets of the system.
+    def pseudospin_doublet_list(self, doublets):
+        """Construct and return a list of PseudoSpinDoublet instances of the
+        listed pseudospin doublets of the system. The doublets are
+        constructed with the pseudospin_doublet method, i.e. with the full
+        frame bookkeeping of the system, but the Hamiltonian and the
+        magnetic moment operators are constructed only once for the whole
+        list.
 
-        Each tabulated doublet is constructed with the pseudospin_doublet
-        method: the g-tensors and their principal magnetic axes are given
-        in the INPUT axis frame (the frame of the ab initio data), which
-        is also stated explicitly in the output. The energy of each
-        doublet is the eigenvalue of the lower of its two states.
+        Doublets that have already been constructed are passed through
+        unchanged, so that a list obtained from this method can be given
+        to the tabulation methods without constructing the doublets a
+        second time.
 
         Arguments
         ---------
-        doublets : tuple of int or list of tuple of int
+        doublets : tuple of int, PseudoSpinDoublet or list
             Either a single tuple with the indices of the two pseudospin
-            eigenstates spanning a doublet, or a list of such tuples, in
-            which case all the listed doublets are tabulated.
+            eigenstates spanning a doublet, a single already constructed
+            PseudoSpinDoublet, or a list of either, in which case all the
+            listed doublets are constructed.
         """
-        if isinstance(doublets,tuple):
+        if isinstance(doublets,(tuple,properties.PseudoSpinDoublet)):
             doublet_list = [doublets]
         elif isinstance(doublets,list):
             doublet_list = doublets
         else:
             print("ERROR in AbInitioElectronExchangeSystem.")
-            print("Error: The doublets argument must be a tuple of two state indices")
-            print("       or a list of such tuples.")
+            print("Error: The doublets argument must be a tuple of two state indices,")
+            print("       a PseudoSpinDoublet, or a list of either.")
             print("Error termination.")
             sys.exit(1)
 
-        hamiltonian_operator     = self.hamiltonian_operator()
-        magnetic_moment_operator = self.magnetic_moment_operator()
+        # The operators are needed only when a doublet still has to be
+        # constructed.
+        hamiltonian_operator     = None
+        magnetic_moment_operator = None
 
-        tmp_str  = "    PSEUDOSPIN DOUBLETS\n\n"
-        tmp_str += "    The g-tensors and their principal magnetic axes are given in the\n"
-        tmp_str += "    input axis frame.\n\n"
+        instance_list = []
 
         for states in doublet_list:
+            if isinstance(states,properties.PseudoSpinDoublet):
+                instance_list.append(states)
+                continue
+
+            if hamiltonian_operator is None:
+                hamiltonian_operator     = self.hamiltonian_operator()
+                magnetic_moment_operator = self.magnetic_moment_operator()
+
             if not len(states) == 2:
                 print("ERROR in AbInitioElectronExchangeSystem.")
                 print("Error: Each doublet must be given as a tuple of two state indices.")
                 print("Error termination.")
                 sys.exit(1)
 
-            doublet = properties.PseudoSpinDoublet\
-                                .from_pseudospin_operator(tuple(states),
-                                                          hamiltonian_operator,
-                                                          magnetic_moment_operator,
-                                                          self.units,
-                                                          kramers=self.kramers_system,
-                                                          rotation=self.input_frame_rotation)
+            instance_list.append(
+                properties.PseudoSpinDoublet
+                          .from_pseudospin_operator(tuple(states),
+                                                    hamiltonian_operator,
+                                                    magnetic_moment_operator,
+                                                    self.units,
+                                                    kramers=self.kramers_system,
+                                                    rotation=self.input_frame_rotation))
 
-            tmp_str += "    DOUBLET ({0},{1}),   E = {2:12.4f} {3}\n\n"\
-                       .format(states[0],states[1],
-                               hamiltonian_operator.eigenvalues[states[0]],
-                               self.units.energy_unit_str)
+        return instance_list
+
+
+    def pseudospin_doublet_summary_table(self, doublets):
+        """Construct and return a compound table of the listed pseudospin
+        doublets of the system as an instance of ResultTable, with one line
+        per doublet. The table is built by the
+        pseudospin_doublet_compound_table class method of ResultTable; see
+        it for the structure of the table, which differs between Kramers
+        and non-Kramers systems.
+
+        Arguments
+        ---------
+        doublets : tuple of int, PseudoSpinDoublet or list
+            The doublets to tabulate, in any of the forms accepted by the
+            pseudospin_doublet_list method. Passing a list of already
+            constructed doublets avoids constructing them twice when both
+            tabulation methods are used.
+        """
+        return result_table.ResultTable\
+                           .pseudospin_doublet_compound_table(
+                               self.pseudospin_doublet_list(doublets),
+                               self.units)
+
+
+    def pseudospin_doublet_table(self, doublets):
+        """Construct and return a human-readable tabulation string of one
+        or several pseudospin doublets of the system, with the properties
+        of each doublet tabulated separately and in full.
+
+        Each tabulated doublet is constructed with the pseudospin_doublet
+        method: the g-tensors and their principal magnetic axes are given
+        in the INPUT axis frame (the frame of the ab initio data), which
+        is also stated explicitly in the output. The energy of each
+        doublet is the eigenvalue of the lower of its two states. A
+        compact one-line-per-doublet summary of the same doublets is given
+        by the pseudospin_doublet_summary_table method.
+
+        Arguments
+        ---------
+        doublets : tuple of int, PseudoSpinDoublet or list
+            The doublets to tabulate, in any of the forms accepted by the
+            pseudospin_doublet_list method. Passing a list of already
+            constructed doublets avoids constructing them twice when both
+            tabulation methods are used.
+        """
+        tmp_str  = "    PSEUDOSPIN DOUBLETS\n\n"
+        tmp_str += "    The g-tensors and their principal magnetic axes are given in the\n"
+        tmp_str += "    input axis frame.\n\n"
+
+        for doublet in self.pseudospin_doublet_list(doublets):
+            if doublet.state_energies is None:
+                energy_str = "not available"
+            else:
+                energy_str = "{0:12.4f} {1}".format(min(doublet.state_energies),
+                                                    self.units.energy_unit_str)
+
+            tmp_str += "    DOUBLET ({0},{1}),   E = {2}\n\n"\
+                       .format(doublet.states[0],doublet.states[1],energy_str)
             tmp_str += str(doublet)
             tmp_str += "\n"
 
@@ -956,13 +1033,21 @@ class AbInitioElectronExchangeSystem:
             else:
                 result_list.append(0)
 
-        tmp_str = "    Effect of time-reversal transformation on the pseudospin operators:\n\n"
-        label_list = ['mu_x','mu_y','mu_z','H']
+        label_list          = ['mu_x','mu_y','mu_z','H']
         correct_result_list = [-1,-1,-1,1]
+
+        rows = []
         for i in range(0,4):
-            tmp_str += "        Operator {0:>4}    result: {1:2}     correct result: {2:2}\n"\
-                       .format(label_list[i],result_list[i],correct_result_list[i])
-        tmp_str += "\n"
+            rows.append([label_list[i],result_list[i],correct_result_list[i]])
+
+        tmp_str = str(result_table.ResultTable(
+            rows,
+            column_headers=['Operator','Result','Correct result'],
+            title="EFFECT OF TIME REVERSAL ON THE PSEUDOSPIN OPERATORS",
+            notes=["A result of 1 stands for a time-even and -1 for a time-odd",
+                   "operator; 0 means that the operator has no definite behaviour",
+                   "under time reversal."],
+            indent=4))
 
         if result_list == correct_result_list:
             return True, tmp_str
@@ -1748,6 +1833,42 @@ class AbInitioElectronExchangeSystem:
                   table_single.count('DOUBLET (') == 1
                   and table_list.count('DOUBLET (') == 2
                   and '{0:12.4f}'.format(2.0*abs(D_f)) in table_list)
+
+            # The doublet list can be constructed once and given to the
+            # tabulation methods, which must then not construct the
+            # doublets again.
+            doublet_list = system_int.pseudospin_doublet_list([(0,1),(2,3)])
+            check('pseudospin_doublet_list constructs the doublets',
+                  (len(doublet_list) == 2)
+                  and all(isinstance(item,properties.PseudoSpinDoublet)
+                          for item in doublet_list))
+            check('pseudospin_doublet_list passes constructed doublets through',
+                  all(new is old for new, old in
+                      zip(system_int.pseudospin_doublet_list(doublet_list),
+                          doublet_list)))
+            check('pseudospin_doublet_table accepts constructed doublets',
+                  system_int.pseudospin_doublet_table(doublet_list)
+                  .count('DOUBLET (') == 2)
+
+            # The compound summary table: one line per doublet, with the
+            # excited doublet at the energy of the zero-field splitting.
+            # The ground doublet |+-3/2> is Ising-like with gz = 6 along
+            # z, whereas the excited doublet |+-1/2> has g = (2,4,4), so
+            # its largest principal g value, and hence its principal
+            # magnetic axis, is transverse and perpendicular to that of
+            # the ground doublet.
+            summary_table = system_int.pseudospin_doublet_summary_table(doublet_list)
+            check('pseudospin_doublet_summary_table has one row per doublet',
+                  len(summary_table.rows) == 2)
+            check('pseudospin_doublet_summary_table gives the doublet energies',
+                  (abs(summary_table.rows[0][2]) < 1.0e-8)
+                  and (abs(summary_table.rows[1][2] - 2.0*abs(D_f)) < 1.0e-8))
+            check('pseudospin_doublet_summary_table gives the g values',
+                  np.allclose(sorted(summary_table.rows[0][3:6]),
+                              [0.0,0.0,6.0],atol=1.0e-8))
+            check('pseudospin_doublet_summary_table gives the axis angles',
+                  (abs(summary_table.rows[0][6]) < 1.0e-6)
+                  and (abs(summary_table.rows[1][6] - 90.0) < 1.0e-6))
 
             # The self-average must reproduce the single-file system.
             average_aa = cls.from_average_aniso_data(filename_a,filename_a,3,g,tmp_units)

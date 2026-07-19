@@ -80,4 +80,13 @@ if __name__ == '__main__':
     # bookkeeping of the system: the g-tensors and their principal magnetic
     # axes are reported in the input axis frame (the frame of the matrices
     # in the datafiles).
-    print(system.pseudospin_doublet_table([(2*i,2*i+1) for i in range(0,8)]))
+    doublets = system.pseudospin_doublet_list([(2*i,2*i+1)
+                                               for i in range(0,8)])
+
+    print(system.pseudospin_doublet_table(doublets))
+
+    # A compound table summarizing all the doublets, one line per doublet,
+    # with the energies, the principal g values and the angle between the
+    # principal magnetic axis of each doublet and that of the ground
+    # doublet.
+    print(system.pseudospin_doublet_summary_table(doublets))

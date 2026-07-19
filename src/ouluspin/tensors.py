@@ -10,6 +10,7 @@ import numpy as np
 import numpy.linalg as la
 
 from ouluspin._fortran import fortran_utils as fu
+from ouluspin import result_table
 
 
 class ChibotaruUngurSphericalTensor:
@@ -93,6 +94,8 @@ class ChibotaruUngurSphericalTensor:
     iwahara_chibotaru_spherical_tensor() : IwaharaChibotaruSphericalTensor
         Return a one-site Iwahara--Chibotaru spherical tensor representation of this
         Chibotaru--Ungur spherical tensor.
+    parameter_table(title=None) : ResultTable
+        Return a table of the Chibotaru--Ungur expansion parameters.
 
     Class methods
     -------------
@@ -190,25 +193,42 @@ class ChibotaruUngurSphericalTensor:
         return converted_tensor
         
         
+    def parameter_table(self, title=None):
+        """Return a listing of the Chibotaru--Ungur expansion parameters as
+        an instance of ResultTable. Each row contains the rank m and the
+        component n of one term of the expansion followed by the real
+        parameter A and the imaginary parameter C of that term.
+
+        Optional arguments
+        ------------------
+        title : str or None
+            The title of the table. Default is None, in which case no
+            title is printed.
+        """
+        if self.frame is None:
+            notes = ["Coordinate frame: unspecified"]
+        else:
+            notes = ["Coordinate frame: " + self.frame]
+
+        rows = []
+        for i in range(0,len(self.real_rank_list)):
+            rows.append([self.real_rank_list[i][0] // 2,
+                         self.real_rank_list[i][1] // 2,
+                         self.real_parameter_list[i],
+                         self.imag_parameter_list[i]])
+
+        return result_table.ResultTable(rows,
+                                        column_headers=["m","n","A","C"],
+                                        title=title,
+                                        notes=notes,
+                                        formats=[None,None,'.12f','.12f'],
+                                        table_type='spherical_tensor')
+
+
     def __repr__(self):
         """Return a human-readable string of the parameters."""
-        tmp_str = "      Coordinate frame: "
-        if self.frame is None:
-            tmp_str += "unspecified\n\n"
-        else:
-            tmp_str += self.frame + "\n\n"
-        tmp_str += "      {0:>3} {1:>4} {2:>24} {3:>24}\n".format("m","n","A","C")
-        for i in range(0,len(self.real_rank_list)):
-            m = self.real_rank_list[i][0] // 2
-            n = self.real_rank_list[i][1] // 2
+        return str(self.parameter_table())
 
-            A  = self.real_parameter_list[i]
-            C  = self.imag_parameter_list[i]
-
-            tmp_str += "      {0:3} {1:4} {2:24.12f} {3:24.12f}\n".format(m,n,A,C)
-        tmp_str += "\n"
-        return tmp_str
-    
 
     def __init__(self, real_rank_list, real_parameter_list, imag_parameter_list, pseudospin):
         """Upon class initiation convert the CU parameters into IC parameters and store them
@@ -438,7 +458,7 @@ class IwaharaChibotaruSphericalTensor:
         Return a Cartesian rank-two tensor representation of a two-site tensor.
     rotate(rotation)
         Rotate the tensor using the Rotation instance given as an argument.
-    ITO_table(symbol="X",title=None,order_of_magnitude=0,rank_threshold=0.0,half_table=False) : str
+    ITO_table(symbol="X",title=None,order_of_magnitude=0,rank_threshold=0.0,half_table=False) : ResultTable
         Return a listing of all ITO expansions parameters.
     inflate_dimension(site_list) : IwaharaChibotaruSphericalTensor
         Return a new Iwahara--Chibotaru spherical tensor that corresponds to a tensor
@@ -745,7 +765,14 @@ class IwaharaChibotaruSphericalTensor:
 
     
     def ITO_table(self, symbol="X", title=None, order_of_magnitude=0, rank_threshold=0.0, half_table=False):
-        """Return a listing of all ITO expansions parameters.
+        """Return a listing of all ITO expansions parameters as an instance
+        of ResultTable. Printing the returned instance, or converting it
+        into a str, gives the human-readable table.
+
+        Each row of the table contains the ranks k and the components q of
+        the operators of one term of the expansion, one pair per spin site,
+        followed by the real part, the imaginary part and the magnitude of
+        the corresponding expansion parameter.
 
         Optional arguments:
         -------------------
@@ -769,7 +796,7 @@ class IwaharaChibotaruSphericalTensor:
             output.
 
         The optional argument symbol gives the str used to label the tensor
-        elements. 
+        elements.
         """
         factor = 10.0**(order_of_magnitude)
 
@@ -779,39 +806,28 @@ class IwaharaChibotaruSphericalTensor:
             if not i == self.n_sites-1:
                 index_str          += ","
 
-        tmp_str = "      Coordinate frame: "
-        if self.frame is None:
-            tmp_str += "unspecified\n\n"
-        else:
-            tmp_str += self.frame + "\n\n"
-        if not title == None:
-            title_length = len(title)
-            bar = (4+title_length+4)*"=" + "\n"
-
-            tmp_str += bar
-            tmp_str += "=== " + title + " ===\n"
-            tmp_str += bar
-            tmp_str += "\n"
-                
-        tmp_str += "       "
-
-        if len(index_str) + 2 > 18:
-            column_width = len(index_str) + 6
-        else:
-            column_width = 18
-
+        column_headers = []
         for i in range(0,self.n_sites):
-            tmp_str += " {0:>4} {1:>4}".format('k' + str(i+1),'q' + str(i+1))
-        tmp_str += (" {0:>" + str(column_width) + "} {1:>" + str(column_width) + "} {2:>" + str(column_width) + "}\n").format("Re(" + symbol + "_" + index_str + ")",
-                                                                                                                              "Im(" + symbol +"_" + index_str + ")",
-                                                                                                                              "|" + symbol + "_" + index_str + "|")
+            column_headers.append('k' + str(i+1))
+            column_headers.append('q' + str(i+1))
+        column_headers.extend(["Re(" + symbol + "_" + index_str + ")",
+                               "Im(" + symbol + "_" + index_str + ")",
+                               "|" + symbol + "_" + index_str + "|"])
 
+        # The ranks and the components are printed as integers and the
+        # parameters as floating-point numbers.
+        formats = 2*self.n_sites*[None] + 3*['.6f']
 
-        tmp_str += "        "
-        n_dashes = 10*self.n_sites - 1 + 3*column_width + 3
-        for i in range(0,n_dashes):
-            tmp_str += "-"
-        tmp_str += "\n"
+        notes = []
+        if self.frame is None:
+            notes.append("Coordinate frame: unspecified")
+        else:
+            notes.append("Coordinate frame: " + self.frame)
+        if not order_of_magnitude == 0:
+            notes.append("The parameters are multiplied by 10^{0}."
+                         .format(order_of_magnitude))
+
+        rows = []
 
         # Find the largest parameter magnitude of each rank combination
         # (k1,k2,...) for the rank_threshold filter. The threshold is compared
@@ -845,19 +861,24 @@ class IwaharaChibotaruSphericalTensor:
                 if first_nonzero_q < 0:
                     continue
 
-            tmp_str += "       "
+            row = []
             for j in range(0,self.n_sites):
                 k = rank_tuple[2*j]
                 q = rank_tuple[2*j+1]
-                tmp_str += " {0:4} {1:4}".format(k//2,q//2)
-            tmp_str += (" {0:" + str(column_width) + ".6f} {1:" + str(column_width) + ".6f} {2:" + str(column_width) + ".6f}\n").format(factor*self.parameter_list[i].real,
-                                                                                                                                        factor*self.parameter_list[i].imag,
-                                                                                                                                        abs(factor*self.parameter_list[i]))
-        tmp_str += "        "
-        for i in range(0,n_dashes):
-            tmp_str += "-"
-        tmp_str += "\n\n"
-        return tmp_str
+                row.append(k//2)
+                row.append(q//2)
+            row.extend([factor*self.parameter_list[i].real,
+                        factor*self.parameter_list[i].imag,
+                        abs(factor*self.parameter_list[i])])
+
+            rows.append(row)
+
+        return result_table.ResultTable(rows,
+                                        column_headers=column_headers,
+                                        title=title,
+                                        notes=notes,
+                                        formats=formats,
+                                        table_type='spherical_tensor')
 
 
     def inflate_dimension(self,site_list):
@@ -1265,7 +1286,7 @@ class IwaharaChibotaruSphericalTensor:
 
     def __repr__(self):
         """Return the ITO parameter table of the tensor."""
-        return self.ITO_table()
+        return str(self.ITO_table())
     
 
     def __init__(self, rank_list, parameter_list):
@@ -1690,15 +1711,14 @@ class IwaharaChibotaruSphericalTensor:
         k_array, q_array = t_isotropic.fortran_rank_arrays()
         check('fortran_rank_arrays shape',
               k_array.shape == (t_isotropic.n_ranks,2))
-        check('ITO table renders', len(t_isotropic.ITO_table()) > 0)
+        check('ITO table renders', len(str(t_isotropic.ITO_table())) > 0)
+        check('ITO table is a ResultTable',
+              isinstance(t_isotropic.ITO_table(),result_table.ResultTable))
 
-        # The filtering options of ITO_table. The parameter rows of the table
-        # are the non-empty lines that contain neither letters (the header)
-        # nor runs of dashes (the horizontal bars).
+        # The filtering options of ITO_table, checked on the parameter rows
+        # stored in the returned table.
         def table_rows(table):
-            return [line.split() for line in table.split("\n")
-                    if line.strip() and (not "---" in line)
-                    and (not any(character.isalpha() for character in line))]
+            return table.rows
 
         # A one-site tensor with ranks (k,q) = (0,0), (1,-1), (1,0), (1,1)
         # and (2,0), where all rank k = 2 parameters are negligibly small.
@@ -1836,7 +1856,7 @@ class MixedCartesianIwaharaChibotaruSphericalTensor:
         Rotate the tensor using the Rotation instance given as an argument. The Cartesian
         index is rotated with the Cartesian rotation matrix and the spherical indices with
         the Wigner D matrices.
-    ITO_table(symbol="g",title=None,order_of_magnitude=0,rank_threshold=0.0,half_table=False) : str
+    ITO_table(symbol="g",title=None,order_of_magnitude=0,rank_threshold=0.0,half_table=False) : ResultTable
         Return a listing of all ITO expansion parameters. The first index column is the
         Cartesian index, followed by the k1, q1, k2, q2, ... indices.
     inflate_dimension(site_list)
@@ -1972,8 +1992,12 @@ class MixedCartesianIwaharaChibotaruSphericalTensor:
 
 
     def ITO_table(self, symbol="g", title=None, order_of_magnitude=0, rank_threshold=0.0, half_table=False):
-        """Return a listing of all ITO expansion parameters. The first index column is
-        the Cartesian index a, followed by the k1, q1, k2, q2, ... indices.
+        """Return a listing of all ITO expansion parameters as an instance of
+        ResultTable. Printing the returned instance, or converting it into a
+        str, gives the human-readable table. The first index column is the
+        Cartesian index a, followed by the k1, q1, k2, q2, ... indices and by
+        the real part, the imaginary part and the magnitude of the expansion
+        parameter.
 
         Optional arguments:
         -------------------
@@ -2006,39 +2030,28 @@ class MixedCartesianIwaharaChibotaruSphericalTensor:
             if not i == self.n_sites-1:
                 index_str += ","
 
-        tmp_str = "      Coordinate frame: "
-        if self.frame is None:
-            tmp_str += "unspecified\n\n"
-        else:
-            tmp_str += self.frame + "\n\n"
-        if not title == None:
-            title_length = len(title)
-            bar = (4+title_length+4)*"=" + "\n"
-
-            tmp_str += bar
-            tmp_str += "=== " + title + " ===\n"
-            tmp_str += bar
-            tmp_str += "\n"
-
-        tmp_str += "       "
-
-        if len(index_str) + 2 > 18:
-            column_width = len(index_str) + 6
-        else:
-            column_width = 18
-
-        tmp_str += " {0:>4}".format("a")
+        column_headers = ["a"]
         for i in range(0,self.n_sites):
-            tmp_str += " {0:>4} {1:>4}".format('k' + str(i+1),'q' + str(i+1))
-        tmp_str += (" {0:>" + str(column_width) + "} {1:>" + str(column_width) + "} {2:>" + str(column_width) + "}\n").format("Re(" + symbol + "_" + index_str + ")",
-                                                                                                                              "Im(" + symbol +"_" + index_str + ")",
-                                                                                                                              "|" + symbol + "_" + index_str + "|")
+            column_headers.append('k' + str(i+1))
+            column_headers.append('q' + str(i+1))
+        column_headers.extend(["Re(" + symbol + "_" + index_str + ")",
+                               "Im(" + symbol + "_" + index_str + ")",
+                               "|" + symbol + "_" + index_str + "|"])
 
-        tmp_str += "        "
-        n_dashes = 5 + 10*self.n_sites - 1 + 3*column_width + 3
-        for i in range(0,n_dashes):
-            tmp_str += "-"
-        tmp_str += "\n"
+        # The Cartesian label is a string and the ranks and the components
+        # are integers; only the parameters are floating-point numbers.
+        formats = (1 + 2*self.n_sites)*[None] + 3*['.6f']
+
+        notes = []
+        if self.frame is None:
+            notes.append("Coordinate frame: unspecified")
+        else:
+            notes.append("Coordinate frame: " + self.frame)
+        if not order_of_magnitude == 0:
+            notes.append("The parameters are multiplied by 10^{0}."
+                         .format(order_of_magnitude))
+
+        rows = []
 
         for alpha in range(0,3):
             tensor = self.component_list[alpha]
@@ -2076,20 +2089,24 @@ class MixedCartesianIwaharaChibotaruSphericalTensor:
                     if first_nonzero_q < 0:
                         continue
 
-                tmp_str += "       "
-                tmp_str += " {0:>4}".format(component_label_list[alpha])
+                row = [component_label_list[alpha]]
                 for j in range(0,self.n_sites):
                     k = rank_tuple[2*j]
                     q = rank_tuple[2*j+1]
-                    tmp_str += " {0:4} {1:4}".format(k//2,q//2)
-                tmp_str += (" {0:" + str(column_width) + ".6f} {1:" + str(column_width) + ".6f} {2:" + str(column_width) + ".6f}\n").format(factor*tensor.parameter_list[i].real,
-                                                                                                                                            factor*tensor.parameter_list[i].imag,
-                                                                                                                                            abs(factor*tensor.parameter_list[i]))
-        tmp_str += "        "
-        for i in range(0,n_dashes):
-            tmp_str += "-"
-        tmp_str += "\n\n"
-        return tmp_str
+                    row.append(k//2)
+                    row.append(q//2)
+                row.extend([factor*tensor.parameter_list[i].real,
+                            factor*tensor.parameter_list[i].imag,
+                            abs(factor*tensor.parameter_list[i])])
+
+                rows.append(row)
+
+        return result_table.ResultTable(rows,
+                                        column_headers=column_headers,
+                                        title=title,
+                                        notes=notes,
+                                        formats=formats,
+                                        table_type='spherical_tensor')
 
 
     def inflate_dimension(self,site_list):
@@ -2274,7 +2291,7 @@ class MixedCartesianIwaharaChibotaruSphericalTensor:
 
     def __repr__(self):
         """Return the ITO parameter table of the tensor."""
-        return self.ITO_table()
+        return str(self.ITO_table())
 
 
     def __init__(self, component_list):
@@ -2508,18 +2525,10 @@ class MixedCartesianIwaharaChibotaruSphericalTensor:
         t_padded = t_g + 0.0*t_isotropic
         check('equality with zero-padded ranks', t_padded == t_g)
 
-        # The filtering options of ITO_table. The parameter rows of the table
-        # are the non-empty lines that contain no runs of dashes (the
-        # horizontal bars) and no letters other than the single Cartesian
-        # label x, y or z (which excludes the header).
+        # The filtering options of ITO_table, checked on the parameter rows
+        # stored in the returned table.
         def table_rows(table):
-            row_list = []
-            for line in table.split("\n"):
-                fields = line.split()
-                if (len(fields) > 1) and (fields[0] in ('x','y','z')) \
-                   and (not "---" in line):
-                    row_list.append(fields)
-            return row_list
+            return table.rows
 
         # Each component of t_table has ranks (k,q) = (1,-1), (1,0) and
         # (1,1) (zero-valued parameters included); the parameters of the
@@ -2609,9 +2618,13 @@ class CartesianTensor:
         Return the asymmetric part of the tensor as a matrix.
     rotate(rotation_matrix)
         Rotate the tensor using the rotation matrix given as an argument.
-    tensor_table(order_of_magnitude=0)
-        Print a table of the tensor including full tensor, isotropic, symmetric traceless
-        and anti-symmetric contributions as well as the principal values.
+    tensor_table(order_of_magnitude=0) : ResultTable
+        Return a table of the matrix representation of the tensor, including the full
+        tensor, its symmetric traceless and anti-symmetric contributions and the
+        isotropic part.
+    principal_axis_table() : ResultTable or None
+        Return a table of the principal values and principal axes of a symmetric
+        tensor, or None when the tensor is not symmetric.
 
     Class methods
     -------------
@@ -2739,71 +2752,105 @@ class CartesianTensor:
 
         
     def tensor_table(self, order_of_magnitude=0):
-        """Print a table of the tensor including full tensor, isotropic, symmetric
-        traceless and anti-symmetric contributions as well as the principal values.
+        """Return a table of the matrix representation of the tensor as an
+        instance of ResultTable. Printing the returned instance, or
+        converting it into a str, gives the human-readable table.
 
-        Before printing, the values of the parameters will be multiplied by
-        10^order_of_magnitude.
+        The table lists the full tensor and its symmetric traceless and
+        anti-symmetric contributions as separate sections, one Cartesian
+        row per line, and reports the isotropic part below the table. The
+        principal values and axes of a symmetric tensor are tabulated
+        separately by the principal_axis_table method.
+
+        Optional arguments
+        ------------------
+        order_of_magnitude : int
+            Before printing, the values of the tensor elements will be
+            multiplied by 10^order_of_magnitude. Default is 0.
         """
         factor = 10**order_of_magnitude
-        
+
         isotropic    = self.isotropic_part()
         full_matrix  = self.tensor
         symm_matrix  = self.symmetric_part()
         asymm_matrix = self.antisymmetric_part()
-        
-        tmp_str = "      Coordinate frame: "
-        if self.frame is None:
-            tmp_str += "unspecified\n\n"
-        else:
-            tmp_str += self.frame + "\n\n"
-        tmp_str += "    Matrix representation\n\n"
-        tmp_str += "    {0:>39}  {1:>39}  {2:>39}\n".format("Full tensor",
-                                                            "Symmetric traceless contribution",
-                                                            "Anti-symmetric contribution")
-        tmp_str += "    " + 39*"-" + "  " + 39*"-" + "  " + 39*"-" + "\n"
-        for i in range(0,3):
-            full_str  = "    "
-            symm_str  = "  "
-            asymm_str = "  "
-            for j in range(0,3):
-                full_str  += " {0:12.6f}".format(factor*full_matrix[i][j])
-                symm_str  += " {0:12.6f}".format(factor*symm_matrix[i][j])
-                asymm_str += " {0:12.6f}".format(factor*asymm_matrix[i][j])
 
-            tmp_str += full_str + symm_str + asymm_str + "\n"
-        tmp_str += "    " + 39*"-" + "  " + 39*"-" + "  " + 39*"-" + "\n"
-        tmp_str += "                    Isotropic: {0:12.6f}\n\n".format(factor*isotropic)
+        component_label_list = ['x','y','z']
 
-        if self.symmetric:
-            tmp_str += "    Eigenvalues and eigenvectors of a symmetric tensor\n\n"
+        rows        = []
+        row_headers = []
 
-            indices = ['x','y','z']
-
-            tmp_str += "        {0:>12}    {1:>12} {2:>12} {3:>12}\n".format('g','x','y','z')
-            tmp_str += "    "
-            for i in range(0,58):
-                tmp_str += "-"
-            tmp_str += "\n"
-        
+        for section_label, matrix in (("Full tensor",full_matrix),
+                                      ("Symmetric traceless contribution",symm_matrix),
+                                      ("Anti-symmetric contribution",asymm_matrix)):
+            rows.append(section_label)
             for i in range(0,3):
-                tmp_str += "    {0:>3} {1:12.6f}   ".format(indices[i],self.eigenvalues[i])
-                for j in range(0,3):
-                    tmp_str += " {0:12.6f}".format(self.eigenvectors[j][i])
-                tmp_str += "\n"
+                rows.append([factor*matrix[i][j] for j in range(0,3)])
+                row_headers.append(component_label_list[i])
 
-            tmp_str += "    "
-            for i in range(0,58):
-                tmp_str += "-"
-            tmp_str += "\n"
-            tmp_str += "    Eigenvectors are written on the rows following the eigenvalue.\n\n"
-        
-        return tmp_str
+        if self.frame is None:
+            notes = ["Coordinate frame: unspecified"]
+        else:
+            notes = ["Coordinate frame: " + self.frame]
+        if not order_of_magnitude == 0:
+            notes.append("The tensor elements are multiplied by 10^{0}."
+                         .format(order_of_magnitude))
 
-    
+        summary = ["Isotropic part: {0:12.6f}".format(factor*isotropic)]
+
+        return result_table.ResultTable(rows,
+                                        column_headers=component_label_list,
+                                        row_headers=row_headers,
+                                        title="MATRIX REPRESENTATION OF THE TENSOR",
+                                        notes=notes,
+                                        summary=summary,
+                                        table_type='cartesian_tensor')
+
+
+    def principal_axis_table(self):
+        """Return a table of the principal values and the principal axes of
+        a symmetric tensor as an instance of ResultTable, or None when the
+        tensor is not symmetric and the principal values are therefore not
+        available. Each line contains one principal value followed by the
+        Cartesian components of the corresponding principal axis.
+        """
+        if not self.symmetric:
+            return None
+
+        component_label_list = ['x','y','z']
+
+        rows = []
+        for i in range(0,3):
+            rows.append([self.eigenvalues[i]]
+                        + [self.eigenvectors[j][i] for j in range(0,3)])
+
+        if self.frame is None:
+            notes = ["Coordinate frame: unspecified"]
+        else:
+            notes = ["Coordinate frame: " + self.frame]
+        notes.append("The principal axes are written on the rows following the")
+        notes.append("principal value they belong to.")
+
+        return result_table.ResultTable(rows,
+                                        column_headers=["Principal value",
+                                                        "x","y","z"],
+                                        row_headers=component_label_list,
+                                        title="PRINCIPAL VALUES AND AXES OF THE TENSOR",
+                                        notes=notes,
+                                        table_type='cartesian_tensor')
+
+
     def __repr__(self):
-        """Return the tensor table of the tensor."""
-        return self.tensor_table()
+        """Return the matrix representation of the tensor followed, for a
+        symmetric tensor, by its principal values and axes.
+        """
+        tmp_str = str(self.tensor_table())
+
+        principal_axis_table = self.principal_axis_table()
+        if principal_axis_table is not None:
+            tmp_str += str(principal_axis_table)
+
+        return tmp_str
 
     
     def __add__(self,other):
@@ -2910,7 +2957,18 @@ class CartesianTensor:
               np.allclose(sorted(ct.eigenvalues),old_eigenvalues))
 
         check('addition', np.allclose((ct + ct).tensor,2.0*ct.tensor))
-        check('tensor table renders', len(ct.tensor_table()) > 0)
+        check('tensor table renders', len(str(ct.tensor_table())) > 0)
+        check('tensor table is a ResultTable',
+              isinstance(ct.tensor_table(),result_table.ResultTable))
+        check('the tensor table has one row per Cartesian row of each part',
+              len([row for row in ct.tensor_table().rows
+                   if isinstance(row,list)]) == 9)
+        check('the principal axis table of a symmetric tensor renders',
+              len(str(ct.principal_axis_table())) > 0)
+        check('a non-symmetric tensor has no principal axis table',
+              CartesianTensor(np.array([[0.0,1.0,0.0],
+                                        [-1.0,0.0,0.0],
+                                        [0.0,0.0,0.0]])).principal_axis_table() is None)
 
         # Coordinate frame label in the printed table.
         tmp_tensor = cls(np.identity(3))

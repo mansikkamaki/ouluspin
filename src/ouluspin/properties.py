@@ -14,6 +14,7 @@ from ouluspin._fortran import fortran_utils as fu
 
 from ouluspin import tensors
 from ouluspin import pseudospin_operators
+from ouluspin import result_table
 
 from ouluspin import _debug as output
 
@@ -69,21 +70,21 @@ class IsothermalStaticMagnetization:
 
     Private methods
     ---------------
-    __single_field_range_table(fancy_header=True) : str
+    __single_field_range_table() : ResultTable
         Return a human-readable table of the magnetization with a format used
         for a single field range for all temperature points.
-    __multiple_field_range_table(fancy_header=True) : str
+    __multiple_field_range_table() : ResultTable
         Return a human-readable table of the magnetization with a format used
         for different field ranges for all temperature points.
 
     Public methods
     --------------
-    data_table() : str
+    data_table() : ResultTable
         Return a human-readable table of the magnetization. This is mostly a
         wrapper for the two different private table methods.
     data_file(filename)
         Write the data to a file.
-    comparison_table(comparison,labels=('M','M')) : str
+    comparison_table(comparison,labels=('M','M')) : ResultTable
         Return a human-readable table of the magnetization stored in this
         this instance and in the instance given as an argument along with the
         deviations. The T_list and B_list attributes of this instance and the other
@@ -102,108 +103,102 @@ class IsothermalStaticMagnetization:
         tests passed.
     """
 
-    def __single_field_range_table(self,fancy_header=True):
-        """Return a human-readable table of the magnetization with a format used
-        for a single field range for all temperature points.
+    __UNIT_NOTE = "The product of Bohr magneton and the Avogadro constant is used as the unit."
+
+    def __single_field_range_table(self):
+        """Return the table of the magnetization, as an instance of
+        ResultTable, in the format used when the same field range is used
+        for all the temperature points. The first column contains the
+        field and the remaining columns the magnetization at each
+        temperature.
         """
-        if fancy_header:
-            tmp_str  = "      MOLAR MAGNETIZATION\n\n"
-            tmp_str += "      The product of Bohr magneton and the Avogadro constant is used as the unit.\n\n"
-            tmp_str += "      {0:>8}".format('B / T')
-        else:
-            tmp_str  = "#     {0:>8}".format('B / T')
-            
-        for i in range(0,self.n_T_points):
-            tmp_str += " {0:14.3f} K".format(self.T_list[i])
-        tmp_str += "\n"
+        column_headers = ['B / T'] \
+                         + ["{0:.3f} K".format(T) for T in self.T_list]
+        formats        = ['.3f'] + self.n_T_points*['.6f']
 
-        if fancy_header:
-            n_dashes = 8 + self.n_T_points*17
-            tmp_str += "      "
-            for i in range(0,n_dashes):
-                tmp_str += "-"
-            tmp_str += "\n"
-
+        rows = []
         for i in range(0,self.n_B_points):
-            tmp_str += "      {0:8.3f}".format(self.B_list[i])
-            for j in range(0,self.n_T_points):
-                tmp_str += " {0:16.6f}".format(self.magnetization[j][i])
-            tmp_str += "\n"
+            rows.append([self.B_list[i]]
+                        + [self.magnetization[j][i]
+                           for j in range(0,self.n_T_points)])
 
-        if fancy_header:
-            tmp_str += "      "
-            for i in range(0,n_dashes):
-                tmp_str += "-"
-            tmp_str += "\n\n"
-        
-        return tmp_str
+        return result_table.ResultTable(rows,
+                                        column_headers=column_headers,
+                                        title="MOLAR MAGNETIZATION",
+                                        notes=self.__UNIT_NOTE,
+                                        formats=formats,
+                                        table_type='magnetization')
 
-    
-    def __multiple_field_range_table(self,fancy_header=True):
-        """Return a human-readable table of the magnetization with a format used
-        for different field ranges for all temperature points.
+
+    def __multiple_field_range_table(self):
+        """Return the table of the magnetization, as an instance of
+        ResultTable, in the format used when a different field range is
+        used for the different temperature points. Each temperature point
+        contributes a pair of columns containing the field and the
+        magnetization.
         """
-        if fancy_header:
-            tmp_str  = "      MOLAR MAGNETIZATION\n\n"
-            tmp_str += "      The product of Bohr magneton and the Avogadro constant is used as the unit.\n\n"
+        temperature_headers = []
+        field_headers       = []
+        formats             = []
 
-        if fancy_header:
-            tmp_str += "        "
-        else:
-            tmp_str = "#       "
-        for i in range(0,self.n_T_points):
-            tmp_str += " {0:>12} {1:10.3f} K".format("B / T",self.T_list[i])
-        tmp_str += "\n"
+        for T in self.T_list:
+            temperature_headers.extend(["{0:.3f} K".format(T),""])
+            field_headers.extend(['B / T','M'])
+            formats.extend(['.6f','.6f'])
 
-        if fancy_header:
-            n_dashes = 8 + self.n_T_points*26
-            tmp_str += "      "
-            for i in range(0,n_dashes):
-                tmp_str += "-"
-            tmp_str += "\n"
-
+        rows = []
         for i in range(0,self.n_B_points):
-            tmp_str += "        "
+            row = []
             for j in range(0,self.n_T_points):
-                tmp_str += " {0:12.6f} {1:12.6f}".format(self.B_list[j][i],self.magnetization[j][i])
-            tmp_str += "\n"
+                row.extend([self.B_list[j][i],self.magnetization[j][i]])
+            rows.append(row)
 
-        if fancy_header:
-            tmp_str += "      "
-            for i in range(0,n_dashes):
-                tmp_str += "-"
-            tmp_str += "\n\n"
-        
-        return tmp_str
-    
+        return result_table.ResultTable(rows,
+                                        column_headers=[temperature_headers,
+                                                        field_headers],
+                                        title="MOLAR MAGNETIZATION",
+                                        notes=self.__UNIT_NOTE,
+                                        formats=formats,
+                                        table_type='magnetization')
+
 
     def data_table(self):
-        """Return a human-readable table of the magnetization. This is mostly a
-        wrapper for the two different private table methods.
+        """Return a table of the magnetization as an instance of
+        ResultTable. This is mostly a wrapper for the two different private
+        table methods, which are used depending on whether the same field
+        range was used for all the temperature points.
         """
         if self.single_field_range:
             return self.__single_field_range_table()
         else:
             return self.__multiple_field_range_table()
 
-        
-    def data_file(self,filename):
-        """Write the data to a file."""
-        f = open(filename, 'w')
-        
-        if self.single_field_range:
-            f.write(self.__single_field_range_table(fancy_header=False))
-        else:
-            f.write(self.__multiple_field_range_table(fancy_header=False))
 
-        f.close()
+    def data_file(self,filename):
+        """Write the data to a file in the bare, machine-readable form of
+        the data table.
+        """
+        self.data_table().data_file(filename)
 
     
     def comparison_table(self,comparison,labels=('M','M')):
-        """Return a human-readable table of the magnetization stored in this
-        this instance and in the instance given as an argument along with the
-        deviations. The T_list and B_list attributes of this instance and the other
-        instance must be equal.
+        """Return a table, as an instance of ResultTable, of the
+        magnetization stored in this instance and in the instance given as
+        an argument along with the deviations. The temperature points form
+        the sections of the table and the root-mean-square deviation is
+        reported below it. The T_list and B_list attributes of this
+        instance and the other instance must be equal.
+
+        Arguments
+        ---------
+        comparison : IsothermalStaticMagnetization
+            The instance the magnetization of this instance is compared to.
+
+        Optional arguments
+        ------------------
+        labels : tuple of str
+            The column headers of the magnetization of this instance and of
+            the compared instance. Default is ('M','M').
         """
         if not isinstance(comparison, IsothermalStaticMagnetization):
             print("ERROR in IsothermalStaticMagnetization.")
@@ -223,14 +218,10 @@ class IsothermalStaticMagnetization:
             print("Error termination.")
             sys.exit(1)
 
-        tmp_str  = "      MOLAR MAGNETIZATION\n\n"
-        tmp_str += "      The product of Bohr magneton and the Avogadro constant is used as the unit.\n\n"
+        rows = []
 
         for i in range(0,self.n_T_points):
-            T = self.T_list[i]
-            tmp_str += "        Temperature: {0:8.3f} K\n\n".format(T)
-            tmp_str += "         {0:>12} {1:>12} {2:>12} {3:>12}\n".format('B / T',labels[0],labels[1],'Deviation')
-            tmp_str += "        ----------------------------------------------------\n"
+            rows.append("Temperature: {0:.3f} K".format(self.T_list[i]))
 
             for j in range(0,self.n_B_points):
                 if self.single_field_range:
@@ -241,13 +232,18 @@ class IsothermalStaticMagnetization:
                 M_this  = self.magnetization[i][j]
                 M_other = comparison.magnetization[i][j]
 
-                tmp_str += "         {0:12.6f} {1:12.6f} {2:12.6f} {3:12.6f}\n".format(B,M_this,M_other,
-                                                                                       M_this-M_other)
-            tmp_str += "        ----------------------------------------------------\n\n"
-        tmp_str += "       RMS ERROR: {0:18.6f}\n\n"\
-                   .format(self.rms_error(comparison))
+                rows.append([B,M_this,M_other,M_this-M_other])
 
-        return tmp_str
+        summary = ["RMS error: {0:.6f}".format(self.rms_error(comparison))]
+
+        return result_table.ResultTable(rows,
+                                        column_headers=['B / T',labels[0],labels[1],
+                                                        'Deviation'],
+                                        title="COMPARISON OF MOLAR MAGNETIZATIONS",
+                                        notes=self.__UNIT_NOTE,
+                                        summary=summary,
+                                        formats=4*['.6f'],
+                                        table_type='magnetization')
 
     
     def rms_error(self,comparison):
@@ -278,7 +274,7 @@ class IsothermalStaticMagnetization:
 
     def __repr__(self):
         """Return a human-readable table of the calculated magnetization."""
-        return self.data_table()
+        return str(self.data_table())
 
     
     def __init__(self, T_list, B_list,
@@ -408,9 +404,9 @@ class IsothermalStaticMagnetization:
         check('root-mean-square error',
               abs(magnetization_a.rms_error(magnetization_b) - rms_reference) < 1.0e-12)
 
-        check('data table renders', len(magnetization_a.data_table()) > 0)
+        check('data table renders', len(str(magnetization_a.data_table())) > 0)
         check('comparison table renders',
-              len(magnetization_a.comparison_table(magnetization_b)) > 0)
+              len(str(magnetization_a.comparison_table(magnetization_b))) > 0)
 
         # A multiple-field-range instance.
         magnetization_c = cls([1.0,2.0],[[0.5,1.0],[0.6,1.1]],
@@ -485,11 +481,11 @@ class StaticMagneticSusceptibility:
 
     Public methods
     --------------
-    data_table() : str
+    data_table() : ResultTable
         Return a human-readable table of the susceptibility.
     data_file(filename)
         Write the data to a file.
-    comparison_table(comparison,labels=('chiT','chiT')) : str
+    comparison_table(comparison,labels=('chiT','chiT')) : ResultTable
         Return a human-readable table of the susceptibility stored in this
         this instance and in the instance given as an argument along with the
         deviations. The T_list attributes of this instance and the other
@@ -508,39 +504,50 @@ class StaticMagneticSusceptibility:
         tests passed.
     """
 
+    __UNIT_NOTE = "The listed susceptibility is the chiT product in units chiT / cm^3 K / mol."
+
     def data_table(self):
-        """Return a human-readable table of the susceptibility."""
-        tmp_str  = "      MOLAR MAGNETIC SUSCEPTIBILITY\n\n"
-        tmp_str += "      The listed susceptibility is the chiT product in units chiT / cm^3 K / mol.\n\n"
-        tmp_str += "      {0:>8} {1:>19}\n".format('T / K','chiT')
-        tmp_str += "      ----------------------------\n"
-
+        """Return a table of the susceptibility as an instance of
+        ResultTable. Each row contains a temperature point and the chiT
+        product at that temperature.
+        """
+        rows = []
         for i in range(0,self.n_T_points):
-            tmp_str += "      {0:8.3f} {1:19.6f}\n".format(self.T_list[i],self.susceptibility[i])
-        
-        tmp_str += "      ----------------------------\n\n"
-        
-        return tmp_str
+            rows.append([self.T_list[i],self.susceptibility[i]])
 
-    
+        return result_table.ResultTable(rows,
+                                        column_headers=['T / K','chiT'],
+                                        title="MOLAR MAGNETIC SUSCEPTIBILITY",
+                                        notes=self.__UNIT_NOTE,
+                                        formats=['.3f','.6f'],
+                                        table_type='susceptibility')
+
+
     def data_file(self,filename):
-        """Write the data to a file."""
-
-        tmp_str = "#     {0:>8} {1:>19}\n".format('T / K','chiT')
-
-        for i in range(0,self.n_T_points):
-            tmp_str += "      {0:8.3f} {1:19.6f}\n".format(self.T_list[i],self.susceptibility[i])
-        
-        f = open(filename, 'w')
-        f.write(tmp_str)
-        f.close()
+        """Write the data to a file in the bare, machine-readable form of
+        the data table.
+        """
+        self.data_table().data_file(filename)
 
     
     def comparison_table(self,comparison,labels=('chiT','chiT')):
-        """Return a human-readable table of the susceptibility stored in this
-        this instance and in the instance given as an argument along with the
-        deviations. The T_list attributes of this instance and the other
-        instance must be equal.
+        """Return a table, as an instance of ResultTable, of the
+        susceptibility stored in this instance and in the instance given as
+        an argument along with the deviations. The root-mean-square
+        deviation is reported below the table. The T_list attributes of
+        this instance and the other instance must be equal.
+
+        Arguments
+        ---------
+        comparison : StaticMagneticSusceptibility
+            The instance the susceptibility of this instance is compared
+            to.
+
+        Optional arguments
+        ------------------
+        labels : tuple of str
+            The column headers of the susceptibility of this instance and
+            of the compared instance. Default is ('chiT','chiT').
         """
         if not isinstance(comparison, StaticMagneticSusceptibility):
             print("ERROR in StaticMagneticSusceptibility.")
@@ -554,21 +561,23 @@ class StaticMagneticSusceptibility:
             print("Error termination.")
             sys.exit(1)
         
-        tmp_str  = "      COMPARISON OF MOLAR MAGNETIC SUSCEPTIBILITIES\n\n"
-        tmp_str += "      The listed susceptibility is the chiT product in units chiT / cm^3 K / mol.\n\n"
-        tmp_str += "      {0:>8} {1:>19} {2:>19} {3:>19}\n".format('T / K',labels[0],labels[1],'Deviation')
-        tmp_str += "      --------------------------------------------------------------------\n"
-
+        rows = []
         for i in range(0,self.n_T_points):
-            tmp_str += "      {0:8.3f} {1:19.6f} {2:19.6f} {3:19.6f}\n"\
-                       .format(self.T_list[i],self.susceptibility[i],comparison.susceptibility[i],
-                               self.susceptibility[i] - comparison.susceptibility[i])
-        
-        tmp_str += "      --------------------------------------------------------------------\n"
-        tmp_str += "                                             RMS ERROR: {0:18.6f}\n\n"\
-                   .format(self.rms_error(comparison))
-        
-        return tmp_str
+            rows.append([self.T_list[i],
+                         self.susceptibility[i],
+                         comparison.susceptibility[i],
+                         self.susceptibility[i] - comparison.susceptibility[i]])
+
+        summary = ["RMS error: {0:.6f}".format(self.rms_error(comparison))]
+
+        return result_table.ResultTable(rows,
+                                        column_headers=['T / K',labels[0],labels[1],
+                                                        'Deviation'],
+                                        title="COMPARISON OF MOLAR MAGNETIC SUSCEPTIBILITIES",
+                                        notes=self.__UNIT_NOTE,
+                                        summary=summary,
+                                        formats=['.3f','.6f','.6f','.6f'],
+                                        table_type='susceptibility')
 
     
     def rms_error(self,comparison):
@@ -597,7 +606,7 @@ class StaticMagneticSusceptibility:
 
     def __repr__(self):
         """Return a human-readable table of the calculated susceptibility."""
-        return self.data_table()
+        return str(self.data_table())
 
     
     def __init__(self, T_list,
@@ -674,9 +683,9 @@ class StaticMagneticSusceptibility:
         check('root-mean-square error',
               abs(susceptibility_a.rms_error(susceptibility_b) - rms_reference) < 1.0e-12)
 
-        check('data table renders', len(susceptibility_a.data_table()) > 0)
+        check('data table renders', len(str(susceptibility_a.data_table())) > 0)
         check('comparison table renders',
-              len(susceptibility_a.comparison_table(susceptibility_b)) > 0)
+              len(str(susceptibility_a.comparison_table(susceptibility_b))) > 0)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             filename = os.path.join(tmp_dir,'susceptibility.dat')
@@ -1088,7 +1097,7 @@ class StaticTransitionMagneticMoments:
 
     Public methods
     --------------
-    transition_magnetic_moment_table() : str
+    transition_magnetic_moment_table() : ResultTable
         Construct and return a human-readable table of the transition magnetic
         moments.
     transition_magnetic_moment_gnuplot_file(basename, energy_cutoff=999999.0, y_max=-1.0) : str
@@ -1113,28 +1122,32 @@ class StaticTransitionMagneticMoments:
     """
 
     def transition_magnetic_moment_table(self):
-        """Construct and return a human-readable table of the transition magnetic
-        moments.
+        """Construct and return a table of the transition magnetic moments
+        as an instance of ResultTable. Each row contains a pair of states,
+        given by their indices, energies and expectation values of the
+        magnetic moment, followed by the magnitude of the transition
+        magnetic moment between them.
         """
-        tmp_str  = "      TRANSITION MAGNETIC MOMENTS\n\n"
-        tmp_str += "       {0:>3} {1:>8} {2:>8}    {3:>3} {4:>8} {5:>8}    {6:>12}\n"\
-            .format("i","E_i","mu_z,i","f","E_f","mu_z,f","|mu_if|")
-        tmp_str += "      ===============================================================\n"
-        
+        rows = []
+
         for i in range(0,self.n_states):
             E_i  = self.eigenvalues[i]
             mu_i = self.expectation_values[i]
-            
+
             for j in range(0,i):
-                E_j   = self.eigenvalues[j]
-                mu_j  = self.expectation_values[j]
-                mu_ij = self.transition_magnetic_moment[i][j]
+                rows.append([i,E_i,mu_i,
+                             j,self.eigenvalues[j],self.expectation_values[j],
+                             self.transition_magnetic_moment[i][j]])
 
-                tmp_str += "       {0:3} {1:8.2f} {2:8.3f}    {3:3} {4:8.2f} {5:8.3f}    {6:12.8f}\n"\
-                    .format(i,E_i,mu_i,j,E_j,mu_j,mu_ij)
-
-        tmp_str += "      ===============================================================\n\n"
-        return tmp_str
+        return result_table.ResultTable(rows,
+                                        column_headers=["i","E_i","mu_z,i",
+                                                        "f","E_f","mu_z,f",
+                                                        "|mu_if|"],
+                                        title="TRANSITION MAGNETIC MOMENTS",
+                                        formats=[None,'.2f','.3f',
+                                                 None,'.2f','.3f',
+                                                 '.8f'],
+                                        table_type='transition_moments')
 
     
     def transition_magnetic_moment_gnuplot_file(self, basename, energy_cutoff=999999.0, y_max=-1.0):
@@ -1278,7 +1291,7 @@ class StaticTransitionMagneticMoments:
 
     def __repr__(self):
         """Return a human-readable table of the expectation values and transition moments."""
-        return self.transition_magnetic_moment_table()
+        return str(self.transition_magnetic_moment_table())
 
 
     def __init__(self, magnetic_moment, hamiltonian, n_states, units,
@@ -1393,7 +1406,7 @@ class StaticTransitionMagneticMoments:
         check('eigenvalues stored', np.allclose(transition_moments.eigenvalues,
                                                 [0.0,10.0]))
         check('transition moment table renders',
-              len(transition_moments.transition_magnetic_moment_table()) > 0)
+              len(str(transition_moments.transition_magnetic_moment_table())) > 0)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             basename = os.path.join(tmp_dir,'barrier')
@@ -1523,6 +1536,10 @@ class PseudoSpinDoublet:
         The Cartesian g-tensor describing the Zeeman interaction of the
         doublet, expressed in the frame of the magnetic moment operators
         passed to the class. Dimensionless.
+    state_energies : tuple of float or None
+        The eigenvalues of the two states spanning the doublet, in the
+        energy unit of the unit system and in the order of the states
+        attribute, or None if the energies were not provided.
     tunneling_gap : float or None
         The energy separation of the two states in the energy unit of the
         unit system, or None if the energies were not provided. For a
@@ -1552,8 +1569,8 @@ class PseudoSpinDoublet:
     __calculate_g_tensor()
         Calculate the Cartesian g-tensor and store it as an attribute.
     __classify_doublet(energies,kramers)
-        Determine the tunneling gap and the Kramers classification and
-        store them as attributes.
+        Determine the state energies, the tunneling gap and the Kramers
+        classification and store them as attributes.
     __check_quasi_doublet_time_reversal()
         For a genuinely split quasi-doublet, check that the diagonal
         moments vanish as required by time-reversal symmetry and warn if
@@ -1692,22 +1709,26 @@ class PseudoSpinDoublet:
 
 
     def __classify_doublet(self,energies,kramers):
-        """Determine the tunneling gap and whether the doublet is a Kramers
-        doublet, and store them in the tunneling_gap and kramers
-        attributes. See the class documentation for the classification
-        rules. Called after the g-tensor has been evaluated.
+        """Determine the energies of the two states, the tunneling gap and
+        whether the doublet is a Kramers doublet, and store them in the
+        state_energies, tunneling_gap and kramers attributes. See the class
+        documentation for the classification rules. Called after the
+        g-tensor has been evaluated.
         """
         # The tunneling gap from the state energies, when available.
         if energies is None:
-            self.tunneling_gap = None
+            self.state_energies = None
+            self.tunneling_gap  = None
         else:
             if len(energies) <= max(self.states):
                 print("ERROR in PseudoSpinDoublet.")
                 print("Error: The energies list is shorter than the largest state index.")
                 print("Error termination.")
                 sys.exit(1)
-            self.tunneling_gap = abs(energies[self.states[1]]
-                                     - energies[self.states[0]])
+            self.state_energies = (energies[self.states[0]],
+                                   energies[self.states[1]])
+            self.tunneling_gap  = abs(energies[self.states[1]]
+                                      - energies[self.states[0]])
 
         degenerate = None
         if self.tunneling_gap is not None:

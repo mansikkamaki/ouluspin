@@ -183,6 +183,18 @@ exchange operator.
   `kelvin`, `millielectronvolt`, `electronvolt`. An instance of this
   class is passed to essentially every other class in the library.
 
+### `ouluspin.result_table`
+
+- **`ResultTable`** — the structured representation of a table of results.
+  The classes of the library return their result tables as instances of
+  this class rather than as preformatted strings: the instance stores the
+  content of the table (the rows, the headers, the title and the
+  explanatory texts) and renders it, so that the same table can later be
+  produced in other output formats. Printing an instance, or converting it
+  to a `str`, gives the plain-text table. The class method
+  `pseudospin_doublet_compound_table` builds a compound one-line-per-doublet
+  summary of a list of `PseudoSpinDoublet` instances.
+
 ### `ouluspin.tensors`
 
 Tensor structures used to parametrize the operators. Spherical tensor
@@ -234,7 +246,8 @@ between formats.
   transition magnetic moment matrix elements between states.
 - **`PseudoSpinDoublet`** — properties of a doublet described by an
   effective S = 1/2: the g-tensor and its principal axes, the tunneling
-  gap, and the Kramers/non-Kramers classification.
+  gap, the energies of the two states, and the Kramers/non-Kramers
+  classification.
 
 ### `ouluspin.integration`
 
@@ -310,6 +323,9 @@ fu.cg_utils.cg(1, 1, 1, -1, 2, 0)   # angular momenta as doubled integers
   the situation (documented per method).
 - **Magnetization** is reported as molar magnetization in units of the
   Bohr magneton.
+- **Result tables** are returned as `ResultTable` instances, not as
+  strings. Print them directly (`print(tensor.ITO_table())`) or convert
+  them with `str()` when a string is needed.
 
 ## Examples
 
@@ -351,6 +367,7 @@ extension and runs the Fortran suite in one step.
     ├── src/
     │   ├── ouluspin/         The Python package
     │   │   ├── units.py                 Energy unit systems
+    │   │   ├── result_table.py          Structured result tables
     │   │   ├── tensors.py               Spherical/Cartesian tensor classes
     │   │   ├── pseudospin_operators.py  Pseudospin bases and operators
     │   │   ├── properties.py            Magnetic property calculations

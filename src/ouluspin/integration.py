@@ -8,6 +8,7 @@ from math import pi, cos, sin, acos, sqrt
 import numpy as np
 
 from ouluspin._fortran import fortran_utils as fu
+from ouluspin import result_table
 
 
 class SimpleGrid:
@@ -50,7 +51,7 @@ class SimpleGrid:
 
     Public methods
     --------------
-    data_table()
+    data_table() : ResultTable
         Return a human-readable table of the grid.
 
     Class methods
@@ -61,29 +62,32 @@ class SimpleGrid:
     """
 
     def data_table(self):
-        """Return a human-readable table of the grid."""
-        tmp_str  = "      SIMPLE CARTESIAN GRID\n\n"
-        tmp_str += "       {0:>10} {1:>10} {2:>10} {3:>10} {4:>10}\n".format('Weight','X','Y','Z','Norm')
-        tmp_str += "      -------------------------------------------------------\n"
-
+        """Return a table of the grid points as an instance of ResultTable.
+        Each row contains the weight of one grid point, the Cartesian
+        components of the corresponding vector and the squared norm of that
+        vector, which is a check of the normalization of the grid.
+        """
+        rows = []
         for i in range(0,self.n_grid_points):
-            w     = self.weights[i]
-            x     = self.vectors[i][0]
-            y     = self.vectors[i][1]
-            z     = self.vectors[i][2]
-            norm = x**2 + y**2 + z**2
-            
-            tmp_str += "       {0:10.8f} {1:10.6f} {2:10.6f} {3:10.6f} {4:10.6f}\n".format(w,x,y,z,norm)
-        tmp_str += "      -------------------------------------------------------\n\n"
+            x = self.vectors[i][0]
+            y = self.vectors[i][1]
+            z = self.vectors[i][2]
 
-        tmp_str += "        Number of grid points: {0:10}\n".format(self.n_grid_points)
-        
-        return tmp_str
+            rows.append([self.weights[i],x,y,z,x**2 + y**2 + z**2])
+
+        summary = ["Number of grid points: {0}".format(self.n_grid_points)]
+
+        return result_table.ResultTable(rows,
+                                        column_headers=['Weight','X','Y','Z','Norm'],
+                                        title="SIMPLE CARTESIAN GRID",
+                                        summary=summary,
+                                        formats=['.8f','.6f','.6f','.6f','.6f'],
+                                        table_type='grid')
+
     
-
     def __repr__(self):
         """Return a human-readable summary of the grid."""
-        return self.data_table()
+        return str(self.data_table())
     
 
     def __init__(self, grid_type=0, grid_vector=(0.0,0.0,1.0)):
@@ -160,7 +164,7 @@ class SimpleGrid:
               abs(np.linalg.norm(grid.vectors[0]) - 1.0) < 1.0e-12)
         check('single-vector grid direction',
               np.allclose(grid.vectors[0],[1.0/sqrt(2.0),1.0/sqrt(2.0),0.0]))
-        check('data table renders', len(grid.data_table()) > 0)
+        check('data table renders', len(str(grid.data_table())) > 0)
 
         return debug_output.test_summary('SimpleGrid',result_list,print_output)
 
@@ -209,7 +213,7 @@ class LebedevLaikovGrid:
 
     Public methods
     --------------
-    data_table() : str
+    data_table() : ResultTable
         Return a human-readable table of the grid.
 
     Class methods
@@ -219,29 +223,32 @@ class LebedevLaikovGrid:
         tests passed.
     """
     def data_table(self):
-        """Return a human-readable table of the grid."""
-        tmp_str  = "      LEBEDEV--LAIKOV GRID\n\n"
-        tmp_str += "       {0:>10} {1:>10} {2:>10} {3:>10} {4:>10}\n".format('Weight','X','Y','Z','Norm')
-        tmp_str += "      -------------------------------------------------------\n"
-
+        """Return a table of the grid points as an instance of ResultTable.
+        Each row contains the weight of one grid point, the Cartesian
+        components of the corresponding vector and the squared norm of that
+        vector, which is a check of the normalization of the grid.
+        """
+        rows = []
         for i in range(0,self.n_grid_points):
-            w     = self.weights[i]
-            x     = self.vectors[i][0]
-            y     = self.vectors[i][1]
-            z     = self.vectors[i][2]
-            norm = x**2 + y**2 + z**2
-            
-            tmp_str += "       {0:10.8f} {1:10.6f} {2:10.6f} {3:10.6f} {4:10.6f}\n".format(w,x,y,z,norm)
-        tmp_str += "      -------------------------------------------------------\n\n"
+            x = self.vectors[i][0]
+            y = self.vectors[i][1]
+            z = self.vectors[i][2]
 
-        tmp_str += "        Number of grid points: {0:10}\n".format(self.n_grid_points)
-        
-        return tmp_str
+            rows.append([self.weights[i],x,y,z,x**2 + y**2 + z**2])
+
+        summary = ["Number of grid points: {0}".format(self.n_grid_points)]
+
+        return result_table.ResultTable(rows,
+                                        column_headers=['Weight','X','Y','Z','Norm'],
+                                        title="LEBEDEV--LAIKOV GRID",
+                                        summary=summary,
+                                        formats=['.8f','.6f','.6f','.6f','.6f'],
+                                        table_type='grid')
+
     
-
     def __repr__(self):
         """Return a human-readable summary of the grid."""
-        return self.data_table()
+        return str(self.data_table())
     
 
     def __init__(self,grid_quality):
@@ -323,7 +330,7 @@ class LebedevLaikovGrid:
               np.allclose(np.dot(grid.weights,grid.vectors),0.0,atol=1.0e-12))
         check('second moment of n_z is 1/3',
               abs(np.dot(grid.weights,grid.vectors[:,2]**2) - 1.0/3.0) < 1.0e-12)
-        check('data table renders', len(grid.data_table()) > 0)
+        check('data table renders', len(str(grid.data_table())) > 0)
 
         return debug_output.test_summary('LebedevLaikovGrid',result_list,print_output)
 
@@ -389,7 +396,7 @@ class ZCWGrid:
 
     Public methods
     --------------
-    data_table() : str
+    data_table() : ResultTable
         Return a human-readable table of the grid.
 
     Class methods
@@ -438,31 +445,34 @@ class ZCWGrid:
 
 
     def data_table(self):
-        """Return a human-readable table of the grid."""
-        tmp_str  = "      ZCW GRID\n\n"
-        tmp_str += "       {0:>10} {1:>10} {2:>10} {3:>10} {4:>10}\n".format('Weigth','X','Y','Z','Norm')
-        tmp_str += "      -------------------------------------------------------\n"
-
+        """Return a table of the grid points as an instance of ResultTable.
+        Each row contains the weight of one grid point, the Cartesian
+        components of the corresponding vector and the squared norm of that
+        vector, which is a check of the normalization of the grid.
+        """
+        rows = []
         for i in range(0,self.n_grid_points):
-            w     = self.weights[i]
-            x     = self.vectors[i][0]
-            y     = self.vectors[i][1]
-            z     = self.vectors[i][2]
-            norm = x**2 + y**2 + z**2
-            
-            tmp_str += "       {0:10.8f} {1:10.6f} {2:10.6f} {3:10.6f} {4:10.6f}\n".format(w,x,y,z,norm)
-        tmp_str += "      -------------------------------------------------------\n\n"
-        
-        tmp_str += "        Grid range:            {0:>10}\n".format(self.integration_range)
-        tmp_str += "        Number of grid points: {0:10}\n".format(self.n_grid_points)
-        tmp_str += "        g:                     {0:10}\n\n".format(self.g_M)
+            x = self.vectors[i][0]
+            y = self.vectors[i][1]
+            z = self.vectors[i][2]
 
-        return tmp_str
+            rows.append([self.weights[i],x,y,z,x**2 + y**2 + z**2])
+
+        summary = ["Grid range:            {0}".format(self.integration_range),
+                   "Number of grid points: {0}".format(self.n_grid_points),
+                   "g:                     {0}".format(self.g_M)]
+
+        return result_table.ResultTable(rows,
+                                        column_headers=['Weight','X','Y','Z','Norm'],
+                                        title="ZCW GRID",
+                                        summary=summary,
+                                        formats=['.8f','.6f','.6f','.6f','.6f'],
+                                        table_type='grid')
 
 
     def __repr__(self):
         """Return a human-readable summary of the grid."""
-        return self.data_table()
+        return str(self.data_table())
     
 
     def __init__(self, M, integration_range='sphere'):
@@ -529,6 +539,6 @@ class ZCWGrid:
         hemisphere = cls(6,integration_range='hemisphere')
         check('hemisphere grid stays in the upper hemisphere',
               np.all(hemisphere.vectors[:,2] >= -1.0e-12))
-        check('data table renders', len(hemisphere.data_table()) > 0)
+        check('data table renders', len(str(hemisphere.data_table())) > 0)
 
         return debug_output.test_summary('ZCWGrid',result_list,print_output)

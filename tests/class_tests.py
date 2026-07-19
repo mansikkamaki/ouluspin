@@ -29,6 +29,7 @@ Notes:
 import sys
 
 from ouluspin import units
+from ouluspin import result_table
 from ouluspin import tensors
 from ouluspin import pseudospin_operators
 from ouluspin import properties
@@ -45,6 +46,7 @@ def main():
     """
     test_class_list = [
         units.EnergyUnitSystem,
+        result_table.ResultTable,
         tensors.ChibotaruUngurSphericalTensor,
         tensors.IwaharaChibotaruSphericalTensor,
         tensors.MixedCartesianIwaharaChibotaruSphericalTensor,
