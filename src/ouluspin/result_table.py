@@ -202,7 +202,7 @@ class ResultTable:
         'eigenvectors':        {'float_format': '.6f', 'indent': 6, 'rule_character': '-'},
         'magnetization':       {'float_format': '.6f', 'indent': 6, 'rule_character': '-'},
         'susceptibility':      {'float_format': '.6f', 'indent': 6, 'rule_character': '-'},
-        'transition_moments':  {'float_format': '.6f', 'indent': 6, 'rule_character': '='},
+        'transition_moments':  {'float_format': '.6f', 'indent': 6, 'rule_character': '-'},
         'pseudospin_doublets': {'float_format': '.4f', 'indent': 4, 'rule_character': '-'},
         'grid':                {'float_format': '.6f', 'indent': 6, 'rule_character': '-'},
     }
@@ -477,13 +477,24 @@ class ResultTable:
 
         tmp_str += rule
 
+        # A section heading is separated from the rows above it by a blank
+        # line, except when it directly follows a horizontal rule, i.e. the
+        # rule below the column headers or a rule row of the table. There
+        # the rule already separates the heading from what precedes it.
+        after_rule = True
+
         for row in body:
             if row is None:
                 tmp_str += rule
+                after_rule = True
             elif isinstance(row,str):
-                tmp_str += "\n" + indent + row + "\n"
+                if not after_rule:
+                    tmp_str += "\n"
+                tmp_str += indent + row + "\n"
+                after_rule = False
             else:
                 tmp_str += indent + line_string(row) + "\n"
+                after_rule = False
 
         tmp_str += rule
 
@@ -492,8 +503,10 @@ class ResultTable:
             for summary_line in self.summary:
                 tmp_str += indent + summary_line + "\n"
 
+        # The footnotes follow directly the line above them, i.e. the
+        # closing rule of the table or the last summary line, without a
+        # blank line in between.
         if len(self.footnotes) > 0:
-            tmp_str += "\n"
             for i in range(0,len(self.footnotes)):
                 marker = self.footnote_marker(i) + " "
                 tmp_str += indented_text(self.footnotes[i],marker,
@@ -940,7 +953,7 @@ class ResultTable:
         check('the explicit indentation overrides the table type',
               cls([[1.0]],table_type='cartesian_tensor',indent=8).indent == 8)
         check('the table type sets the rule character',
-              cls([[1.0]],table_type='transition_moments').rule_character == '=')
+              cls([[1.0]],table_type='cartesian_tensor').rule_character == '-')
         check('the footnote markers are consecutive letters',
               (cls.footnote_marker(0) == 'a)') and (cls.footnote_marker(2) == 'c)'))
 
