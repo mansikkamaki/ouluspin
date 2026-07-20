@@ -189,11 +189,47 @@ exchange operator.
   The classes of the library return their result tables as instances of
   this class rather than as preformatted strings: the instance stores the
   content of the table (the rows, the headers, the title and the
-  explanatory texts) and renders it, so that the same table can later be
-  produced in other output formats. Printing an instance, or converting it
-  to a `str`, gives the plain-text table. The class method
+  explanatory texts) and renders it, so that the same table can be
+  produced in several output formats. Printing an instance, or converting
+  it to a `str`, gives the plain-text table. The class method
   `pseudospin_doublet_compound_table` builds a compound one-line-per-doublet
   summary of a list of `PseudoSpinDoublet` instances.
+
+  Besides the plain text, a table renders into the formats used when the
+  results are written up:
+
+  | Method | Output |
+  | --- | --- |
+  | `string_table(plain=False)` | the plain-text table; `plain=True` gives a bare, machine-readable form |
+  | `data_file(filename)` | the bare form written into a text file, for plotting programs |
+  | `latex_table(filename,standalone=True)` | a LaTeX table; a `None` filename returns the string |
+  | `latex_string_table(standalone=True)` | the LaTeX table as a string |
+  | `odt_table(filename)` | an OpenDocument text (`.odt`) document |
+  | `docx_table(filename)` | an Office Open XML (`.docx`) document |
+
+  The `.odt`, `.docx` and LaTeX writers append the table to the file when
+  it already exists and create the document when it does not, so calling
+  them once per table collects all the tables of a calculation into one
+  document. The documents are laid out for an A4 page with 2 cm margins
+  and an 11 pt font, and the tables span the full width of the text area.
+
+  These renderings also typeset the physical quantities named by the
+  headers: the symbols are set in italics with their indices as
+  subscripts and superscripts, while the unit of a header of the form
+  `quantity / unit` is set upright, so that `E / cm^-1` becomes an italic
+  *E* over an upright cm⁻¹ and `Re(X_k1q1)` carries both pairs of
+  operator indices. Greek letters are written out by name in the header
+  (`theta`, `mu_B`) and set as the letters. Footnote markers become
+  italic superscripts and negative numbers are written with a typographic
+  minus sign. The plain-text table prints all of these as they are given,
+  and a note or a footnote wrapped by hand for it is set on a single line
+  where the text wraps by itself.
+
+  The word-processor documents are written with the standard library
+  only: both formats are ZIP archives of XML documents, so **no external
+  modules such as `odfpy` or `python-docx` are needed**, and nothing
+  beyond the standard library is imported unless one of the writers is
+  actually called.
 
 ### `ouluspin.tensors`
 
@@ -325,7 +361,9 @@ fu.cg_utils.cg(1, 1, 1, -1, 2, 0)   # angular momenta as doubled integers
   Bohr magneton.
 - **Result tables** are returned as `ResultTable` instances, not as
   strings. Print them directly (`print(tensor.ITO_table())`) or convert
-  them with `str()` when a string is needed.
+  them with `str()` when a string is needed. The same instance also
+  writes itself into a LaTeX, `.odt` or `.docx` document; see
+  [`ouluspin.result_table`](#ouluspinresult_table).
 
 ## Examples
 
@@ -372,6 +410,7 @@ extension and runs the Fortran suite in one step.
     │   │   ├── pseudospin_operators.py  Pseudospin bases and operators
     │   │   ├── properties.py            Magnetic property calculations
     │   │   ├── integration.py           Spherical integration grids
+    │   │   ├── _documents.py            .odt and .docx writers (internal)
     │   │   ├── qc/                      Quantum-chemistry interfaces
     │   │   ├── systems/                 Higher-level physical systems
     │   │   └── _fortran/                Compiled Fortran extension (internal)

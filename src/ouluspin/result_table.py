@@ -5,16 +5,18 @@
 
 The classes of this module separate the CONTENT of a result table (the
 numbers, the headers and the explanatory texts) from its APPEARANCE (the
-plain-text layout used in the standard output of the library). The classes
-of the library that report results construct an instance of ResultTable and
-return it; the caller obtains the printable table simply by printing the
-instance or by converting it to a str.
+layout of the rendering that is asked for). The classes of the library that
+report results construct an instance of ResultTable and return it; the
+caller obtains the printable table simply by printing the instance or by
+converting it to a str.
 
-The structured representation is what makes further output formats
-possible: the same instance can later be rendered as a LaTeX table or
-written into a .docx or .odt document by adding the corresponding rendering
-methods to ResultTable, without touching any of the classes that produce
-the results.
+The structured representation is what makes the other output formats
+possible: the same instance renders into the plain-text table of the
+standard output of the library, into a LaTeX table and into an .odt or a
+.docx document, without any of the classes that produce the results
+knowing about the formats. The writers of the word-processor documents are
+in the internal _documents module, which is imported only when they are
+called.
 """
 
 import sys
@@ -27,10 +29,35 @@ class ResultTable:
 
     An instance stores the table content as rows of cells together with the
     headers, the title and the explanatory texts belonging to the table. The
-    appearance of the table is produced by the rendering methods, currently
-    the plain-text renderer string_table(), which is also used by the
-    __repr__ dunder method. Additional renderers (LaTeX, .docx, .odt) will
-    be added later and will use the same stored content.
+    appearance of the table is produced by the rendering methods: the
+    plain-text renderer string_table(), which is also used by the __repr__
+    dunder method, the LaTeX renderers latex_table() and
+    latex_string_table(), and the word-processor renderers odt_table() and
+    docx_table(). All of them use the same stored content.
+
+    The word-processor renderers are written on the standard library only,
+    so the library needs no external modules for them. The module writing
+    the documents is imported when one of the renderers is called, which
+    keeps it out of the ordinary use of the library.
+
+    The renderers that are able to typeset their output, i.e. the LaTeX
+    and the word-processor renderers, recognize the physical quantities
+    stated by the headers of the columns and of the rows and set them the
+    way they are meant to be read: the symbols are set in italics and the
+    indices they carry as subscripts and superscripts, so that 'g_x' is
+    set as a g with a subscript x and 'Re(X_k1q1)' with the two pairs of
+    indices of the operator, whereas the unit of a header of the form
+    'quantity / unit' is set upright. A Greek letter is written out by its
+    name in the header, e.g. 'theta' or 'mu_B', and set as the letter. The
+    markers of the footnotes are set as italic superscripts, and the
+    negative numbers are written with the typographic minus sign in the
+    word-processor documents and in the math mode of the LaTeX tables. The
+    plain-text table prints all of these as they are given.
+
+    A quantity whose symbol the plain-text table cannot print at all is
+    named by a written-out word there and given as a dictionary stating
+    both forms, e.g. {'text': 'Angle', 'typeset': 'theta'}; see the
+    header_text class method.
 
     The class does not decide what a table contains. The routine that
     produces the results decides which values are tabulated and constructs
@@ -59,8 +86,10 @@ class ResultTable:
         The headers of the columns, one per column of the rows. A list of
         lists gives a multi-line column header, one list per header line.
         The row header column is not covered by these; it is named by the
-        row_header_label. Default is None, in which case no column headers
-        are printed.
+        row_header_label. A header whose symbol the plain-text table
+        cannot print is given as a dictionary stating both of its forms
+        (see the header_text class method). Default is None, in which case
+        no column headers are printed.
     row_headers : list of str or None
         The headers of the rows, one per ordinary row. When given, the row
         headers are printed as an additional leftmost column. Section
@@ -75,11 +104,16 @@ class ResultTable:
         Explanatory texts printed between the title and the table itself,
         used e.g. to state the units or the coordinate frame of the
         tabulated values. A text containing newlines is printed on several
-        lines, each of them indented by the renderer. Default is None.
+        lines, each of them indented by the renderer; the newlines are the
+        manual wrapping of the plain-text table, and the renderings that
+        wrap the text themselves set each note on a single line. Two
+        separate notes are always set on separate lines. Default is None.
     footnotes : list of str or str or None
         Explanatory texts printed below the table. A text containing
         newlines is printed on several lines, the continuation lines being
-        aligned with the text of the first one. The footnotes are
+        aligned with the text of the first one; as with the notes, the
+        newlines are the manual wrapping of the plain-text table only. The
+        footnotes are
         labelled with the markers 'a)', 'b)', ... in the order they are
         given; the corresponding marker is added to the header of the
         column it explains by the routine that constructs the table (see
@@ -163,16 +197,50 @@ class ResultTable:
         comment line.
     data_file(filename,plain=True)
         Write the table into a text file.
+    odt_table(filename)
+        Write the table into an OpenDocument text (.odt) file, appending
+        it to an existing document.
+    docx_table(filename)
+        Write the table into an Office Open XML (.docx) file, appending
+        it to an existing document.
+    latex_table(filename,standalone=True) : str or None
+        Write the table into a LaTeX file, appending it to an existing
+        document, or return it as a string when the filename is None.
+    latex_string_table(standalone=True) : str
+        Return the LaTeX rendering of the table as a string.
 
     Private methods
     ---------------
     __resolve_options(...)
         Fill in the options that were not given from the table type preset.
+    __table_cells()
+        Return the content of the table as the header lines and the rows
+        of (text,is_number) pairs together with the alignments and the
+        field widths of the columns.
     __columns()
-        Return the content of the table as a list of columns of formatted
-        strings together with the header lines and the alignments.
+        Return the content of the table in the column-wise form used by
+        the plain-text renderer.
+    __document_content()
+        Return the content of the table in the renderer-independent form
+        used by the word-processor and the LaTeX renderers.
     __format_cell(value,column_format)
         Return the printable string of a single cell.
+    __is_number(value)
+        Return whether the value of a cell is a number.
+    __latex_number(text) : str
+        Return the LaTeX rendering of a formatted number.
+    __latex_text(text,markup=False) : str
+        Return the LaTeX rendering of a text cell or of a header.
+    __latex_cell(cell) : str
+        Return the LaTeX rendering of one cell of the table.
+    __latex_header(text) : str
+        Return the LaTeX rendering of a column or a row header.
+    __latex_quantity(atom) : str
+        Return the LaTeX rendering of one physical quantity of a header.
+    __latex_indices(group_list) : str
+        Return the LaTeX rendering of the indices of a quantity.
+    __latex_footnote_marker(letter) : str
+        Return the LaTeX rendering of a footnote marker.
 
     Class methods
     -------------
@@ -182,6 +250,21 @@ class ResultTable:
         Return the marker ('a)', 'b)', ...) of the footnote of the given
         index, to be appended to the header of the column the footnote
         explains.
+    header_text(header,typeset=False) : str
+        Return the text of a header, in the plain-text form or in the form
+        used by the renderings that can typeset it.
+    split_footnote_marker(text) : (str, str or None)
+        Split a footnote marker off the end of a header and return the
+        header and the letter of the marker.
+    markup_atoms(text) : list of dict
+        Split a header into its typesetting atoms, i.e. recognize the
+        physical quantities it states.
+    markup_segments(text) : list of dict
+        Split a header into the formatted pieces of its rich-text
+        rendering, used by the word-processor renderers.
+    latex_escape(text) : str
+        Return the text with the characters that are special in LaTeX
+        escaped.
     pseudospin_doublet_compound_table(doublets,...) : ResultTable
         Return a compound table summarizing the properties of a list of
         pseudospin doublets of a system.
@@ -189,6 +272,23 @@ class ResultTable:
         Initiate the class and run a set of internal tests. Return True if
         all tests passed.
     """
+
+    # The Greek letters recognized in the headers of the tables. The
+    # plain-text table cannot print them, so they are written out by their
+    # names in the headers, and the renderings that are able to typeset
+    # them set them as the letters. The names are also the names of the
+    # corresponding LaTeX commands.
+    GREEK_LETTERS = {
+        'alpha':   "α", 'beta':    "β", 'gamma':   "γ", 'delta':   "δ",
+        'epsilon': "ε", 'zeta':    "ζ", 'eta':     "η", 'theta':   "θ",
+        'iota':    "ι", 'kappa':   "κ", 'lambda':  "λ", 'mu':      "μ",
+        'nu':      "ν", 'xi':      "ξ", 'pi':      "π", 'rho':     "ρ",
+        'sigma':   "σ", 'tau':     "τ", 'upsilon': "υ", 'phi':     "φ",
+        'chi':     "χ", 'psi':     "ψ", 'omega':   "ω",
+        'Gamma':   "Γ", 'Delta':   "Δ", 'Theta':   "Θ", 'Lambda':  "Λ",
+        'Xi':      "Ξ", 'Pi':      "Π", 'Sigma':   "Σ", 'Phi':     "Φ",
+        'Psi':     "Ψ", 'Omega':   "Ω",
+    }
 
     # The presets of the recognized table types. Each preset gives the
     # default number format of the floating-point columns, the default
@@ -314,16 +414,47 @@ class ResultTable:
         return str(value)
 
 
-    def __columns(self):
+    def __is_number(self, value):
+        """Return True when the value of a cell is a number rather than a
+        string, an empty cell or a boolean. The renderers that typeset the
+        numbers differently from the text use this to decide how a cell is
+        printed.
+        """
+        if value is None or isinstance(value,str):
+            return False
+
+        if isinstance(value,(bool,np.bool_)):
+            return False
+
+        return isinstance(value,(int,float,complex,
+                                 np.integer,np.floating,np.complexfloating))
+
+
+    def __table_cells(self, typeset=False):
         """Return the content of the table in a column-wise form as a tuple
 
             (header_lines, body, alignments, widths)
 
         where header_lines is a list of lists of the formatted headers of
         the columns, body is the list of the rows with all cells converted
-        into strings (the section headings and the rules being kept as they
-        are), alignments is the list of the alignments of the columns and
-        widths is the list of the field widths of the columns.
+        into (text,is_number) pairs (the section headings and the rules
+        being kept as they are), alignments is the list of the alignments
+        of the columns and widths is the list of the field widths of the
+        columns.
+
+        The flag is_number of a cell tells whether the cell holds a number
+        rather than a string. It is used by the renderers that typeset the
+        numbers differently from the text, i.e. the LaTeX renderer, which
+        sets the numbers in math mode.
+
+        Optional arguments
+        ------------------
+        typeset : boolean
+            Whether the headers are given in the form used by the renderers
+            that are able to typeset them, i.e. whether a header that
+            states a different form for them is taken in that form (see the
+            header_text class method). Default is False, which gives the
+            headers in the form used by the plain-text table.
         """
         # Convert the cells into strings, keeping the special rows as they
         # are. The row headers are prepended as an additional column.
@@ -340,9 +471,10 @@ class ResultTable:
 
             if self.row_headers is not None:
                 if row_index < len(self.row_headers):
-                    cells.append(str(self.row_headers[row_index]))
+                    cells.append((self.header_text(self.row_headers[row_index],
+                                                   typeset),False))
                 else:
-                    cells.append("")
+                    cells.append(("",False))
 
             for i in range(0,len(row)):
                 if self.formats is None or i >= len(self.formats):
@@ -350,7 +482,8 @@ class ResultTable:
                 else:
                     column_format = self.formats[i]
 
-                cells.append(self.__format_cell(row[i],column_format))
+                cells.append((self.__format_cell(row[i],column_format),
+                              self.__is_number(row[i])))
 
                 # Columns holding anything else than strings are treated as
                 # numeric columns and are aligned to the right by default.
@@ -369,12 +502,14 @@ class ResultTable:
         # row headers are used.
         header_lines = []
         for header_line in self.column_headers:
-            header_lines.append([str(header) for header in header_line])
+            header_lines.append([self.header_text(header,typeset)
+                                 for header in header_line])
 
         if self.row_headers is not None and len(header_lines) > 0:
             for header_line in header_lines:
                 header_line.insert(0,"")
-            header_lines[-1][0] = self.row_header_label
+            header_lines[-1][0] = self.header_text(self.row_header_label,
+                                                   typeset)
 
         # The alignments of the columns.
         alignments = []
@@ -392,15 +527,85 @@ class ResultTable:
             else:
                 alignments.append('l')
 
-        # The field widths from the widest entry of each column.
+        # The field widths from the widest entry of each column. The
+        # header lines hold plain strings and the body rows (text,is_number)
+        # pairs.
         widths = self.n_columns*[0]
-        for line in header_lines + body:
-            if line is None or isinstance(line,str):
-                continue
+
+        for line in header_lines:
             for i in range(0,min(len(line),self.n_columns)):
                 widths[i] = max(widths[i],len(line[i]))
 
+        for line in body:
+            if line is None or isinstance(line,str):
+                continue
+            for i in range(0,min(len(line),self.n_columns)):
+                widths[i] = max(widths[i],len(line[i][0]))
+
         return header_lines, body, alignments, widths
+
+
+    def __columns(self):
+        """Return the content of the table in the column-wise form used by
+        the plain-text renderer, i.e. as the tuple
+
+            (header_lines, body, alignments, widths)
+
+        returned by the __table_cells method with the cells of the body
+        reduced from the (text,is_number) pairs to the plain strings.
+        """
+        header_lines, cell_body, alignments, widths = self.__table_cells()
+
+        body = []
+        for row in cell_body:
+            if row is None or isinstance(row,str):
+                body.append(row)
+            else:
+                body.append([cell[0] for cell in row])
+
+        return header_lines, body, alignments, widths
+
+
+    def __document_content(self):
+        """Return the content of the table in the renderer-independent form
+        used by the word-processor renderers of the _documents module and
+        by the LaTeX renderer.
+
+        The returned dictionary carries the texts belonging to the table
+        together with its header lines, its rows and the layout information
+        the renderers need; the items are documented in the docstring of
+        the _documents module. The rows of the plain-text rendering that
+        draw a horizontal rule are not rows of a typeset table, so they are
+        converted into the flag rule_above of the row that follows them.
+        """
+        header_lines, cell_body, alignments, widths = \
+            self.__table_cells(typeset=True)
+
+        body       = []
+        rule_above = False
+
+        for row in cell_body:
+            if row is None:
+                rule_above = True
+            elif isinstance(row,str):
+                body.append({'type': 'section', 'text': row,
+                             'rule_above': rule_above})
+                rule_above = False
+            else:
+                body.append({'type': 'row', 'cells': list(row),
+                             'rule_above': rule_above})
+                rule_above = False
+
+        return {'title':           self.title,
+                'notes':           list(self.notes),
+                'summary':         list(self.summary),
+                'footnotes':       list(self.footnotes),
+                'header_lines':    header_lines,
+                'body':            body,
+                'alignments':      alignments,
+                'widths':          widths,
+                'n_columns':       self.n_columns,
+                'has_row_headers': self.row_headers is not None}
 
 
     def string_table(self, plain=False):
@@ -534,6 +739,336 @@ class ResultTable:
         f.close()
 
 
+    def odt_table(self, filename):
+        """Write the table into an OpenDocument text (.odt) file.
+
+        When the file exists the table is appended to the document,
+        which makes it possible to collect several tables into one
+        document by calling the method once per table. When the file does
+        not exist a new document is created, laid out for an A4 page with
+        margins of 2 cm and using the 11 pt font the tables are
+        dimensioned for. The table always spans the full width of the text
+        area, the width being divided between the columns in proportion to
+        the widths they have in the plain-text rendering.
+
+        The document is written using the standard library only, so no
+        external modules are needed. The module writing it is imported
+        when the method is called, not when ResultTable is imported.
+
+        Arguments
+        ---------
+        filename : str
+            The name of the file to write or to append to.
+        """
+        from ouluspin import _documents
+
+        _documents.write_odt(self.__document_content(),filename)
+
+
+    def docx_table(self, filename):
+        """Write the table into an Office Open XML (.docx) file.
+
+        The method is the .docx counterpart of odt_table and behaves in
+        the same way: an existing file is appended to, a missing one is
+        created with an A4 page layout and the 11 pt font, and the table
+        spans the full width of the text area.
+
+        Arguments
+        ---------
+        filename : str
+            The name of the file to write or to append to.
+        """
+        from ouluspin import _documents
+
+        _documents.write_docx(self.__document_content(),filename)
+
+
+    def __latex_number(self, text):
+        """Return the LaTeX rendering of a formatted number, i.e. the
+        number in math mode. A number in the exponent form is converted
+        into a power of ten, e.g. '1.5000e-03' into '$1.5000 \\times
+        10^{-3}$'.
+        """
+        exponent_position = text.lower().find('e')
+
+        if exponent_position > 0:
+            mantissa = text[:exponent_position]
+            exponent = text[exponent_position+1:]
+
+            # Drop the plus sign and the leading zeros of the exponent.
+            sign = ""
+            if exponent.startswith('-'):
+                sign     = "-"
+                exponent = exponent[1:]
+            elif exponent.startswith('+'):
+                exponent = exponent[1:]
+
+            exponent = exponent.lstrip('0')
+            if exponent == "":
+                exponent = "0"
+                sign     = ""
+
+            return ("$" + mantissa + " \\times 10^{" + sign + exponent + "}$")
+
+        return "$" + text + "$"
+
+
+    def __latex_text(self, text, markup=False):
+        """Return the LaTeX rendering of a text cell, of a header or of an
+        explanatory line.
+
+        The characters that are special in LaTeX are escaped. With markup
+        set to True the physical quantities of the text are in addition
+        recognized and typeset as such (see the markup_atoms class method),
+        so that a header such as 'Re(X_k1q1)' is set as 'Re($X_{k_1,q_1}$)'
+        and 'E / cm^-1' as '$E$ / $\\mathrm{cm}^{-1}$'.
+        """
+        if not markup:
+            return self.latex_escape(text)
+
+        tmp_str = ""
+
+        for atom in self.markup_atoms(text):
+            if atom['kind'] == 'text':
+                tmp_str += self.latex_escape(atom['text'])
+            else:
+                tmp_str += self.__latex_quantity(atom)
+
+        return tmp_str
+
+
+    def __latex_footnote_marker(self, letter):
+        """Return the LaTeX rendering of a footnote marker, i.e. the letter
+        of the marker set as an italic superscript.
+        """
+        return "\\textsuperscript{\\textit{" + letter + "}}"
+
+
+    def __latex_header(self, text):
+        """Return the LaTeX rendering of a column header or of a row
+        header. The physical quantities of the header are typeset as such
+        and a footnote marker at its end is set as an italic superscript.
+        """
+        body, marker = self.split_footnote_marker(text)
+
+        if marker is None:
+            return self.__latex_text(text,markup=True)
+
+        return (self.__latex_text(body,markup=True)
+                + self.__latex_footnote_marker(marker))
+
+
+    def __latex_quantity(self, atom):
+        """Return the LaTeX rendering of one physical quantity of a header,
+        i.e. its base symbol in math mode carrying its subscript and its
+        superscript, e.g. '$X_{k_1,q_1}$' or '$\\mathrm{cm}^{-1}$'. The
+        bars of a magnitude are drawn inside the math mode, where they are
+        the vertical bars they are meant to be.
+        """
+        tmp_str = atom['base_latex']
+
+        if atom['sub'] is not None:
+            tmp_str += "_{" + self.__latex_indices(atom['sub']) + "}"
+
+        # The bars of a magnitude enclose the symbol together with the
+        # indices labelling it, but a power of the magnitude is taken of
+        # the magnitude itself and stands outside the bars.
+        if atom.get('bars',False):
+            tmp_str = "|" + tmp_str + "|"
+
+        if atom['sup'] is not None:
+            tmp_str += "^{" + self.__latex_indices(atom['sup']) + "}"
+
+        return "$" + tmp_str + "$"
+
+
+    def __latex_indices(self, group_list):
+        """Return the LaTeX rendering of the index groups of a subscript or
+        of a superscript. An index that is itself a labelled quantity, such
+        as the 'k1' of 'X_k1q1', carries its own subscript, so that the
+        groups of 'k1q1' are rendered as 'k_{1},q_{1}'.
+        """
+        part_list = []
+
+        for letters, digits in group_list:
+            if letters == "":
+                part_list.append(digits)
+            elif digits == "":
+                part_list.append(letters)
+            else:
+                part_list.append(letters + "_{" + digits + "}")
+
+        return ",".join(part_list)
+
+
+    def __latex_cell(self, cell):
+        """Return the LaTeX rendering of one cell of the table, given as
+        the (text,is_number) pair of the internal representation. The
+        numbers are set in math mode and the text is escaped.
+        """
+        text, is_number = cell
+
+        if text == "":
+            return ""
+
+        if is_number:
+            return self.__latex_number(text)
+
+        return self.__latex_text(text)
+
+
+    def latex_table(self, filename, standalone=True):
+        """Write the table into a LaTeX file, or return it as a string.
+
+        When the file exists the table is written at its end, before the
+        \\end{document} line, which makes it possible to collect several
+        tables into one document. When the file does not exist a new file
+        is written, either a minimally compileable document containing the
+        table or the table alone, depending on the standalone argument.
+
+        The numbers of the table are set in math mode, as are the symbols
+        carrying a subscript, such as the g_x of a column header. The
+        horizontal rules are drawn with \\hline, so the table needs no
+        additional LaTeX packages and can be pasted into any document.
+
+        Arguments
+        ---------
+        filename : str or None
+            The name of the file to write or to append to. When None, the
+            table is not written but returned as a string, which is what
+            the latex_string_table method does.
+
+        Optional arguments
+        ------------------
+        standalone : boolean
+            Whether a new file (or the returned string) is a minimally
+            compileable LaTeX document instead of the table alone. The
+            argument has no effect when the table is appended to an
+            existing file. Default is True.
+        """
+        header_lines, cell_body, alignments, widths = \
+            self.__table_cells(typeset=True)
+
+        column_specification = ""
+        for i in range(0,self.n_columns):
+            if i < len(alignments) and alignments[i] in ('l','r','c'):
+                column_specification += alignments[i]
+            else:
+                column_specification += 'r'
+
+        def latex_row(cells, header=False):
+            parts = []
+            for i in range(0,self.n_columns):
+                if i >= len(cells):
+                    parts.append("")
+                elif header:
+                    parts.append(self.__latex_header(str(cells[i])))
+                elif i == 0 and self.row_headers is not None:
+                    # The leading cell of a row is the row header, which is
+                    # typeset as the header it is.
+                    parts.append(self.__latex_header(cells[i][0]))
+                else:
+                    parts.append(self.__latex_cell(cells[i]))
+            return " & ".join(parts) + " \\\\\n"
+
+        table_str = "\\begin{table}[htbp]\n\\centering\n"
+
+        if self.title is not None:
+            table_str += "\\caption{" + self.__latex_text(self.title) + "}\n"
+
+        # The lines of a note, of a summary line or of a footnote are the
+        # manual wrapping of the plain-text table. The typeset renderings
+        # wrap the text themselves, so the lines of one entry are joined
+        # into a single one and only the separate entries are set on
+        # separate lines.
+        def joined(text):
+            return " ".join([line.strip() for line in text.split("\n")
+                             if not line.strip() == ""])
+
+        for note in self.notes:
+            table_str += self.__latex_text(joined(note)) + " \\\\\n"
+
+        table_str += "\\begin{tabular}{" + column_specification + "}\n\\hline\n"
+
+        for header_line in header_lines:
+            table_str += latex_row(header_line,True)
+
+        table_str += "\\hline\n"
+
+        for row in cell_body:
+            if row is None:
+                table_str += "\\hline\n"
+            elif isinstance(row,str):
+                table_str += ("\\multicolumn{" + str(self.n_columns) + "}{l}{"
+                              + self.__latex_text(row) + "} \\\\\n")
+            else:
+                table_str += latex_row(row)
+
+        table_str += "\\hline\n\\end{tabular}\n"
+
+        for line in self.summary:
+            table_str += "\\\\\n" + self.__latex_text(joined(line)) + "\n"
+
+        # The footnotes are labelled with the marker letter set as an
+        # italic superscript instead of the 'a)' of the plain-text table.
+        for i in range(0,len(self.footnotes)):
+            marker = self.__latex_footnote_marker(chr(ord('a') + i))
+            table_str += ("\\\\\n" + marker + " "
+                          + self.__latex_text(joined(self.footnotes[i])) + "\n")
+
+        table_str += "\\end{table}\n"
+
+        def standalone_document(body):
+            return ("\\documentclass[11pt,a4paper]{article}\n"
+                    "\\usepackage[a4paper,margin=2cm]{geometry}\n"
+                    "\\begin{document}\n\n" + body + "\n\\end{document}\n")
+
+        # An existing file is appended to, the table being written before
+        # the end of the document.
+        import os
+
+        if filename is not None and os.path.exists(filename):
+            f = open(filename)
+            document = f.read()
+            f.close()
+
+            position = document.rfind("\\end{document}")
+            if position < 0:
+                document = document + "\n" + table_str
+            else:
+                document = document[:position] + table_str + document[position:]
+
+            f = open(filename,'w')
+            f.write(document)
+            f.close()
+            return None
+
+        if standalone:
+            document = standalone_document(table_str)
+        else:
+            document = table_str
+
+        if filename is None:
+            return document
+
+        f = open(filename,'w')
+        f.write(document)
+        f.close()
+        return None
+
+
+    def latex_string_table(self, standalone=True):
+        """Return the LaTeX rendering of the table as a string.
+
+        Optional arguments
+        ------------------
+        standalone : boolean
+            Whether the returned string is a minimally compileable LaTeX
+            document instead of the table alone. Default is True.
+        """
+        return self.latex_table(None,standalone=standalone)
+
+
     def __repr__(self):
         """Return the plain-text rendering of the table."""
         return self.string_table()
@@ -602,8 +1137,358 @@ class ResultTable:
         for the first footnote, 'b)' for the second one and so on. The
         marker is appended to the header of the column the footnote
         explains by the routine that constructs the table.
+
+        The marker is written out in this form in the plain-text table. The
+        renderers that can typeset it, i.e. the LaTeX and the
+        word-processor renderers, set the letter alone as an italic
+        superscript; they recognize the marker with the split_footnote_marker
+        class method.
         """
         return chr(ord('a') + index) + ")"
+
+
+    @classmethod
+    def header_text(cls, header, typeset=False):
+        """Return the text of a column or a row header.
+
+        A header is ordinarily given as a str, which is used by all the
+        renderings alike. A quantity whose symbol the plain-text table
+        cannot print, such as an angle, is instead named by its written-out
+        name there and by its symbol in the renderings that can typeset it.
+        Such a header is given as the dictionary
+
+            {'text': the plain-text name, 'typeset': the typeset name}
+
+        e.g. {'text': 'Angle', 'typeset': 'theta'}, which the plain-text
+        table prints as 'Angle' and the LaTeX and the word-processor
+        renderings set as a theta. The Greek letters are written out by
+        their names in the typeset form (see the markup_atoms class
+        method).
+
+        Optional arguments
+        ------------------
+        typeset : boolean
+            Whether the typeset form of the header is returned instead of
+            the plain-text one. Default is False.
+        """
+        if isinstance(header,dict):
+            if typeset and 'typeset' in header:
+                return str(header['typeset'])
+            return str(header.get('text',""))
+
+        return str(header)
+
+
+    @classmethod
+    def split_footnote_marker(cls, text):
+        """Split a footnote marker off the end of a text and return the
+        pair (body,marker), where the marker is the letter of the marker
+        without its parenthesis, or None when the text carries no marker.
+
+        The markers are written into the headers of the columns they
+        explain by the routines that construct the tables, so that in the
+        plain-text table they are a part of the header text. The renderers
+        that set the markers as italic superscripts use this method to
+        separate the marker from the header, e.g. 'Angle a)' into
+        ('Angle','a').
+        """
+        import re
+
+        match = re.match(r'^(.*?)[ ]*([a-z])\)$',str(text))
+
+        if match is None:
+            return str(text), None
+
+        return match.group(1), match.group(2)
+
+
+    @classmethod
+    def markup_atoms(cls, text):
+        """Split a header or a label into the list of its typesetting atoms
+        and return the list.
+
+        The tables of the library label their columns with the symbols of
+        the physical quantities they hold, e.g. 'k1', 'S_0', 'g_x',
+        'Re(X_k1q1)', '|C|^2' or 'E / cm^-1'. The plain-text table prints
+        these as they are, but the LaTeX and the word-processor renderings
+        are able to typeset them properly, and this method recognizes the
+        quantities for them.
+
+        Each atom of the returned list is a dictionary. A piece of ordinary
+        text is the atom
+
+            {'kind': 'text', 'text': the text}
+
+        and a physical quantity is the atom
+
+            {'kind':       'quantity',
+             'base':       the base symbol as (text,italic) pairs,
+             'base_latex': the base symbol as LaTeX,
+             'sub':        the subscript, or None,
+             'sup':        the superscript, or None}
+
+        where the subscript and the superscript are given as lists of index
+        groups, each group being a (letters,digits) pair; the groups of the
+        subscript of 'X_k1q1' are, for instance, [('k','1'),('q','1')].
+
+        A base symbol of a single letter is a variable and is set in
+        italics, whereas a base symbol of several letters is a unit, such
+        as the 'cm' of 'cm^-1', and is set upright.
+        """
+        import re
+
+        def index_groups(index_text):
+            """Split the text of a subscript or of a superscript into its
+            index groups, e.g. 'k1q1' into [('k','1'),('q','1')] and '-1'
+            into [('','-1')].
+            """
+            group_list = []
+            for part in index_text.split(","):
+                for match in re.finditer(r'([A-Za-z]*)(-?[0-9]*)',part):
+                    if match.group(0) == "":
+                        continue
+                    group_list.append((match.group(1),match.group(2)))
+
+            if len(group_list) == 0:
+                return [(index_text,"")]
+
+            return group_list
+
+        def base_pieces(base_text):
+            """Split a base symbol into (text,italic) pairs. The letters of
+            a symbol of a single letter, and those inside the vertical bars
+            of a magnitude such as '|C|', are variables and are set in
+            italics; a symbol of several letters is a unit and is upright.
+            """
+            if base_text in cls.GREEK_LETTERS:
+                return [(cls.GREEK_LETTERS[base_text],True)]
+
+            if len(base_text) == 1 and base_text.isalpha():
+                return [(base_text,True)]
+
+            if base_text.startswith('|') and base_text.endswith('|'):
+                inner = base_text[1:-1]
+                if len(inner) == 1 and inner.isalpha():
+                    return [("|",False),(inner,True),("|",False)]
+
+            return [(base_text,False)]
+
+        def base_latex(base_text):
+            """Return the LaTeX rendering of a base symbol, the units being
+            set upright with \\mathrm.
+            """
+            if base_text in cls.GREEK_LETTERS:
+                return "\\" + base_text
+
+            if len(base_text) == 1 and base_text.isalpha():
+                return base_text
+
+            if base_text.startswith('|') and base_text.endswith('|'):
+                inner = base_text[1:-1]
+                if len(inner) == 1 and inner.isalpha():
+                    return "|" + inner + "|"
+
+            if base_text.isalpha():
+                return "\\mathrm{" + base_text + "}"
+
+            return base_text
+
+        def quantity(base_text, sub_text, sup_text, bars=False):
+            if sub_text is None:
+                sub = None
+            else:
+                sub = index_groups(sub_text)
+
+            if sup_text is None:
+                sup = None
+            else:
+                sup = index_groups(sup_text)
+
+            return {'kind':       'quantity',
+                    'base':       base_pieces(base_text),
+                    'base_latex': base_latex(base_text),
+                    'sub':        sub,
+                    'sup':        sup,
+                    'bars':       bars}
+
+        # The recognized forms, in the order they are tried: a symbol or a
+        # magnitude carrying a superscript ('cm^-1', '|C|^2'), a symbol
+        # carrying a subscript ('S_0', 'X_k1q1'), a single letter followed
+        # by an index ('k1'), and a single letter standing alone ('E').
+        # A letter is taken to be a symbol only when it does not belong to
+        # an ordinary word, which the surrounding letters tell.
+        # The Greek letters are written out by their names, which are
+        # matched as whole words so that a name occurring inside an
+        # ordinary word, such as the 'nu' of 'number', is not taken for a
+        # symbol.
+        # An index may itself consist of several parts separated by commas,
+        # as in the 'mu_z,i' of the transition moment tables.
+        index_str = r'[A-Za-z0-9]+(?:,[A-Za-z0-9]+)*'
+
+        greek_str = ("(?<![A-Za-z])(?P<greek>"
+                     + "|".join(sorted(cls.GREEK_LETTERS.keys(),
+                                       key=len,reverse=True))
+                     + r")(?![A-Za-z])(?:_(?P<greek_sub>" + index_str + r"))?")
+
+        # The magnitude of a quantity, such as the '|X_k1q1|' of the tensor
+        # tables or the '|mu_if|' of the transition moment tables, is
+        # matched first, so that the bars end up around the whole quantity
+        # together with the indices it carries.
+        pattern = re.compile(greek_str +
+                             r'|\|(?P<bar_base>[A-Za-z]+)'
+                             r'(?:_(?P<bar_sub>' + index_str + r'))?\|'
+                             r'(?:\^(?P<bar_sup>-?[A-Za-z0-9]+))?'
+                             r'|(?P<sup_base>[A-Za-z]+|[0-9]+)'
+                             r'\^(?P<sup>-?[A-Za-z0-9]+)'
+                             r'|(?P<sub_base>[A-Za-z])_(?P<sub>' + index_str + r')'
+                             r'|(?<![A-Za-z])(?P<index_base>[A-Za-z])'
+                             r'(?P<index>[0-9]+)(?![A-Za-z0-9])'
+                             r'|(?<![A-Za-z])(?P<bare>[A-Za-z])(?![A-Za-z0-9])')
+
+        # Within the unit of a header, i.e. after the solidus of a header
+        # such as 'E / cm^-1' or 'B / T', the letters are the symbols of
+        # the units and are set upright, so only the indices of the units
+        # are recognized there.
+        unit_pattern = re.compile(r'([A-Za-z]+|[0-9]+)\^(-?[A-Za-z0-9]+)')
+
+        atom_list = []
+
+        def add_text(piece):
+            if piece == "":
+                return
+            if len(atom_list) > 0 and atom_list[-1]['kind'] == 'text':
+                atom_list[-1]['text'] += piece
+            else:
+                atom_list.append({'kind': 'text', 'text': piece})
+
+        def parse(part, unit):
+            position = 0
+
+            if unit:
+                used_pattern = unit_pattern
+            else:
+                used_pattern = pattern
+
+            for match in used_pattern.finditer(part):
+                add_text(part[position:match.start()])
+
+                if unit:
+                    # Only the indices of the units are recognized within
+                    # the unit of a header.
+                    atom_list.append(quantity(match.group(1),None,
+                                              match.group(2)))
+                elif match.group('greek') is not None:
+                    atom_list.append(quantity(match.group('greek'),
+                                              match.group('greek_sub'),None))
+                elif match.group('bar_base') is not None:
+                    atom_list.append(quantity(match.group('bar_base'),
+                                              match.group('bar_sub'),
+                                              match.group('bar_sup'),
+                                              bars=True))
+                elif match.group('sup_base') is not None:
+                    atom_list.append(quantity(match.group('sup_base'),None,
+                                              match.group('sup')))
+                elif match.group('sub_base') is not None:
+                    atom_list.append(quantity(match.group('sub_base'),
+                                              match.group('sub'),None))
+                elif match.group('index_base') is not None:
+                    atom_list.append(quantity(match.group('index_base'),
+                                              match.group('index'),None))
+                else:
+                    atom_list.append(quantity(match.group('bare'),None,None))
+
+                position = match.end()
+
+            add_text(part[position:])
+
+        # A header states the quantity and its unit as 'quantity / unit',
+        # so everything after the first solidus belongs to the unit.
+        solidus = text.find('/')
+
+        if solidus < 0:
+            parse(text,False)
+        else:
+            parse(text[:solidus],False)
+            add_text(text[solidus:solidus+1])
+            parse(text[solidus+1:],True)
+
+        return atom_list
+
+
+    @classmethod
+    def markup_segments(cls, text):
+        """Split a header or a label into the list of the typeset pieces of
+        its rich-text rendering and return the list. The method is used by
+        the word-processor renderers, which build the cells of their tables
+        out of runs of differently formatted text.
+
+        Each segment of the returned list is the dictionary
+
+            {'text':     the text of the segment,
+             'italic':   whether the text is set in italics,
+             'position': 'normal', 'sub' or 'super'}
+
+        The quantities recognized by the markup_atoms class method are
+        split into their base symbols and the indices carried by them, e.g.
+        'E / cm^-1' into the italic 'E', the upright ' / cm' and the
+        superscript '-1'.
+        """
+        segment_list = []
+
+        def add(text_piece, italic, position):
+            if text_piece == "":
+                return
+            segment_list.append({'text':     text_piece,
+                                 'italic':   italic,
+                                 'position': position})
+
+        def add_indices(group_list, position):
+            for i in range(0,len(group_list)):
+                letters, digits = group_list[i]
+                if i > 0:
+                    add(",",False,position)
+                add(letters,True,position)
+                add(digits,False,position)
+
+        for atom in cls.markup_atoms(text):
+            if atom['kind'] == 'text':
+                add(atom['text'],False,'normal')
+                continue
+
+            if atom.get('bars',False):
+                add("|",False,'normal')
+
+            for piece, italic in atom['base']:
+                add(piece,italic,'normal')
+
+            if atom['sub'] is not None:
+                add_indices(atom['sub'],'sub')
+
+            if atom.get('bars',False):
+                add("|",False,'normal')
+
+            if atom['sup'] is not None:
+                add_indices(atom['sup'],'super')
+
+        return segment_list
+
+
+    @classmethod
+    def latex_escape(cls, text):
+        """Return the text with the characters that are special in LaTeX
+        escaped.
+        """
+        tmp_text = str(text).replace("\\","\\textbackslash{}")
+        for character in ['&','%','$','#','_','{','}']:
+            tmp_text = tmp_text.replace(character,"\\" + character)
+        tmp_text = tmp_text.replace("~","\\textasciitilde{}")
+        tmp_text = tmp_text.replace("^","\\textasciicircum{}")
+
+        # The vertical bar is not a bar in the text mode of LaTeX, so it is
+        # written with the command that produces one.
+        tmp_text = tmp_text.replace("|","\\textbar{}")
+
+        return tmp_text
 
 
     @classmethod
@@ -731,14 +1616,25 @@ class ResultTable:
         energy_unit = units.energy_unit_str
         angle_note  = "The angle between the principal magnetic axis of the doublet\n" \
                       "and that of the lowest-energy doublet, in degrees."
-        angle_header = "Angle " + cls.footnote_marker(0)
+
+        # The plain-text table names the angle, which it cannot print as a
+        # symbol, whereas the renderings that can typeset it set it as the
+        # theta it is.
+        angle_marker = cls.footnote_marker(0)
+        angle_header = {'text':    "Angle " + angle_marker,
+                        'typeset': "theta " + angle_marker}
 
         rows = []
 
         if kramers_system:
             column_headers = [["Doublet","States","E / " + energy_unit,
                                "g_x","g_y","g_z",angle_header]]
-            formats        = [None,None,'.4f','.4f','.4f','.4f','.2f']
+            # The energies are given with one decimal, which is the
+            # accuracy of the quantum-chemical calculations they come
+            # from. The tunneling gap of the non-Kramers table below is a
+            # small difference of two energies and is a relative quantity
+            # of a higher accuracy, so it keeps its own format.
+            formats        = [None,None,'.1f','.4f','.4f','.4f','.2f']
 
             for i in range(0,len(doublet_list)):
                 doublet  = doublet_list[i]
@@ -759,7 +1655,7 @@ class ResultTable:
             column_headers = [["Doublet","States",
                                "E_1 / " + energy_unit,"E_2 / " + energy_unit,
                                "Gap / " + energy_unit,"g_z",angle_header]]
-            formats        = [None,None,'.4f','.4f','.6e','.4f','.2f']
+            formats        = [None,None,'.1f','.1f','.6e','.4f','.2f']
 
             for i in range(0,len(doublet_list)):
                 item = doublet_list[i]
@@ -802,11 +1698,14 @@ class ResultTable:
         else:
             table_title = title
 
-        notes = ["The g-tensors and their principal magnetic axes are given in the",
-                 frame_label + "."]
+        # A note is one entry even when it is wrapped by hand for the
+        # plain-text table; the renderings that wrap the text themselves
+        # set it on a single line.
+        notes = ["The g-tensors and their principal magnetic axes are given in the\n"
+                 + frame_label + "."]
         if not kramers_system:
-            notes.append("The transverse principal g values vanish by Griffith's theorem")
-            notes.append("and are not tabulated.")
+            notes.append("The transverse principal g values vanish by Griffith's "
+                         "theorem\nand are not tabulated.")
 
         return cls(rows,
                    column_headers=column_headers,
@@ -944,6 +1843,241 @@ class ResultTable:
         os.remove(filename)
         check('the data file contains the bare rendering', file_str == plain_str)
 
+        # The LaTeX rendering. The numbers are set in math mode, as are the
+        # symbols carrying a subscript or a superscript.
+        latex_table_instance = cls([[1,-3.56,1.5e-3,'text']],
+                                   column_headers=['Re(X_k1q1)','g_x',
+                                                   'E / cm^-1','Angle a)'],
+                                   title="LATEX TEST",
+                                   footnotes="A footnote.",
+                                   formats=[None,'.2f','.4e',None])
+        latex_str = latex_table_instance.latex_string_table(standalone=False)
+
+        check('the LaTeX rendering builds a tabular environment',
+              ("\\begin{tabular}" in latex_str)
+              and ("\\end{tabular}" in latex_str))
+        check('the LaTeX rendering sets the numbers in math mode',
+              "$-3.56$" in latex_str)
+        check('the LaTeX rendering writes the exponents as powers of ten',
+              "$1.5000 \\times 10^{-3}$" in latex_str)
+        check('the LaTeX rendering sets the subscripts in math mode',
+              "$g_{x}$" in latex_str)
+        check('the LaTeX rendering sets the units upright with a superscript',
+              "$\\mathrm{cm}^{-1}$" in latex_str)
+        check('the LaTeX rendering carries the title as the caption',
+              "\\caption{LATEX TEST}" in latex_str)
+        check('the LaTeX rendering labels the footnotes with a superscript',
+              "\\textsuperscript{\\textit{a}} A footnote." in latex_str)
+        check('the LaTeX rendering marks the footnoted header with a superscript',
+              "Angle\\textsuperscript{\\textit{a}}" in latex_str)
+        check('the LaTeX rendering sets a bare symbol in math mode',
+              "$E$" in latex_str)
+        check('the LaTeX rendering sets the indices of a symbol',
+              "$X_{k_{1},q_{1}}$" in latex_str)
+        check('the bare LaTeX rendering has no preamble',
+              not "\\documentclass" in latex_str)
+        check('the standalone LaTeX rendering is a complete document',
+              ("\\documentclass" in latex_table_instance.latex_string_table())
+              and ("\\end{document}" in latex_table_instance.latex_string_table()))
+
+        # The recognition of the physical quantities of the headers. The
+        # symbols are variables and are set in italics, whereas the units
+        # of a header of the form 'quantity / unit' are set upright.
+        def segment_of(text,piece):
+            for segment in cls.markup_segments(text):
+                if segment['text'] == piece:
+                    return segment
+            return None
+
+        def latex_markup(text):
+            """The LaTeX rendering of a header, as the renderer sets it."""
+            return cls([[1.0]])._ResultTable__latex_text(text,markup=True)
+
+        check('a symbol carrying an index is split into its parts',
+              (segment_of('S_0','S')['italic'] is True)
+              and (segment_of('S_0','0')['position'] == 'sub'))
+        check('a symbol followed by an index is recognized',
+              (segment_of('k1','k')['italic'] is True)
+              and (segment_of('k1','1')['position'] == 'sub'))
+        check('a bare symbol is set in italics',
+              segment_of('E / cm^-1','E')['italic'] is True)
+        check('the unit of a header is set upright',
+              (segment_of('E / cm^-1','cm')['italic'] is False)
+              and (segment_of('B / T',' / T')['italic'] is False))
+        check('the index of a unit is a superscript',
+              segment_of('E / cm^-1','-1')['position'] == 'super')
+        check('the indices of a symbol are separated',
+              [segment['text'] for segment in cls.markup_segments('X_k1q1')]
+              == ['X','k','1',',','q','1'])
+        check('an ordinary word is not taken for a symbol',
+              cls.markup_segments('Doublet')[0]['italic'] is False)
+        check('a footnote marker is split off a header',
+              cls.split_footnote_marker('Angle a)') == ('Angle','a'))
+        check('a header without a marker is left alone',
+              cls.split_footnote_marker('Doublet') == ('Doublet',None))
+
+        # A Greek letter is written out by its name in the header and set
+        # as the letter by the renderings that can typeset it.
+        check('a Greek letter is set as the letter',
+              segment_of('theta','θ')['italic'] is True)
+        check('a Greek letter name inside a word is not a symbol',
+              cls.markup_segments('number')[0]['text'] == 'number')
+        check('a Greek letter carries its indices',
+              [segment['text'] for segment in cls.markup_segments('mu_B')]
+              == ['μ','B'])
+        check('an index of several parts is kept together',
+              latex_markup('mu_z,i') == "$\\mu_{z,i}$")
+        check('the bars of a magnitude enclose the whole quantity',
+              latex_markup('|mu_if|') == "$|\\mu_{if}|$")
+        check('a power of a magnitude stands outside the bars',
+              latex_markup('|C|^2') == "$|C|^{2}$")
+
+        # A header that the plain-text table cannot print as a symbol is
+        # given in both forms, and each rendering takes the one it can set.
+        two_form_header = {'text': 'Angle', 'typeset': 'theta'}
+        check('the plain-text form of a header is the default',
+              cls.header_text(two_form_header) == 'Angle')
+        check('the typeset form of a header is used when asked for',
+              cls.header_text(two_form_header,typeset=True) == 'theta')
+        check('an ordinary header has one form only',
+              (cls.header_text('Doublet') == 'Doublet')
+              and (cls.header_text('Doublet',typeset=True) == 'Doublet'))
+
+        two_form_table = cls([[1.0]],column_headers=[two_form_header])
+        check('the plain-text table prints the written-out header',
+              ("Angle" in two_form_table.string_table())
+              and (not "theta" in two_form_table.string_table()))
+        check('the LaTeX table sets the header as the symbol',
+              "$\\theta$" in two_form_table.latex_string_table(standalone=False))
+
+        # The manual wrapping of a note or of a footnote belongs to the
+        # plain-text table; the renderings that wrap the text themselves
+        # set each entry on a single line.
+        wrapped_table = cls([[1.0]],
+                            column_headers=['Value'],
+                            notes="A note that is\nwrapped by hand.",
+                            footnotes="A footnote that is\nwrapped by hand.")
+        wrapped_latex = wrapped_table.latex_string_table(standalone=False)
+
+        check('the plain-text table keeps the manual wrapping',
+              "A note that is\n" in wrapped_table.string_table())
+        check('the LaTeX table joins the lines of a note',
+              "A note that is wrapped by hand." in wrapped_latex)
+        check('the LaTeX table joins the lines of a footnote',
+              "A footnote that is wrapped by hand." in wrapped_latex)
+        check('the LaTeX table breaks the line only between the entries',
+              wrapped_latex.count("wrapped by hand. \\\\")
+              + wrapped_latex.count("wrapped by hand.\n") == 2)
+
+        # The LaTeX file, and the appending of a second table to it.
+        latex_name = os.path.join(tempfile.gettempdir(),'ouluspin_result_table_test.tex')
+        if os.path.exists(latex_name):
+            os.remove(latex_name)
+
+        latex_table_instance.latex_table(latex_name)
+        latex_table_instance.latex_table(latex_name)
+
+        f = open(latex_name)
+        latex_file_str = f.read()
+        f.close()
+        os.remove(latex_name)
+
+        check('the LaTeX file is a compileable document',
+              latex_file_str.count("\\documentclass") == 1)
+        check('a second table is appended to the LaTeX file',
+              latex_file_str.count("\\begin{tabular}") == 2)
+        check('the appended table is written before the end of the document',
+              latex_file_str.rfind("\\begin{tabular}")
+              < latex_file_str.rfind("\\end{document}"))
+
+        # The word-processor renderings. Both formats are ZIP archives of
+        # XML documents, so the test checks that the archive holds the
+        # expected entries, that they are well-formed XML and that a second
+        # table is appended to an existing document.
+        import xml.dom.minidom
+        import zipfile
+
+        for extension, entry_list, table_element in \
+                (('.odt',['mimetype','content.xml','styles.xml',
+                          'META-INF/manifest.xml'],'<table:table '),
+                 ('.docx',['[Content_Types].xml','word/document.xml',
+                           'word/styles.xml'],'<w:tbl>')):
+            document_name = os.path.join(tempfile.gettempdir(),
+                                         'ouluspin_result_table_test' + extension)
+            if os.path.exists(document_name):
+                os.remove(document_name)
+
+            if extension == '.odt':
+                latex_table_instance.odt_table(document_name)
+                latex_table_instance.odt_table(document_name)
+                content_entry = 'content.xml'
+            else:
+                latex_table_instance.docx_table(document_name)
+                latex_table_instance.docx_table(document_name)
+                content_entry = 'word/document.xml'
+
+            archive   = zipfile.ZipFile(document_name,'r')
+            name_list = archive.namelist()
+            document  = archive.read(content_entry).decode('utf-8')
+            archive.close()
+            os.remove(document_name)
+
+            check('the ' + extension + ' document holds the expected entries',
+                  all(entry in name_list for entry in entry_list))
+
+            well_formed = True
+            try:
+                xml.dom.minidom.parseString(document)
+            except Exception:
+                well_formed = False
+
+            check('the ' + extension + ' document is well-formed XML',well_formed)
+            check('a second table is appended to the ' + extension + ' document',
+                  document.count(table_element) == 2)
+            check('the ' + extension + ' document carries the table content',
+                  ("LATEX TEST" in document) and ("3.56" in document))
+            check('the ' + extension
+                  + ' document writes the negative numbers with a minus sign',
+                  ("−3.56" in document) and (not "-3.56" in document))
+
+            if extension == '.odt':
+                subscript_markup   = 'style:text-position="sub'
+                superscript_markup = 'style:text-position="super'
+                italic_markup      = 'fo:font-style="italic"'
+            else:
+                subscript_markup   = '<w:vertAlign w:val="subscript"/>'
+                superscript_markup = '<w:vertAlign w:val="superscript"/>'
+                italic_markup      = '<w:i/>'
+
+            check('the ' + extension + ' document sets the subscripts',
+                  subscript_markup in document)
+            check('the ' + extension + ' document sets the superscripts',
+                  superscript_markup in document)
+            check('the ' + extension + ' document sets the symbols in italics',
+                  italic_markup in document)
+
+            # The document wraps the text of a paragraph itself, so a note
+            # or a footnote wrapped by hand is set on a single line.
+            wrapped_name = os.path.join(tempfile.gettempdir(),
+                                        'ouluspin_result_table_wrap' + extension)
+            if os.path.exists(wrapped_name):
+                os.remove(wrapped_name)
+
+            if extension == '.odt':
+                wrapped_table.odt_table(wrapped_name)
+            else:
+                wrapped_table.docx_table(wrapped_name)
+
+            archive         = zipfile.ZipFile(wrapped_name,'r')
+            wrapped_document = archive.read(content_entry).decode('utf-8')
+            archive.close()
+            os.remove(wrapped_name)
+
+            check('the ' + extension + ' document joins the lines of a note',
+                  "A note that is wrapped by hand." in wrapped_document)
+            check('the ' + extension + ' document joins the lines of a footnote',
+                  "A footnote that is wrapped by hand." in wrapped_document)
+
         # The table types and the footnote markers.
         check('the table types are listed',
               ('generic' in cls.table_types())
@@ -993,6 +2127,8 @@ class ResultTable:
               len(body_lines(table)) == 2)
         check('the compound table has a footnote on the angle',
               "a)" in table_str)
+        check('the compound table gives the energies with one decimal',
+              "100.0" in table_str)
         check('the angle to the reference doublet vanishes',
               abs(table.rows[0][6]) < 1.0e-8)
         check('the angle between perpendicular magnetic axes is 90 degrees',
