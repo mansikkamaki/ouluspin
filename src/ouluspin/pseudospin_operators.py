@@ -617,6 +617,8 @@ class PseudoSpinOperator:
     __diagonalize() : void
         Construct the matrix, diagonalize it and return the eigenvalues and eigenvectors.
         The construction and diagonalization will be handled by fortran_utils.
+    __projection_label(doubled_projection) : str
+        Return the label of the projection M of a basis state, i.e. '-15/2' or '-7'.
 
     Public methods
     --------------
@@ -628,6 +630,10 @@ class PseudoSpinOperator:
     eigenvector_table(eigenvalue_print_limit=None, print_threshold=None) : ResultTable
         Return a human-readable table of the eigenvalues and eigenvectors. The argument
         can be used to override the default class instance value for the print limit.
+    compact_eigenvector_table(eigenvalue_print_limit=None, decimals=3) : ResultTable
+        Return a compact table of the compositions of the eigenvectors, one eigenstate
+        per row and one basis state per column. Available for a basis of a single spin
+        site only, i.e. for the J multiplet of a lanthanide(III) ion and the like.
 
     Class methods
     -------------
@@ -788,11 +794,112 @@ class PseudoSpinOperator:
                                         table_type='eigenvectors')
 
 
+    def __projection_label(self, doubled_projection):
+        """Return the label of the projection M of a basis state, given as
+        the doubled value the basis stores, i.e. '-15/2' for a half-integer
+        projection and '-7' for an integer one.
+        """
+        if doubled_projection % 2 == 0:
+            return str(doubled_projection//2)
+
+        return str(doubled_projection) + "/2"
+
+
+    def compact_eigenvector_table(self, eigenvalue_print_limit=None,
+                                  decimals=3):
+        """Return a compact table of the compositions of the eigenvectors
+        as an instance of ResultTable.
+
+        Each row is one eigenstate, labelled by its energy, and each column
+        is one basis state, labelled by the projection M of the basis
+        state. The elements are the squared moduli |<J,M|i>|^2 of the
+        coefficients of the basis states in the eigenvector, so the values
+        of a row sum to one.
+
+        The table is meant for a system of a single spin site, i.e. for the
+        J multiplet of a lanthanide(III) ion and the like, where the basis
+        states differ only in their projection M and the whole composition
+        of an eigenstate fits on one line. A system of several spin sites
+        needs the two labels S and M of every site to name a basis state
+        and does not fit this form, so it is an error; use the
+        eigenvector_table method for such a system.
+
+        When the operator matrix was not diagonalized, an empty table
+        stating this is returned.
+
+        Optional arguments
+        ------------------
+        eigenvalue_print_limit : float or None
+            Eigenstates with an eigenvalue above this value are not
+            tabulated. Default is None, in which case the print limit
+            stored in the instance is used.
+        decimals : int
+            The number of decimals of the tabulated squared moduli. The
+            table has one column per basis state and is easily too wide for
+            a page, so the default is 3, which still separates a
+            contribution of a per cent from a vanishing one.
+        """
+        if not self.basis.n_sites == 1:
+            print("ERROR in PseudoSpinOperator.")
+            print("Error: The compact eigenvector table is available for a basis")
+            print("       of a single spin site only; this basis has "
+                  + str(self.basis.n_sites) + " sites.")
+            print("       Use the eigenvector_table method instead.")
+            print("Error termination.")
+            sys.exit(1)
+
+        if not self.diagonalize_operator_matrix:
+            return result_table.ResultTable([],
+                                            title="COMPOSITION OF THE EIGENSTATES",
+                                            notes="No eigenvectors available.",
+                                            table_type='eigenvectors')
+
+        print_limit = self.__print_limit(eigenvalue_print_limit)
+
+        # The basis states of the single spin site differ only in their
+        # projection, so the columns are labelled by it. The order is the
+        # one of the basis states, so that the column of a basis state is
+        # the one carrying its label.
+        column_headers = []
+        for basis_state in self.basis.basis_state_list:
+            column_headers.append(self.__projection_label(basis_state[0][1]))
+
+        rows        = []
+        row_headers = []
+
+        for i in range(0,self.n_basis):
+            if not print_limit == None:
+                if self.eigenvalues[i] > print_limit:
+                    break
+
+            row_headers.append("{0:.1f}".format(self.eigenvalues[i]))
+            rows.append([abs(self.eigenvectors[j][i])**2
+                         for j in range(0,self.n_basis)])
+
+        # The total angular momentum is the same for every basis state, so
+        # it is stated once instead of being tabulated.
+        J_label = self.__projection_label(self.basis.pseudospin_list[0])
+
+        notes = ["The squared moduli |<J,M|i>|^2 of the basis states in the "
+                 "eigenstates,\nwhich sum to one on every row. J = " + J_label
+                 + ", and the columns are\nlabelled by the projection M."]
+
+        return result_table.ResultTable(
+            rows,
+            column_headers=column_headers,
+            row_headers=row_headers,
+            row_header_label="E / " + self.units.energy_unit_str,
+            title="COMPOSITION OF THE EIGENSTATES",
+            notes=notes,
+            formats=self.n_basis*['.' + str(int(decimals)) + 'f'],
+            table_type='eigenvectors')
+
+
     def __repr__(self):
         """Return a human-readable summary of the operator."""
         return str(self.eigenvalue_table())
 
-    
+
     def __init__(self, basis, tensor_list, units,
                  diagonalize_operator_matrix=True,
                  store_operator_matrix=False,
@@ -1002,6 +1109,48 @@ class PseudoSpinOperator:
               len([row for row in
                    operator_zeeman.eigenvector_table(print_threshold=0.5).rows
                    if isinstance(row,list)]) == operator_zeeman.n_basis)
+
+        # The compact table of the compositions of the eigenvectors. The
+        # operator is an axial splitting of a J = 5/2 multiplet, whose
+        # eigenstates are the basis states themselves, so every row holds a
+        # single unit contribution.
+        axial = tensors.IwaharaChibotaruSphericalTensor\
+                       .from_one_site_cartesian_operator(2.0,'z',5)
+        multiplet = cls(PseudoSpinBasis([5]),[axial],tmp_units,
+                        translate_eigenvalues=True)
+
+        compact_table = multiplet.compact_eigenvector_table()
+
+        check('the compact eigenvector table is a ResultTable',
+              isinstance(compact_table,result_table.ResultTable))
+        check('the compact table has one row per eigenstate',
+              len(compact_table.rows) == multiplet.n_basis)
+        check('the compact table has one column per basis state',
+              len(compact_table.rows[0]) == multiplet.n_basis)
+        check('the rows of the compact table sum to one',
+              all(abs(sum(row) - 1.0) < 1.0e-10 for row in compact_table.rows))
+        check('the compact table labels the columns by the projection',
+              compact_table.column_headers[0]
+              == ['-5/2','-3/2','-1/2','1/2','3/2','5/2'])
+        check('the compact table labels the rows by the energies',
+              len(compact_table.row_headers) == multiplet.n_basis)
+        check('the compact table renders', len(str(compact_table)) > 0)
+        check('the compact table gives the composition of the eigenstates',
+              all(abs(max(row) - 1.0) < 1.0e-10 for row in compact_table.rows))
+        check('the eigenvalue print limit drops the higher states',
+              len(multiplet.compact_eigenvector_table(
+                  eigenvalue_print_limit=1.0).rows) < multiplet.n_basis)
+
+        # An integer projection is labelled without the halving, i.e. the
+        # basis states of an S = 1 site are labelled -1, 0 and 1.
+        integer_axial = tensors.IwaharaChibotaruSphericalTensor\
+                               .from_one_site_cartesian_operator(2.0,'z',2)
+        integer_multiplet = cls(PseudoSpinBasis([2]),[integer_axial],tmp_units,
+                                translate_eigenvalues=True)
+
+        check('an integer projection is labelled as an integer',
+              integer_multiplet.compact_eigenvector_table().column_headers[0]
+              == ['-1','0','1'])
 
         return debug_output.test_summary('PseudoSpinOperator',result_list,print_output)
 
