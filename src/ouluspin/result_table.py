@@ -1348,8 +1348,11 @@ class ResultTable:
         # Within the unit of a header, i.e. after the solidus of a header
         # such as 'E / cm^-1' or 'B / T', the letters are the symbols of
         # the units and are set upright, so only the indices of the units
-        # are recognized there.
-        unit_pattern = re.compile(r'([A-Za-z]+|[0-9]+)\^(-?[A-Za-z0-9]+)')
+        # are recognized there. A unit named by a Greek letter, such as the
+        # Bohr magneton 'mu_B', is recognized there as well.
+        unit_pattern = re.compile(greek_str
+                                  + r'|(?P<unit_base>[A-Za-z]+|[0-9]+)'
+                                  + r'\^(?P<unit_sup>-?[A-Za-z0-9]+)')
 
         atom_list = []
 
@@ -1373,10 +1376,14 @@ class ResultTable:
                 add_text(part[position:match.start()])
 
                 if unit:
-                    # Only the indices of the units are recognized within
-                    # the unit of a header.
-                    atom_list.append(quantity(match.group(1),None,
-                                              match.group(2)))
+                    # Only the units and the indices they carry are
+                    # recognized within the unit of a header.
+                    if match.group('greek') is not None:
+                        atom_list.append(quantity(match.group('greek'),
+                                                  match.group('greek_sub'),None))
+                    else:
+                        atom_list.append(quantity(match.group('unit_base'),None,
+                                                  match.group('unit_sup')))
                 elif match.group('greek') is not None:
                     atom_list.append(quantity(match.group('greek'),
                                               match.group('greek_sub'),None))

@@ -72,6 +72,21 @@ A typical workflow is:
   numpy ≥ 1.26) for the compiled extension module
 - A LAPACK/BLAS library (Intel MKL, OpenBLAS, or reference LAPACK/BLAS)
 
+Optional, needed only by the plotting of the results (`ResultPlot`):
+
+- `matplotlib` (and `pillow`, which it installs along with itself, for the
+  TIFF files). Everything else, including the LaTeX, `.odt` and `.docx`
+  renderings of the result tables, works without it. Install it into the
+  interpreter that runs the library:
+
+      ouluspin-python -m pip install --user matplotlib
+
+  Take care that the installation does not replace the `numpy` of the
+  interpreter: a `numpy` installed beside an Intel Python shadows the
+  optimized one and can break the compiled Fortran extension, whose ABI is
+  tied to the `numpy` it was built against. Should that happen, remove the
+  shadowing copy with `ouluspin-python -m pip uninstall numpy`.
+
 ## Installation and setup
 
 ### 1. Build the Fortran extension module
@@ -230,6 +245,44 @@ exchange operator.
   modules such as `odfpy` or `python-docx` are needed**, and nothing
   beyond the standard library is imported unless one of the writers is
   actually called.
+
+### `ouluspin.result_plot`
+
+- **`ResultPlot`** — the structured representation of a plot of results,
+  doing for the figures what `ResultTable` does for the tables. An
+  instance is built from the object whose results are plotted, which
+  decides the kind of the plot:
+
+  | Source | Plot |
+  | --- | --- |
+  | `IsothermalStaticMagnetization` | magnetization against the field, one curve per temperature |
+  | `StaticMagneticSusceptibility` | the χ*T* product against the temperature |
+  | `StaticTransitionMagneticMoments` | the effective barrier of the reversal of the magnetization |
+  | any operator carrying `eigenvalues` | an energy level diagram |
+
+  `ResultPlot.from_data(x,y,...)` builds a plot from plain values. The
+  axis labels, the legends and the drawing style are stored as attributes
+  and can be changed afterwards, and the labels are typeset from the same
+  markup as the table headers, so that `E / cm^-1` and `mu_B` come out as
+  an italic *E* over cm⁻¹ and as μ<sub>B</sub>.
+
+  The plot is written with `png_plot(filename)`, `tiff_plot(filename)` and
+  `pdf_plot(filename)`. All of them take `size_ratio` and `resolution`
+  (600 dpi by default, high enough for a publication), `draft_copy=True`
+  to write a low-resolution copy beside the image for manuscript drafts,
+  and `overwrite=False`, which makes writing over an existing file an
+  error. PNG files are written with compression level 9 and TIFF files
+  LZW-compressed by default; `compression` overrides both.
+
+  Two compatible plots are combined with `+`, e.g. two χ*T* curves into
+  one plot field or two level structures side by side. The criteria are
+  strict: the kinds and both axis labels must agree, and effective
+  barriers are never combined, since two barriers in one field cannot be
+  told apart.
+
+  Plotting is the only part of the library needing `matplotlib`; it is
+  imported by the writing methods only when they are called, so the rest
+  of the library works without it.
 
 ### `ouluspin.tensors`
 
@@ -406,11 +459,13 @@ extension and runs the Fortran suite in one step.
     │   ├── ouluspin/         The Python package
     │   │   ├── units.py                 Energy unit systems
     │   │   ├── result_table.py          Structured result tables
+    │   │   ├── result_plot.py           Structured result plots
     │   │   ├── tensors.py               Spherical/Cartesian tensor classes
     │   │   ├── pseudospin_operators.py  Pseudospin bases and operators
     │   │   ├── properties.py            Magnetic property calculations
     │   │   ├── integration.py           Spherical integration grids
     │   │   ├── _documents.py            .odt and .docx writers (internal)
+    │   │   ├── _images.py               Plot image writers (internal)
     │   │   ├── qc/                      Quantum-chemistry interfaces
     │   │   ├── systems/                 Higher-level physical systems
     │   │   └── _fortran/                Compiled Fortran extension (internal)

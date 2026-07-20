@@ -35,6 +35,15 @@ dependencies = [
     "scipy",
 ]
 
+# The plotting of the results is the only part of the library needing a
+# plotting library, so it is an optional dependency; Pillow is needed for
+# the TIFF files.
+[project.optional-dependencies]
+plots = [
+    "matplotlib",
+    "pillow",
+]
+
 [tool.setuptools.packages.find]
 where = ["src"]
 
