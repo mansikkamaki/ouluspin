@@ -273,6 +273,20 @@ class ResultTable:
         all tests passed.
     """
 
+    # The typographic minus sign. The negative numbers of the renderings
+    # that can typeset them are written with it instead of the hyphen the
+    # plain-text table prints.
+    MINUS_SIGN = "−"
+
+    # The font of a table that is too wide for the page is made smaller, so
+    # that the table still fits the width of the text. Each entry gives the
+    # width of the table, in characters of the plain-text rendering, up to
+    # which the font is scaled by the corresponding factor; a table wider
+    # than the last entry uses the last factor. A table of some twenty
+    # columns is still legible this way, and the reader of the document can
+    # always turn the page instead.
+    __FONT_SCALES = ((80,1.0),(100,0.9),(125,0.8),(150,0.7))
+
     # The Greek letters recognized in the headers of the tables. The
     # plain-text table cannot print them, so they are written out by their
     # names in the headers, and the renderings that are able to typeset
@@ -831,10 +845,28 @@ class ResultTable:
         for atom in self.markup_atoms(text):
             if atom['kind'] == 'text':
                 tmp_str += self.latex_escape(atom['text'])
+            elif atom['kind'] == 'number':
+                # The math mode gives the number a proper minus sign.
+                tmp_str += "$" + atom['text'] + "$"
             else:
                 tmp_str += self.__latex_quantity(atom)
 
         return tmp_str
+
+
+    def __latex_font_command(self, scale):
+        """Return the LaTeX command that sets the font of a wide table, or
+        an empty string when the table is set in the font of the running
+        text.
+        """
+        if scale >= 1.0:
+            return ""
+        if scale >= 0.9:
+            return "\\small"
+        if scale >= 0.8:
+            return "\\footnotesize"
+
+        return "\\scriptsize"
 
 
     def __latex_footnote_marker(self, letter):
@@ -988,6 +1020,21 @@ class ResultTable:
         for note in self.notes:
             table_str += self.__latex_text(joined(note)) + " \\\\\n"
 
+        # A table too wide for the page is set in a smaller font, inside a
+        # group of its own so that the size of the caption and of the
+        # explanatory texts is not changed.
+        character_width = sum(widths) \
+                          + max(0,self.n_columns - 1)*len(self.column_separator)
+        size_command    = self.__latex_font_command(self.font_scale(character_width))
+
+        if not size_command == "":
+            # The space LaTeX leaves on both sides of every column is a
+            # large part of the width of a table of many columns, so it is
+            # narrowed along with the font. Both are set inside the group,
+            # so the rest of the document keeps its own spacing.
+            table_str += ("{" + size_command
+                          + "\\setlength{\\tabcolsep}{2pt}\n")
+
         table_str += "\\begin{tabular}{" + column_specification + "}\n\\hline\n"
 
         for header_line in header_lines:
@@ -1005,6 +1052,9 @@ class ResultTable:
                 table_str += latex_row(row)
 
         table_str += "\\hline\n\\end{tabular}\n"
+
+        if not size_command == "":
+            table_str += "}\n"
 
         for line in self.summary:
             table_str += "\\\\\n" + self.__latex_text(joined(line)) + "\n"
@@ -1219,7 +1269,14 @@ class ResultTable:
 
             {'kind': 'text', 'text': the text}
 
-        and a physical quantity is the atom
+        a header that states a plain number, such as the projection '-15/2'
+        of a basis state or an energy, is the atom
+
+            {'kind': 'number', 'text': the number}
+
+        which the renderers set as a number, i.e. with the typographic
+        minus sign of a negative value instead of the hyphen the plain-text
+        table prints, and a physical quantity is the atom
 
             {'kind':       'quantity',
              'base':       the base symbol as (text,italic) pairs,
@@ -1236,6 +1293,14 @@ class ResultTable:
         as the 'cm' of 'cm^-1', and is set upright.
         """
         import re
+
+        # A header that is a plain number, e.g. the projection '-15/2' or
+        # '-1' of a basis state or an energy such as '105.1'. It is
+        # recognized before anything else, since the solidus of a fraction
+        # is not the solidus that separates a quantity from its unit.
+        if re.match(r'^-?[0-9]+(?:\.[0-9]+)?(?:/[0-9]+)?$',text.strip()) \
+           and not text.strip() == "":
+            return [{'kind': 'number', 'text': text.strip()}]
 
         def index_groups(index_text):
             """Split the text of a subscript or of a superscript into its
@@ -1316,7 +1381,10 @@ class ResultTable:
         # carrying a subscript ('S_0', 'X_k1q1'), a single letter followed
         # by an index ('k1'), and a single letter standing alone ('E').
         # A letter is taken to be a symbol only when it does not belong to
-        # an ordinary word, which the surrounding letters tell.
+        # an ordinary word, which the surrounding letters tell, and when it
+        # does not follow a number: a letter after a number is the unit of
+        # that number, as the 'K' of the header '2.000 K', and is set
+        # upright like the other units.
         # The Greek letters are written out by their names, which are
         # matched as whole words so that a name occurring inside an
         # ordinary word, such as the 'nu' of 'number', is not taken for a
@@ -1343,7 +1411,8 @@ class ResultTable:
                              r'|(?P<sub_base>[A-Za-z])_(?P<sub>' + index_str + r')'
                              r'|(?<![A-Za-z])(?P<index_base>[A-Za-z])'
                              r'(?P<index>[0-9]+)(?![A-Za-z0-9])'
-                             r'|(?<![A-Za-z])(?P<bare>[A-Za-z])(?![A-Za-z0-9])')
+                             r'|(?<![A-Za-z])(?<![0-9] )(?P<bare>[A-Za-z])'
+                             r'(?![A-Za-z0-9])')
 
         # Within the unit of a header, i.e. after the solidus of a header
         # such as 'E / cm^-1' or 'B / T', the letters are the symbols of
@@ -1462,6 +1531,12 @@ class ResultTable:
                 add(atom['text'],False,'normal')
                 continue
 
+            if atom['kind'] == 'number':
+                # A negative number is written with the typographic minus
+                # sign rather than with the hyphen of the plain-text table.
+                add(atom['text'].replace("-",cls.MINUS_SIGN),False,'normal')
+                continue
+
             if atom.get('bars',False):
                 add("|",False,'normal')
 
@@ -1481,6 +1556,31 @@ class ResultTable:
 
 
     @classmethod
+    def font_scale(cls, character_width):
+        """Return the factor the font of a table of the given width is
+        scaled by in the renderings that typeset it.
+
+        A table of many columns, such as the composition of the eigenstates
+        of a J multiplet, does not fit the width of a page in the font of
+        the running text. Rather than let it run over the margin, the
+        renderings set a wide table in a smaller font, in which it still
+        reads well; whether to keep it that way or to turn the table onto a
+        page of its own is left to whoever writes the document.
+
+        Arguments
+        ---------
+        character_width : int
+            The width of the table in the characters of the plain-text
+            rendering, i.e. the width of its widest line.
+        """
+        for limit, scale in cls.__FONT_SCALES:
+            if character_width <= limit:
+                return scale
+
+        return cls.__FONT_SCALES[-1][1]
+
+
+    @classmethod
     def latex_escape(cls, text):
         """Return the text with the characters that are special in LaTeX
         escaped.
@@ -1491,9 +1591,13 @@ class ResultTable:
         tmp_text = tmp_text.replace("~","\\textasciitilde{}")
         tmp_text = tmp_text.replace("^","\\textasciicircum{}")
 
-        # The vertical bar is not a bar in the text mode of LaTeX, so it is
-        # written with the command that produces one.
+        # The vertical bar and the angle brackets are not themselves in the
+        # text mode of LaTeX, where they come out as a dash and as inverted
+        # punctuation marks, so they are written with the commands that
+        # produce them.
         tmp_text = tmp_text.replace("|","\\textbar{}")
+        tmp_text = tmp_text.replace("<","\\textless{}")
+        tmp_text = tmp_text.replace(">","\\textgreater{}")
 
         return tmp_text
 
@@ -1934,6 +2038,65 @@ class ResultTable:
               == ['μ','B'])
         check('an index of several parts is kept together',
               latex_markup('mu_z,i') == "$\\mu_{z,i}$")
+
+        # A header that states a plain number, e.g. the projection of a
+        # basis state, is set as a number, so that a negative value carries
+        # the typographic minus sign instead of a hyphen. The solidus of a
+        # fraction is not the solidus that separates a quantity from its
+        # unit.
+        check('a fraction is set as a number',
+              latex_markup('-15/2') == "$-15/2$")
+        check('an integer is set as a number',
+              latex_markup('-1') == "$-1$")
+        check('a decimal number is set as a number',
+              latex_markup('105.1') == "$105.1$")
+        check('a negative number carries the minus sign',
+              cls.markup_segments('-15/2')[0]['text'] == cls.MINUS_SIGN + "15/2")
+        check('a positive number is left alone',
+              cls.markup_segments('15/2')[0]['text'] == "15/2")
+        check('a unit is still told from a fraction',
+              latex_markup('E / cm^-1') == "$E$ / $\\mathrm{cm}^{-1}$")
+
+        # The characters that are not themselves in the text mode of LaTeX
+        # are written with the commands that produce them; a bra-ket of a
+        # note would otherwise come out as inverted punctuation marks.
+        check('the angle brackets are escaped',
+              cls.latex_escape("<J,M|i>")
+              == "\\textless{}J,M\\textbar{}i\\textgreater{}")
+
+        # A letter following a number is the unit of that number, not a
+        # symbol, so it is set upright.
+        check('a unit following a number is set upright',
+              latex_markup('2.000 K') == "2.000 K")
+        check('a symbol is still set in italics',
+              latex_markup('E') == "$E$")
+        check('a unit following a number is upright in the documents',
+              all(segment['italic'] is False
+                  for segment in cls.markup_segments('2.000 K')))
+
+        # A table too wide for the page is set in a smaller font.
+        check('a narrow table is set in the font of the text',
+              cls.font_scale(60) == 1.0)
+        check('a wide table is set in a smaller font',
+              cls.font_scale(110) < 1.0)
+        check('a very wide table is set in the smallest font',
+              cls.font_scale(400) == cls.font_scale(150))
+
+        narrow_latex = cls([[1.0]],column_headers=['Value']) \
+                       .latex_string_table(standalone=False)
+        wide_latex   = cls([20*[1.0]],column_headers=[str(i) for i
+                                                      in range(0,20)]) \
+                       .latex_string_table(standalone=False)
+
+        check('the LaTeX rendering of a narrow table sets no font size',
+              not "\\footnotesize" in narrow_latex)
+        check('the LaTeX rendering of a wide table sets a smaller font',
+              ("\\footnotesize" in wide_latex)
+              or ("\\scriptsize" in wide_latex))
+        check('the LaTeX rendering of a wide table narrows the columns',
+              "\\tabcolsep" in wide_latex)
+        check('the smaller font is set inside a group of its own',
+              wide_latex.count("{") == wide_latex.count("}"))
         check('the bars of a magnitude enclose the whole quantity',
               latex_markup('|mu_if|') == "$|\\mu_{if}|$")
         check('a power of a magnitude stands outside the bars',

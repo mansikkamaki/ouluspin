@@ -63,8 +63,13 @@ FONT_SIZE     = 11.0
 RULE_WIDTH    = "0.5pt"
 
 # The typographic minus sign. The negative numbers of the documents are
-# written with it instead of the hyphen of the plain-text table.
-MINUS_SIGN    = "−"
+# written with it instead of the hyphen of the plain-text table. It is the
+# one of ResultTable, so that the tables and the headers agree.
+def minus_sign():
+    """Return the typographic minus sign used by the renderings."""
+    from ouluspin.result_table import ResultTable
+
+    return ResultTable.MINUS_SIGN
 
 # The height the subscripts and the superscripts are raised or lowered by,
 # and their size, as a percentage of the height of the font.
@@ -77,6 +82,22 @@ def escape(text):
     replaced by the corresponding entities.
     """
     return str(text).replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
+
+
+def table_font_size(content):
+    """Return the size of the font of the table in points.
+
+    A table of many columns does not fit the width of the page in the font
+    of the running text, so a wide table is set in a smaller font (see the
+    font_scale class method of ResultTable). The columns of the document
+    are of a fixed width, so without this the entries of a wide table would
+    wrap onto several lines inside their cells.
+    """
+    from ouluspin.result_table import ResultTable
+
+    character_width = sum(content['widths']) + 2*max(0,content['n_columns'] - 1)
+
+    return FONT_SIZE*ResultTable.font_scale(character_width)
 
 
 def column_widths(content):
@@ -103,7 +124,7 @@ def number_segments(text):
     """Return a formatted number as a single segment, with the hyphens of
     the plain-text form replaced by the typographic minus sign.
     """
-    return [{'text':     str(text).replace("-",MINUS_SIGN),
+    return [{'text':     str(text).replace("-",minus_sign()),
              'italic':   False,
              'position': 'normal'}]
 
@@ -402,6 +423,10 @@ def odt_table_styles(content, prefix):
                     '</style:style>')
 
     # The paragraph styles of the cells, one per alignment.
+    # A wide table is set in a smaller font, so that its entries do not
+    # wrap inside the cells.
+    font_size = table_font_size(content)
+
     for alignment, name in (('l','left'),('r','right'),('c','center')):
         for parent, style in (('Table_20_Contents','contents'),
                               ('Table_20_Heading','heading')):
@@ -410,6 +435,8 @@ def odt_table_styles(content, prefix):
                         ' style:parent-style-name="' + parent + '">'
                         '<style:paragraph-properties fo:text-align="'
                         + name + '" style:justify-single-word="false"/>'
+                        '<style:text-properties fo:font-size="'
+                        + "{0:.1f}".format(font_size) + 'pt"/>'
                         '</style:style>')
 
     # The text styles of the formatted pieces of the cells, i.e. the
@@ -759,9 +786,10 @@ def docx_section_properties():
             '</w:sectPr>')
 
 
-def docx_runs(segment_list, bold=False):
+def docx_runs(segment_list, bold=False, font_size=None):
     """Return the formatted pieces of a paragraph of a .docx document as
-    the runs of the paragraph.
+    the runs of the paragraph. The font size, when given, is the size of
+    the text in points; it is used to set a wide table in a smaller font.
     """
     tmp_str = ""
 
@@ -770,6 +798,10 @@ def docx_runs(segment_list, bold=False):
 
         if bold:
             properties += '<w:b/>'
+        if font_size is not None:
+            # The size is given in half-points in the .docx format.
+            properties += ('<w:sz w:val="'
+                           + str(int(round(2.0*font_size))) + '"/>')
         if segment['italic']:
             properties += '<w:i/>'
         if segment['position'] == 'sub':
@@ -786,7 +818,7 @@ def docx_runs(segment_list, bold=False):
     return tmp_str
 
 
-def docx_paragraph(segment_list, bold=False, alignment='l'):
+def docx_paragraph(segment_list, bold=False, alignment='l', font_size=None):
     """Return one paragraph of a .docx document. The text of the paragraph
     is given as a list of formatted segments.
     """
@@ -798,11 +830,11 @@ def docx_paragraph(segment_list, bold=False, alignment='l'):
         justification = 'left'
 
     return ('<w:p><w:pPr><w:jc w:val="' + justification + '"/></w:pPr>'
-            + docx_runs(segment_list,bold) + '</w:p>')
+            + docx_runs(segment_list,bold,font_size) + '</w:p>')
 
 
 def docx_cell(segment_list, width, top_rule, bottom_rule, bold=False,
-              alignment='l', span=1):
+              alignment='l', span=1, font_size=None):
     """Return one table cell of a .docx document. The rules of the cell are
     drawn as its top and bottom borders.
     """
@@ -832,7 +864,7 @@ def docx_cell(segment_list, width, top_rule, bottom_rule, bold=False,
             '</w:tcBorders>'
             '<w:vAlign w:val="center"/>'
             '</w:tcPr>'
-            + docx_paragraph(segment_list,bold,alignment) +
+            + docx_paragraph(segment_list,bold,alignment,font_size) +
             '</w:tc>')
 
 
@@ -853,6 +885,10 @@ def docx_table_body(content):
         if column < len(width_list):
             return width_list[column]
         return TEXT_WIDTH/max(1,n_columns)
+
+    # A wide table is set in a smaller font; the texts around the table
+    # stay in the font of the running text.
+    font_size = table_font_size(content)
 
     tmp_str = ""
 
@@ -889,7 +925,8 @@ def docx_table_body(content):
             else:
                 segment_list = []
             tmp_str += docx_cell(segment_list,cell_width(j),top_rule,
-                                 bottom_rule,True,alignment_of(j))
+                                 bottom_rule,True,alignment_of(j),
+                                 font_size=font_size)
         tmp_str += '</w:tr>'
 
     row_list = [item for item in content['body'] if item['type'] == 'row'
@@ -904,13 +941,15 @@ def docx_table_body(content):
 
         if item['type'] == 'section':
             tmp_str += docx_cell(plain_segments(item['text']),TEXT_WIDTH,
-                                 top_rule,bottom_rule,True,'l',n_columns)
+                                 top_rule,bottom_rule,True,'l',n_columns,
+                                 font_size=font_size)
         else:
             for j in range(0,n_columns):
                 tmp_str += docx_cell(cell_segments(item,j,
                                                    content['has_row_headers']),
                                      cell_width(j),top_rule,bottom_rule,
-                                     False,alignment_of(j))
+                                     False,alignment_of(j),
+                                     font_size=font_size)
 
         tmp_str += '</w:tr>'
 
