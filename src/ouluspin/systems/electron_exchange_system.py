@@ -469,11 +469,17 @@ class AbInitioElectronExchangeSystem:
         Construct and return the PseudoSpinDoublet instance of the doublet
         spanned by the two pseudospin eigenstates given in the states
         tuple, with the g-tensor reported in the input axis frame.
-    pseudospin_doublet_list(doublets) : list of PseudoSpinDoublet
+    pseudospin_doublet_index_list(pseudospin) : list of tuple of int
+        Return the states of the pseudospin multiplet grouped into
+        doublets, as the list of index tuples the doublet methods take. A
+        non-Kramers multiplet is left with one singlet, which is placed
+        where it leaves the smallest splitting within the doublets.
+    pseudospin_doublet_list(doublets) : list
         Construct and return the PseudoSpinDoublet instances of one or
         several pseudospin doublets, with the g-tensors reported in the
         input axis frame. Already constructed doublets are passed through
-        unchanged.
+        unchanged, and a singlet given as a tuple of one index is turned
+        into the energy of that state.
     pseudospin_doublet_summary_table(doublets) : ResultTable
         Construct and return a compound table of one or several pseudospin
         doublets with one line per doublet.
@@ -872,6 +878,104 @@ class AbInitioElectronExchangeSystem:
                                                    rotation=self.input_frame_rotation)
 
 
+    def pseudospin_doublet_index_list(self, pseudospin):
+        """Return the states of the pseudospin multiplet grouped into
+        doublets, as the list of index tuples the doublet methods take.
+
+        The pseudospin is given in the doubled form used throughout the
+        library, i.e. 15 for S = 15/2, and the multiplet holds pseudospin
+        + 1 states. How they group depends on the parity of the multiplet:
+
+        A Kramers system, i.e. one of a half-integer pseudospin (an odd
+        value of the argument), holds an even number of states, which are
+        exactly degenerate in pairs by Kramers' theorem. The states are
+        grouped into the doublets (0,1), (2,3), ... and every state
+        belongs to one.
+
+        A non-Kramers system, i.e. one of an integer pseudospin (an even
+        value of the argument), holds an odd number of states, so one of
+        them is left over as a singlet. The doublets of such a system are
+        quasi-doublets, i.e. pairs of states split by the tunneling gap,
+        so the states are paired to leave the smallest total splitting
+        within the pairs: the singlet is placed where it costs the least.
+        It is returned as a tuple of a single index, which the
+        pseudospin_doublet_list method turns into the energy of the state.
+
+        The singlet cannot be the ground state, since the principal
+        magnetic axes of the system are those of the ground doublet and a
+        singlet carries none; that case is an error.
+
+        Arguments
+        ---------
+        pseudospin : int
+            The pseudospin of the multiplet in the doubled form, i.e. 15
+            for the J = 15/2 multiplet of a Dy(III) ion. The multiplet must
+            fit into the basis of the system.
+        """
+        n_states = pseudospin + 1
+
+        if n_states > self.basis.n_basis:
+            print("ERROR in AbInitioElectronExchangeSystem.")
+            print("Error: The pseudospin " + str(pseudospin) + " needs "
+                  + str(n_states) + " states,")
+            print("       but the basis of the system holds only "
+                  + str(self.basis.n_basis) + ".")
+            print("Error termination.")
+            sys.exit(1)
+
+        # A half-integer pseudospin, i.e. a Kramers system: the states are
+        # degenerate in pairs and every state belongs to a doublet.
+        if pseudospin % 2 == 1:
+            return [(2*i,2*i+1) for i in range(0,n_states//2)]
+
+        # An integer pseudospin, i.e. a non-Kramers system. The states are
+        # ordered by energy, so the pairs are formed of neighbouring states
+        # and the singlet splits the multiplet in two: the states below it
+        # pair among themselves and so do the states above it. The singlet
+        # therefore stands at an even position, and the one leaving the
+        # smallest total splitting within the pairs is chosen.
+        energy_list = self.hamiltonian_operator().eigenvalues[:n_states]
+
+        def pairing_cost(singlet_index):
+            """The total splitting within the pairs when the state of the
+            given index is left as the singlet.
+            """
+            cost = 0.0
+
+            for i in range(0,singlet_index,2):
+                cost += abs(energy_list[i+1] - energy_list[i])
+
+            for i in range(singlet_index+1,n_states-1,2):
+                cost += abs(energy_list[i+1] - energy_list[i])
+
+            return cost
+
+        singlet_index = 0
+        smallest_cost = None
+
+        for candidate in range(0,n_states,2):
+            cost = pairing_cost(candidate)
+
+            if smallest_cost is None or cost < smallest_cost:
+                smallest_cost = cost
+                singlet_index = candidate
+
+        if singlet_index == 0:
+            print("ERROR in AbInitioElectronExchangeSystem.")
+            print("Error: The ground state of the non-Kramers multiplet is a singlet,")
+            print("       i.e. it is not part of a quasi-doublet. The principal")
+            print("       magnetic axes of the system are those of the ground")
+            print("       doublet, so they cannot be determined for such a system.")
+            print("Error termination.")
+            sys.exit(1)
+
+        index_list = [(i,i+1) for i in range(0,singlet_index,2)]
+        index_list.append((singlet_index,))
+        index_list.extend([(i,i+1) for i in range(singlet_index+1,n_states-1,2)])
+
+        return index_list
+
+
     def pseudospin_doublet_list(self, doublets):
         """Construct and return a list of PseudoSpinDoublet instances of the
         listed pseudospin doublets of the system. The doublets are
@@ -916,13 +1020,32 @@ class AbInitioElectronExchangeSystem:
                 instance_list.append(states)
                 continue
 
+            # The energy of a singlet state, i.e. the result of an earlier
+            # call of this method, is passed through as it is, so that a
+            # list obtained from this method can be handed to the
+            # tabulation methods as it stands.
+            if isinstance(states,(int,float,np.integer,np.floating)):
+                instance_list.append(float(states))
+                continue
+
             if hamiltonian_operator is None:
                 hamiltonian_operator     = self.hamiltonian_operator()
                 magnetic_moment_operator = self.magnetic_moment_operator()
 
+            # A singlet state of a non-Kramers system is given as a tuple
+            # of one index. It spans no doublet, so there is nothing to
+            # construct; its energy is passed on, which is what the
+            # tabulation methods take for a state that is not part of a
+            # doublet.
+            if len(states) == 1:
+                instance_list.append(
+                    float(hamiltonian_operator.eigenvalues[states[0]]))
+                continue
+
             if not len(states) == 2:
                 print("ERROR in AbInitioElectronExchangeSystem.")
-                print("Error: Each doublet must be given as a tuple of two state indices.")
+                print("Error: Each doublet must be given as a tuple of two state indices,")
+                print("       or a singlet as a tuple of one index.")
                 print("Error termination.")
                 sys.exit(1)
 
@@ -986,6 +1109,14 @@ class AbInitioElectronExchangeSystem:
         tmp_str += "    input axis frame.\n\n"
 
         for doublet in self.pseudospin_doublet_list(doublets):
+            # A singlet state of a non-Kramers system spans no doublet and
+            # has none of the properties tabulated below, so only its
+            # energy is stated.
+            if not isinstance(doublet,properties.PseudoSpinDoublet):
+                tmp_str += "    SINGLET,   E = {0:12.4f} {1}\n\n"\
+                           .format(float(doublet),self.units.energy_unit_str)
+                continue
+
             if doublet.state_energies is None:
                 energy_str = "not available"
             else:
@@ -1683,6 +1814,71 @@ class AbInitioElectronExchangeSystem:
                         R=np.identity(3))
 
         check('non-Kramers system recognized', not nk_system.kramers_system)
+
+        # The grouping of the states of a multiplet into doublets. A
+        # Kramers multiplet holds an even number of states and every state
+        # belongs to a doublet.
+        check('a Kramers multiplet is grouped into doublets',
+              system.pseudospin_doublet_index_list(pseudospin)
+              == [(0,1),(2,3)])
+
+        # A non-Kramers multiplet is left with one singlet, which is placed
+        # where it leaves the smallest splitting within the quasi-doublets.
+        # The S = 1 ion of an easy-axis zero-field splitting, i.e. a
+        # negative D, has its two lowest states close together and the
+        # third one far above, so the singlet is the highest state.
+        easy_axis_matrix = -D*np.dot(nk_spin_matrix_list[2],nk_spin_matrix_list[2]) \
+                           + E*(np.dot(nk_spin_matrix_list[0],nk_spin_matrix_list[0])
+                                - np.dot(nk_spin_matrix_list[1],nk_spin_matrix_list[1]))
+        easy_axis_hamiltonian = pseudospin_operators\
+                                .GeneralOperatorMatrix(easy_axis_matrix,
+                                                       diagonalize_operator_matrix=True,
+                                                       translate_eigenvalues=True)
+        easy_axis_system = cls(easy_axis_hamiltonian,nk_moment,nk_basis,
+                               tmp_units,R=np.identity(3))
+
+        easy_axis_index_list = easy_axis_system\
+                               .pseudospin_doublet_index_list(nk_pseudospin)
+
+        check('a non-Kramers multiplet is left with one singlet',
+              len([states for states in easy_axis_index_list
+                   if len(states) == 1]) == 1)
+        check('the singlet of an easy-axis non-Kramers ion is the highest state',
+              easy_axis_index_list == [(0,1),(2,)])
+        check('the singlet is turned into the energy of the state',
+              isinstance(easy_axis_system.pseudospin_doublet_list(
+                  easy_axis_index_list)[1],float))
+
+        # The singlet is placed where it costs the least, which is not
+        # always at an end of the multiplet. The system below holds five
+        # states of the energies 0, 0.1, 5, 10 and 10.1, where the pairs
+        # (0,1) and (3,4) leave the smallest total splitting and the
+        # singlet is therefore the middle state.
+        spaced_energies    = [0.0,0.1,5.0,10.0,10.1]
+        spaced_hamiltonian = pseudospin_operators\
+                             .GeneralOperatorMatrix(
+                                 np.diag(spaced_energies).astype(np.complex128),
+                                 diagonalize_operator_matrix=True,
+                                 translate_eigenvalues=True)
+        spaced_spin_matrix_list = debug_output.spin_matrices(4)
+        spaced_moment = pseudospin_operators\
+                        .GeneralVectorOperatorMatrix(
+                            [-g*tmp_units.mu_B*spin_matrix
+                             for spin_matrix in spaced_spin_matrix_list])
+        spaced_system = cls(spaced_hamiltonian,spaced_moment,
+                            pseudospin_operators.PseudoSpinBasis([4]),
+                            tmp_units,R=np.identity(3))
+
+        check('the singlet is placed where it costs the least',
+              spaced_system.pseudospin_doublet_index_list(4)
+              == [(0,1),(2,),(3,4)])
+
+        # A multiplet that does not fit into the basis of the system is an
+        # error, so the largest multiplet the basis holds is the one of the
+        # basis itself.
+        check('the whole basis can be grouped',
+              len(system.pseudospin_doublet_index_list(pseudospin))
+              == (pseudospin + 1)//2)
 
         U = nk_basis.unitary_part_of_time_reversal_operator()
         H_ps = nk_system.pseudospin_hamiltonian_matrix

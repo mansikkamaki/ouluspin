@@ -310,7 +310,12 @@ between formats.
 - **`PseudoSpinBasis`** — the basis states of a multi-site pseudospin
   system (pseudospins given as multiples of two).
 - **`PseudoSpinOperator`** — constructs and diagonalizes a multi-site
-  pseudospin operator from a list of spherical tensors.
+  pseudospin operator from a list of spherical tensors. Besides
+  `eigenvalue_table()` and `eigenvector_table()` it offers
+  `compact_eigenvector_table()`, which tabulates the composition of every
+  eigenstate on a single row, one column per basis state labelled by its
+  projection *M*; it is available for a basis of one spin site only, i.e.
+  for the *J* multiplet of a lanthanide(III) ion and the like.
 - **`PseudoSpinVectorOperator`** — a vector (three-component) pseudospin
   operator; a convenience interface over three `PseudoSpinOperator`
   components.
@@ -374,6 +379,14 @@ Readers for quantum-chemistry outputs. All readers take an
   the Hamiltonian and magnetic moment onto a pseudospin basis, and
   provides ITO decompositions (crystal-field and exchange parameters),
   transition magnetic moments and doublet g-tensor analyses.
+  `pseudospin_doublet_index_list(pseudospin)` groups the states of a
+  multiplet into the doublets the tabulation methods take. A Kramers
+  multiplet splits evenly into doublets; a non-Kramers one holds an odd
+  number of states and is left with one singlet, which is placed where it
+  leaves the smallest splitting within the quasi-doublets and is reported
+  by its energy alone. A non-Kramers system whose ground state is that
+  singlet is an error, since the principal magnetic axes of the system are
+  those of the ground doublet.
 
 ### Fortran extension (`ouluspin._fortran`)
 
