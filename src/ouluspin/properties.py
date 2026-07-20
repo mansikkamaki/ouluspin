@@ -1052,9 +1052,28 @@ class StaticTransitionMagneticMoments:
     The magnetic moment is plotted as a function of the projection mu_z of
     the magnetic moment to construct an effective barrier for the
     relaxation of magnetization in single-molecule magnets as discussed in
-    
+
         L. Ungur, M. Thewissen, J.-P. Costes, W. Wernsdorfer, L. F.
         Chibotaru. Inorg. Chem. 2013, 52, 2097--2099.
+
+    The matrix elements are evaluated in the basis in which the projection
+    of the magnetic moment is diagonal within each group of degenerate
+    states, not in the basis the diagonalization of the Hamiltonian
+    happens to return. The distinction matters: a diagonalization returns
+    an arbitrary basis of a degenerate subspace, so the two states of a
+    Kramers doublet come out as arbitrary combinations of the states of a
+    definite moment, and both the expectation values and the matrix
+    elements between the states of two doublets depend on that arbitrary
+    choice. In the quantized basis the expectation value of the projection
+    of an axial doublet is the g_z/2 of its g-tensor, as it should be, and
+    more generally
+
+        max |<mu_z>| = ( sum_i ( g_i * (u_i . z) )^2 )^(1/2) / 2,
+
+    where g_i and u_i are the principal values and the principal axes of
+    the g-tensor of the doublet in the frame of the magnetic moment
+    operators. The states of a degenerate group are ordered by a
+    descending projection, i.e. the state of the largest moment first.
 
     Arguments
     ---------
@@ -1075,6 +1094,17 @@ class StaticTransitionMagneticMoments:
     ------------------
     print_output : boolean
         Whether to print output. Default is False.
+    degeneracy_tolerance : float or None
+        The energy separation, in the energy unit of the unit system, below
+        which two states are considered degenerate and their moment is
+        quantized (see above). Default is None, in which case the tolerance
+        follows the numerical accuracy of the energies, i.e. 1.0e-6 times
+        the spread of the tabulated spectrum, with 1.0e-6 times the Bohr
+        magneton of the unit system (the tolerance of PseudoSpinDoublet) as
+        the floor. The tolerance must stay below the physically meaningful
+        gaps of the spectrum, in particular below the tunneling gap of a
+        non-Kramers system, whose states are split for a physical reason
+        and must not be recombined.
 
     Attributes
     ----------
@@ -1088,7 +1118,9 @@ class StaticTransitionMagneticMoments:
         moments will be considered.
     expectation_values : list of float
         A list of the expectation values of mu_z for the n_states lowest
-        states.
+        states, evaluated in the quantized basis.
+    degeneracy_tolerance : float
+        The degeneracy tolerance actually used.
     print_output : boolean
         Whether to print output. Default is False.
     units : EnergyUnitSystem
@@ -1100,13 +1132,18 @@ class StaticTransitionMagneticMoments:
     transition_magnetic_moment_table() : ResultTable
         Construct and return a human-readable table of the transition magnetic
         moments.
-    transition_magnetic_moment_gnuplot_file(basename, energy_cutoff=999999.0, y_max=-1.0) : str
-        Write a template file for plotting the effective barrier constructed from
-        the transition magetic moments. The printing of the barrier is based on
-        the epslatex terminal of GnuPlot.
+
+    The effective barrier of the reversal of the magnetization is plotted by
+    handing the instance to ResultPlot, which draws the states by their
+    magnetic moment projection and their energy and the transitions between
+    them as arrows.
 
     Private methods
     ---------------
+    __quantization_transformation(mu_z)
+        Return the block-diagonal unitary transformation that diagonalizes
+        the projection of the magnetic moment within each group of
+        degenerate states.
 
     Class methods
     -------------
@@ -1150,152 +1187,82 @@ class StaticTransitionMagneticMoments:
                                         table_type='transition_moments')
 
     
-    def transition_magnetic_moment_gnuplot_file(self, basename, energy_cutoff=999999.0, y_max=-1.0):
-        """Write a template file for plotting the effective barrier constructed from
-        the transition magetic moments. The printing of the barrier is based on
-        the epslatex terminal of GnuPlot.
-
-        Arguments
-        ---------
-        basename : str
-            Basename used for the GnuPlot and related files produced by the code.
-
-        Optional arguments
-        ------------------
-        highest_multiplet : float
-            Arrows are not drawn between states if one of the states has an energy that is
-            highet than this value. The default value is a large number so that all arrows
-            are drawn.
-        y_max : float
-            The maximum value of the energy axis in the plots. If a negative value is given,
-            the maximum value is determined automatically. The default value is negative.
-        """
-        x_max = int(ceil(max(self.expectation_values) + 1.0))
-        x_min = -x_max
-
-        level_width = 0.055 * x_max
-        level_width_str = str(level_width)
-
-        highest_energy = max(self.eigenvalues)
-
-        if y_max < 0.0:
-            y_max = int(100.0 * ceil(1.03 * highest_energy / 100.0))
-        y_min = -int(10.0 * ceil(0.02 * highest_energy / 10.0))
-        
-        output_string ="reset"
-        output_string += '\n'
-        output_string += 'set terminal epslatex standalone color solid font ",14" size 12.0cm,8.0cm\n'
-        output_string += 'set output "' + basename + '.tex"\n'
-        output_string += '\n'
-
-        for i in range(0,self.n_states):
-            output_string += 'E' + str(i) + '=' + str(self.eigenvalues[i]) + '\n'
-            output_string += 'mu' + str(i) + '=' + str(self.expectation_values[i]) + '\n'
-        
-        output_string += '\n'
-        output_string += r'set ylabel "Energy / $\\mathrm{cm}^{-1}$"' + "\n"
-        output_string += r'set xlabel "Magnetic moment / $\\beta$"' + "\n"
-        output_string += '\n'
-        output_string += 'xmin=' + str(x_min) + '\n'
-        output_string += 'xmax=' + str(x_max) + '\n'
-        output_string += '\n'
-        output_string += 'ymin=' + str(y_min) + '\n'
-        output_string += 'ymax=' + str(y_max) + '\n'
-        output_string += '\n'
-        output_string += 'set xrange [xmin:xmax]\n'
-        output_string += 'set yrange [ymin:ymax]\n'
-        output_string += '\n'
-        output_string += 'set size ratio 0.6\n'
-        output_string += 'set border lw 4\n'
-        output_string += '\n'
-        output_string += 'unset key\n'
-        output_string += '\n'
-
-        # Energy levels.
-        for i in range(0,self.n_states):
-            output_string += 'set arrow from mu' + str(i) + '-' + level_width_str + ',E' + str(i) + ' to mu' + str(i) + '+' + level_width_str + ',E' + str(i) + ' nohead lw 6 lc rgb "#000000"\n'
-        output_string += '\n'
-
-        # Arrows
-        for i in range(0,self.n_states):
-            for j in range(0,self.n_states):
-                transition = self.transition_magnetic_moment[i][j]
-                
-                if self.expectation_values[i] / self.expectation_values[j] >= 0.0:
-                    climbing = True
-                else:
-                    climbing = False
-
-                if climbing:
-                    displacement_i = ''
-                    displacement_j = ''
-                else:
-                    if self.expectation_values[i] < self.expectation_values[j]:
-                        displacement_i = '+' + level_width_str
-                        displacement_j = '-' + level_width_str
-                    else:
-                        displacement_i = '-' + level_width_str
-                        displacement_j = '+' + level_width_str
-
-                draw = True
-                if i == j:
-                    draw = False
-
-                if abs(transition) >= 1.0:
-                    color_str = 'lw 5 lc rgb "#FF0000"'
-                elif abs(transition) >= 0.1:
-                    color_str = 'lw 3 lc rgb "#EE5B6B"'
-                elif abs(transition) >= 0.01:
-                    color_str = 'lw 3 lc rgb "#FEDEE1"'
-                else:
-                    draw = False
-
-                i_str = 'mu' + str(i) + displacement_i + ',E' + str(i)
-                j_str = 'mu' + str(j) + displacement_j + ',E' + str(j)
-
-                if climbing:
-                    if self.expectation_values[i] < 0.0:
-                        if self.eigenvalues[i] < self.eigenvalues[j]:
-                            initial_str = i_str
-                            final_str   = j_str
-                        else:
-                            initial_str = j_str
-                            final_str   = i_str
-                    else:
-                        if self.eigenvalues[i] < self.eigenvalues[j]:
-                            initial_str = j_str
-                            final_str   = i_str
-                        else:
-                            initial_str = i_str
-                            final_str   = j_str
-                else:
-                    if self.expectation_values[i] < self.expectation_values[j]:
-                        initial_str = i_str
-                        final_str   = j_str
-                    else:
-                        initial_str = j_str
-                        final_str   = i_str
-
-                if max(self.eigenvalues[i],self.eigenvalues[j]) > energy_cutoff:
-                    draw = False
-                    
-                if draw:
-                    output_string += 'set arrow from ' + initial_str + ' to  ' + final_str + ' '  + color_str + '\n'
-
-        output_string += 'plot [xmin:xmax][ymin:ymax] NaN\n'
-
-        f = open(basename + '.gp', 'w')
-        f.write(output_string)
-        f.close()
-
-
     def __repr__(self):
         """Return a human-readable table of the expectation values and transition moments."""
         return str(self.transition_magnetic_moment_table())
 
 
+    def __quantization_transformation(self, mu_z):
+        """Return the unitary transformation that quantizes the magnetic
+        moment within each group of degenerate states.
+
+        A diagonalization returns an arbitrary basis of a degenerate
+        subspace, and the projection of the magnetic moment is not
+        diagonal in such a basis: the two states of a Kramers doublet come
+        out as arbitrary combinations of the states of a definite moment.
+        The expectation value of the projection is then not the moment of
+        the doublet at all, and neither are the matrix elements between the
+        states of two doublets. The states of each degenerate group are
+        therefore recombined into the states that diagonalize the
+        projection, which are the ones the relaxation of the magnetization
+        is described in.
+
+        The transformation is block diagonal, one block per group of
+        degenerate states, so it leaves the energies untouched. The states
+        of a group are ordered by a descending projection, i.e. the state
+        of the largest moment first.
+
+        Arguments
+        ---------
+        mu_z : array of complex128
+            The projection of the magnetic moment in the eigenbasis of the
+            Hamiltonian.
+        """
+        transformation = np.identity(self.n_states,dtype=np.complex128)
+
+        group       = []
+        group_start = 0
+
+        def close_group(group_list):
+            """Diagonalize the projection within one group of degenerate
+            states and store the result in the transformation.
+            """
+            if len(group_list) < 2:
+                return
+
+            block = mu_z[np.ix_(group_list,group_list)]
+
+            # The projection is Hermitian, so its eigenvectors within the
+            # group are orthonormal and the transformation stays unitary.
+            eigenvalues, eigenvectors = np.linalg.eigh(block)
+
+            order        = np.argsort(-eigenvalues)
+            eigenvectors = eigenvectors[:,order]
+
+            transformation[np.ix_(group_list,group_list)] = eigenvectors
+
+        for i in range(0,self.n_states):
+            if len(group) == 0:
+                group = [i]
+                group_start = i
+                continue
+
+            if abs(self.eigenvalues[i] - self.eigenvalues[group_start]) \
+               <= self.degeneracy_tolerance:
+                group.append(i)
+            else:
+                close_group(group)
+                group = [i]
+                group_start = i
+
+        close_group(group)
+
+        return transformation
+
+
     def __init__(self, magnetic_moment, hamiltonian, n_states, units,
-                 print_output=False):
+                 print_output=False,
+                 degeneracy_tolerance=None):
         """Construct the transition magnetic moments and store them as an array."""
         self.n_states     = n_states
         self.units        = units
@@ -1309,25 +1276,63 @@ class StaticTransitionMagneticMoments:
         self.expectation_values         = []
         self.eigenvalues                = hamiltonian.eigenvalues[:self.n_states]
 
+        # The states whose energies differ by less than the tolerance are
+        # treated as degenerate. The default follows the numerical accuracy
+        # of the energies, which is set by the accuracy of the operator
+        # matrices the calculation started from and therefore scales with
+        # the spread of the spectrum; the Zeeman energy in a field of about
+        # one microtesla, i.e. the tolerance used by PseudoSpinDoublet, is
+        # used as the floor for a spectrum that is nearly degenerate as a
+        # whole.
+        if degeneracy_tolerance is None:
+            if len(self.eigenvalues) > 0:
+                energy_span = max(self.eigenvalues) - min(self.eigenvalues)
+            else:
+                energy_span = 0.0
+
+            self.degeneracy_tolerance = max(1.0e-6*self.units.mu_B,
+                                            1.0e-6*energy_span)
+        else:
+            self.degeneracy_tolerance = degeneracy_tolerance
+
         C = hamiltonian.eigenvectors
 
+        # The magnetic moment in the eigenbasis of the Hamiltonian, one
+        # component at a time.
+        mu_list = []
         for k in range(0,3):
             if self.print_output:
                 print("      Cartesian component " + str(k) + " ...")
-            mu = fu.matrix_utils.basis_transformation(C,magnetic_moment.operator_list[k].matrix,0)
 
-            for i in range(0,self.n_states):
-                if k == 2:
-                    if abs(mu[i][i].imag) > 1.0e-9:
-                        print("ERROR in StaticTransitionMagneticMoments.")
-                        print("ERROR: Complex-valued expectation value of magnetic moment projection.")
-                        print("Error termination.")
-                        sys.exit(1)
-                    else:
-                        self.expectation_values.append(mu[i][i].real / self.units.mu_B)
-                        
-                for j in range(0,self.n_states):
-                    self.transition_magnetic_moment[i][j] += abs(mu[i][j]) / 3.0
+            mu = fu.matrix_utils.basis_transformation(
+                C,magnetic_moment.operator_list[k].matrix,0)
+
+            mu_list.append(np.asarray(mu)[:self.n_states,:self.n_states])
+
+        # Within a degenerate group the eigenvectors are arbitrary, so the
+        # states are recombined into the ones that carry a definite
+        # projection of the magnetic moment before anything is read off
+        # them.
+        transformation = self.__quantization_transformation(mu_list[2])
+
+        for k in range(0,3):
+            mu_list[k] = np.conjugate(transformation.T) @ mu_list[k] \
+                         @ transformation
+
+        for i in range(0,self.n_states):
+            if abs(mu_list[2][i][i].imag) > 1.0e-9:
+                print("ERROR in StaticTransitionMagneticMoments.")
+                print("ERROR: Complex-valued expectation value of magnetic moment projection.")
+                print("Error termination.")
+                sys.exit(1)
+
+            self.expectation_values.append(mu_list[2][i][i].real
+                                           / self.units.mu_B)
+
+            for j in range(0,self.n_states):
+                for k in range(0,3):
+                    self.transition_magnetic_moment[i][j] += \
+                        abs(mu_list[k][i][j]) / 3.0
 
         tokk = time.time()
         if self.print_output:
@@ -1408,10 +1413,102 @@ class StaticTransitionMagneticMoments:
         check('transition moment table renders',
               len(str(transition_moments.transition_magnetic_moment_table())) > 0)
 
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            basename = os.path.join(tmp_dir,'barrier')
-            transition_moments.transition_magnetic_moment_gnuplot_file(basename)
-            check('gnuplot file written', os.path.getsize(basename + '.gp') > 0)
+        # A degenerate Kramers doublet. The two states come out of the
+        # diagonalization as arbitrary combinations of the states of a
+        # definite moment, so the projection has to be quantized within the
+        # doublet before it is read off. The doublet is the ground doublet
+        # of an axial system with no splitting at all: H = 0, mu = -2*mu_B*S,
+        # for which the projection of the doublet is g_z/2 = 1 in units of
+        # the Bohr magneton.
+        zero_tensor = tensors.IwaharaChibotaruSphericalTensor\
+                             .from_one_site_cartesian_operator(0.0,'z',1)
+        degenerate_hamiltonian = pseudospin_operators.PseudoSpinOperator(
+            basis,[zero_tensor],tmp_units,translate_eigenvalues=True)
+
+        degenerate_moments = cls(magnetic_moment,degenerate_hamiltonian,2,
+                                 tmp_units)
+
+        check('the states of a degenerate doublet are degenerate',
+              abs(degenerate_moments.eigenvalues[1]
+                  - degenerate_moments.eigenvalues[0]) < 1.0e-10)
+        check('the moment is quantized within a degenerate doublet',
+              np.allclose(np.abs(degenerate_moments.expectation_values),
+                          [1.0,1.0]))
+        check('the states of a degenerate doublet carry opposite moments',
+              abs(degenerate_moments.expectation_values[0]
+                  + degenerate_moments.expectation_values[1]) < 1.0e-10)
+        check('the state of the largest moment comes first',
+              degenerate_moments.expectation_values[0]
+              > degenerate_moments.expectation_values[1])
+
+        # The projection of an axial doublet is the g_z/2 of its g-tensor;
+        # more generally the largest projection follows from the g-tensor
+        # of the doublet in the frame of the magnetic moment operators.
+        doublet = PseudoSpinDoublet((0,1),
+                                    [magnetic_moment.operator_list[k].matrix
+                                     for k in range(0,3)],
+                                    tmp_units)
+
+        g_values = np.asarray(doublet.g_tensor.eigenvalues,dtype=np.float64)
+        g_axes   = np.asarray(doublet.g_tensor.eigenvectors,dtype=np.float64)
+
+        largest_projection = 0.5*np.sqrt(sum((g_values[k]*g_axes[2][k])**2
+                                             for k in range(0,3)))
+
+        check('the projection of the doublet follows from its g-tensor',
+              abs(abs(degenerate_moments.expectation_values[0])
+                  - largest_projection) < 1.0e-8)
+
+        # A doublet whose easy axis is tilted away from the quantization
+        # axis. The magnetic moment is of the Ising kind, mu = -2*mu_B*S_u
+        # along the axis u lying at 45 degrees from z in the xz plane, so
+        # that the projection is not diagonal in the basis returned by the
+        # diagonalization: its diagonal elements are cos(45 deg) = 0.7071
+        # of the moment of the doublet and the rest of the moment sits in
+        # the off-diagonal element. The doublet itself is the same doublet
+        # whichever way it is looked at, so the largest projection is still
+        # cos(45 deg); reading the diagonal without quantizing the
+        # projection first happens to give the same number here, so the
+        # test below compares the two against each other.
+        angle = 0.25*np.pi
+
+        # The Cartesian tensor of an Ising moment along the tilted axis,
+        # i.e. -2*mu_B times the projector on that axis.
+        axis          = np.array([np.sin(angle),0.0,np.cos(angle)])
+        tilted_matrix = -2.0*tmp_units.mu_B*np.outer(axis,axis)
+
+        tilted_tensor = tensors.MixedCartesianIwaharaChibotaruSphericalTensor\
+                               .from_one_site_cartesian_tensor(tilted_matrix,1)
+
+        tilted_moment = pseudospin_operators.PseudoSpinVectorOperator(
+            basis,[tilted_tensor],tmp_units,
+            diagonalize_operator_matrix=False,
+            store_operator_matrix=True)
+
+        tilted = cls(tilted_moment,degenerate_hamiltonian,2,tmp_units)
+
+        check('the quantized projection follows the tilted axis',
+              abs(abs(tilted.expectation_values[0]) - np.cos(angle)) < 1.0e-8)
+
+        # The same doublet with the quantization switched off, which a
+        # negative tolerance does since two exactly degenerate states are
+        # still within a vanishing one. The projection is then the part of
+        # the moment that happens to be diagonal in the basis returned by
+        # the diagonalization, i.e. cos^2(45 deg) = 0.5 instead of the
+        # cos(45 deg) = 0.7071 the doublet actually carries. The two differ,
+        # so the quantization is what makes the projection the moment of the
+        # doublet rather than an artefact of the basis.
+        unquantized = cls(tilted_moment,degenerate_hamiltonian,2,tmp_units,
+                          degeneracy_tolerance=-1.0)
+
+        check('the degeneracy tolerance is stored',
+              unquantized.degeneracy_tolerance == -1.0)
+        check('the unquantized projection is the basis-dependent one',
+              abs(abs(unquantized.expectation_values[0])
+                  - np.cos(angle)**2) < 1.0e-8)
+        check('the quantization increases the projection of the doublet',
+              abs(tilted.expectation_values[0])
+              > abs(unquantized.expectation_values[0]) + 1.0e-8)
 
         return debug_output.test_summary('StaticTransitionMagneticMoments',
                                          result_list,print_output)
