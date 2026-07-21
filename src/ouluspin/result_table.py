@@ -320,6 +320,7 @@ class ResultTable:
         'transition_moments':  {'float_format': '.6f', 'indent': 6, 'rule_character': '-'},
         'pseudospin_doublets': {'float_format': '.4f', 'indent': 4, 'rule_character': '-'},
         'grid':                {'float_format': '.6f', 'indent': 6, 'rule_character': '-'},
+        'ion_data':            {'float_format': '.6f', 'indent': 4, 'rule_character': '-'},
     }
 
     def __resolve_options(self, table_type, indent, rule_character, formats, alignments):

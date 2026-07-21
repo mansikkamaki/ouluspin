@@ -87,6 +87,7 @@ from ouluspin.systems.electron_exchange_system import (
     ElectronExchangeSystem,
     AbInitioElectronExchangeSystem,
 )
+from ouluspin.data_tables import IonData
 from ouluspin.qc.molcas import AnisoCalculation, OpenMolcasCalculation
 from ouluspin.qc.orca import OrcaCalculation, OrcaAnisoOutput, OrcaAnisoFile
 
@@ -133,6 +134,8 @@ __all__ = [
     "PseudoSpinSystem",
     "ElectronExchangeSystem",
     "AbInitioElectronExchangeSystem",
+    # Tabulated and calculated data of the ions.
+    "IonData",
     # Quantum-chemistry interfaces.
     "AnisoCalculation",
     "OpenMolcasCalculation",

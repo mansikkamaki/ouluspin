@@ -35,6 +35,7 @@ from ouluspin import tensors
 from ouluspin import pseudospin_operators
 from ouluspin import properties
 from ouluspin import integration
+from ouluspin import data_tables
 from ouluspin.qc import molcas
 from ouluspin.qc import orca
 from ouluspin.systems import electron_exchange_system
@@ -69,6 +70,7 @@ def main():
         properties.PseudoSpinDoublet,
         electron_exchange_system.ElectronExchangeSystem,
         electron_exchange_system.AbInitioElectronExchangeSystem,
+        data_tables.IonData,
         molcas.OpenMolcasCalculation,
         orca.OrcaCalculation,
         orca.OrcaAnisoOutput,

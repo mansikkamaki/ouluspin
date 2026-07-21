@@ -395,6 +395,69 @@ Spherical grids for powder averaging:
 - **`SimpleGrid`** — one or three Cartesian unit vectors, for single-axis
   or axis-resolved calculations.
 
+### `ouluspin.data_tables`
+
+- **`IonData`** — the data of a chemical ion, e.g. `IonData('Dy(III)')`. The
+  name is parsed case-insensitively and accepts the oxidation state as an
+  Arabic or a Roman numeral with the usual punctuation (`'Dy(III)'`,
+  `'dy iii'`, `'Dy-III'`, `'Dy3'`, `'Dy 3+'`); a Roman numeral must be
+  separated from the symbol, since `'Siii'` would otherwise be both Si(II)
+  and S(III). Leaving the oxidation state out uses the state the element is
+  ordinarily met in, so `'Dy'` is Dy(III) and `'Fe'` is Fe(III).
+
+  The instance carries the electron configuration of the ion
+  (`electron_configuration`, `valence_configuration`), the terms of its open
+  shell (`terms`, `term_data`, `n_terms`, `n_states`, `n_spin_states`) and
+  the quantum numbers of its
+  Hund's-rule ground multiplet (`L`, `S`, `J`, `term_symbol`,
+  `ground_multiplet_symbol`, `degeneracy`) together with its Landé
+  g-factor in three forms: `lande_g_factor`, evaluated with the CODATA
+  g-factor of the free electron (1.33410643 for Dy(III)) and meant for
+  quantitative work; `lande_g_factor_simple`, the textbook approximation
+  g_e = 2 (1.33333333); and `lande_g_factor_str`, the exact fraction the
+  latter is (`'4/3'`), evaluated in exact arithmetic. The angular
+  momenta are stored in the **doubled** form used throughout the library,
+  i.e. `J = 15` for the J = 15/2 of Dy(III), and are printed as the true
+  angular momenta in the tables. `J` is therefore the pseudospin to hand to
+  `PseudoSpinBasis` or to `AbInitioElectronExchangeSystem.from_aniso_data`.
+
+  `curie_susceptibility()` returns the χT product of the free ion given by
+  the Curie law for its ground multiplet, in cm³ K mol⁻¹ — 14.19 for
+  Dy(III) with the accurate g-factor, which is the default, and the 14.17
+  of the textbook tables with `simple_g_factor=True`, those tables being
+  computed in the same g_e = 2 approximation. `coefficients_of_fractional_parentage()` returns the CFPs of the
+  open shell; they are evaluated on the first call rather than upon
+  construction. `states_by_multiplicity()` groups the terms and the states
+  of the open shell by spin multiplicity. `data_table()`,
+  `ground_multiplet_table()`, `term_table()` and `cfp_table()` return
+  `ResultTable` instances, and `repr` of the instance is the plain-text
+  rendering of `data_table()`. Both tables give the Landé g-factor and the
+  χT product in both conventions, side by side. The data table further
+  lists the terms of the open
+  shell and, beneath them, the number of terms, of spin states and of
+  states of each spin multiplicity together with their totals — for the 4f9
+  of Dy(III), 73 terms holding 735 spin states and 2002 states. The **spin
+  states** of a multiplicity are the states of one spin component alone,
+  i.e. the states divided by the multiplicity: a 6H term holds 6×11 = 66
+  states and 11 spin states, so they are the states a spin-free calculation
+  of that multiplicity carries.
+
+  Only ions of a single open shell are treated, i.e. the d-block (Sc–Zn,
+  Y–Cd, Hf–Hg) and f-block (La–Lu, Ac–Lr) ions whose electrons outside the
+  noble-gas core all belong to one d or one f shell. An oxidation state too
+  low for that (a neutral d-block atom, a mono-positive f-block ion) or too
+  high (which would break into the core) is a fatal error stating which of
+  the two is the case; a state that is possible but not chemically common is
+  accepted with a warning, since the assignment of the whole valence to the
+  open shell is then not certain — La(II) is taken here as 4f1 whereas it is
+  in fact 5d1.
+
+  The term structure is not tabulated but calculated: the terms come from
+  `cfp_terms` of the Fortran extension and Hund's rules pick the ground term
+  out of them. What is tabulated is only what does not follow from the
+  physics, i.e. the chemical symbols, the blocks of the periodic table and
+  the common and ordinary oxidation states of each element.
+
 ### `ouluspin.qc`
 
 Readers for quantum-chemistry outputs. All readers take an
@@ -576,6 +639,7 @@ extension and runs the Fortran suite in one step.
     │   │   ├── pseudospin_operators.py  Pseudospin bases and operators
     │   │   ├── properties.py            Magnetic property calculations
     │   │   ├── integration.py           Spherical integration grids
+    │   │   ├── data_tables.py           Data of the ions (IonData)
     │   │   ├── _documents.py            .odt and .docx writers (internal)
     │   │   ├── _images.py               Plot image writers (internal)
     │   │   ├── qc/                      Quantum-chemistry interfaces
