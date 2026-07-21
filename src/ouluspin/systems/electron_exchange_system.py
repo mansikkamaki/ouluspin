@@ -628,6 +628,13 @@ class AbInitioElectronExchangeSystem:
             L. F. Chibotaru and L. Ungur. J. Chem. Phys. 2012, 137, 064112.
             L. Ungur and L. F. Chibotaru. Chem. Eur. J. 2017, 23, 3708--3718.
 
+        and in the review:
+
+            L. F. Chibotaru. Ab Initio Methodology for Pseudospin
+            Hamiltonians of Anisotropic Magnetic Complexes, in Advances in
+            Chemical Physics, Vol. 153, Eds. S. A. Rice and A. R. Dinner,
+            Wiley, 2013.
+
         """
         initial_hamiltonian, initial_magnetic_moment = self.__setup_numerical_matrices()
 

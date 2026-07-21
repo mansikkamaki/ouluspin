@@ -19,6 +19,31 @@ from ouluspin import result_table
 from ouluspin import _debug as output
 
 
+# The lowest temperature, in kelvins, the static magnetic properties are
+# evaluated at. The properties follow from the Boltzmann populations of the
+# states, i.e. from the factors exp(-E / (k_B*T)), which are not defined at
+# T = 0: the factor of the lowest state, whose energy is zero, is the
+# indeterminate exp(-0/0) and comes out of a floating-point evaluation as a
+# NaN that spreads to the whole result. A temperature point at (or below)
+# this limit is therefore raised to it by IsothermalStaticMagnetization and
+# StaticMagneticSusceptibility, so that a temperature range given as, say,
+# numpy.linspace(0,300,301) can be used as it stands.
+#
+# The value is deliberately a conservative one. Any temperature above zero
+# is in fact well-defined numerically, since the Boltzmann factors of the
+# excited states merely underflow to zero, which is the correct zero
+# temperature limit; the limit is set well clear of that regime rather than
+# at the smallest temperature that still happens to evaluate. At 1.0e-3 K
+# the thermal energy k_B*T is about 7.0e-4 cm^-1, which is far below the
+# splittings the pseudospin Hamiltonians of the library describe, so the
+# properties are those of the zero temperature limit. A system whose
+# splitting is smaller still, such as the tunneling gap of a very axial
+# single-molecule magnet, is the one case where the difference shows, and
+# there the limit can be lowered through the MINIMUM_TEMPERATURE attribute
+# of the two classes.
+MINIMUM_TEMPERATURE = 1.0e-3
+
+
 
 class IsothermalStaticMagnetization:
     """A class to store and print the values of isothermal magnetization calculated
@@ -31,7 +56,9 @@ class IsothermalStaticMagnetization:
     ---------
     T_list : list of float
         A list of the different temperatures the isothermal magnetization is
-        evaluated in.
+        evaluated in. A temperature at or below MINIMUM_TEMPERATURE is
+        raised to it, since the magnetization is not defined at zero
+        temperature; see the attribute below.
     B_list : list of float or list of list of float
         A list of the different field values (in tesla) the magnetization is
         evaluated in. The field list can also be a list of lists where the
@@ -51,7 +78,8 @@ class IsothermalStaticMagnetization:
     ----------
     T_list : list of float
         A list of the different temperatures the isothermal magnetization is
-        evaluated in.
+        evaluated in, with the temperatures at or below MINIMUM_TEMPERATURE
+        raised to it.
     B_list : list of float or list of list of float
         A list of the different field values (in tesla) the magnetization is
         evaluated in. The field list can also be a list of lists where the
@@ -67,9 +95,20 @@ class IsothermalStaticMagnetization:
     single_field_range : boolean
         Whether a single range of field values is used for all temperature
         points or not.
+    MINIMUM_TEMPERATURE : float
+        The lowest temperature, in kelvins, the magnetization is evaluated
+        at. The magnetization follows from the Boltzmann populations of the
+        states and is not defined at zero temperature, so a temperature
+        point at or below this limit is raised to it. The limit is a
+        conservative one, and low enough that the magnetization at it is
+        that of the zero temperature limit; see the module constant
+        MINIMUM_TEMPERATURE, which sets it.
 
     Private methods
     ---------------
+    __checked_temperature_list(T_list) : list of float
+        Return the temperature list with the temperatures at or below
+        MINIMUM_TEMPERATURE raised to it.
     __single_field_range_table() : ResultTable
         Return a human-readable table of the magnetization with a format used
         for a single field range for all temperature points.
@@ -104,6 +143,10 @@ class IsothermalStaticMagnetization:
     """
 
     __UNIT_NOTE = "The product of Bohr magneton and the Avogadro constant is used as the unit."
+
+    # The module constant is published as an attribute of the class, so
+    # that the limit can be read, and lowered, through the class itself.
+    MINIMUM_TEMPERATURE = MINIMUM_TEMPERATURE
 
     def __single_field_range_table(self):
         """Return the table of the magnetization, as an instance of
@@ -277,10 +320,35 @@ class IsothermalStaticMagnetization:
         return str(self.data_table())
 
     
+    def __checked_temperature_list(self, T_list):
+        """Return the temperature list with every temperature at or below
+        MINIMUM_TEMPERATURE raised to it, so that the Boltzmann populations
+        stay defined. A negative temperature is an error rather than
+        something to be corrected quietly.
+        """
+        for T in T_list:
+            if float(T) < 0.0:
+                print("ERROR in IsothermalStaticMagnetization.")
+                print("ERROR: Negative temperature: " + str(float(T)) + ".")
+                print("Error termination.")
+                sys.exit(1)
+
+        checked_list = [max(float(T),self.MINIMUM_TEMPERATURE) for T in T_list]
+
+        # A temperature range is usually given as a numpy array, e.g. as
+        # numpy.linspace(0,300,301), and stays one.
+        if isinstance(T_list,np.ndarray):
+            return np.array(checked_list, dtype=np.float64)
+
+        return checked_list
+
+
     def __init__(self, T_list, B_list,
                  magnetization=None):
-        """Just set up the arguments as attributes."""
-        self.T_list = T_list
+        """Just set up the arguments as attributes. The temperatures too
+        close to zero are raised to MINIMUM_TEMPERATURE.
+        """
+        self.T_list = self.__checked_temperature_list(T_list)
         self.B_list = B_list
 
         self.n_T_points = len(self.T_list)
@@ -414,6 +482,25 @@ class IsothermalStaticMagnetization:
         check('multiple field ranges recognized',
               not magnetization_c.single_field_range)
 
+        # The magnetization is not defined at zero temperature, so a
+        # temperature point at or below the limit is raised to it and the
+        # rest of the range is left as it is.
+        zero_T = cls([0.0,0.5*cls.MINIMUM_TEMPERATURE,1.8],[1.0])
+        check('a zero temperature is raised to the limit',
+              zero_T.T_list[0] == cls.MINIMUM_TEMPERATURE)
+        check('a temperature below the limit is raised to it',
+              zero_T.T_list[1] == cls.MINIMUM_TEMPERATURE)
+        check('the temperatures above the limit are left as they are',
+              zero_T.T_list[2] == 1.8)
+
+        # A temperature range is usually given as a numpy array and stays
+        # one, so that it can be used as such afterwards.
+        array_T = cls(np.linspace(0.0,10.0,3),[1.0])
+        check('a temperature range given as an array stays an array',
+              isinstance(array_T.T_list,np.ndarray)
+              and np.allclose(array_T.T_list,
+                              [cls.MINIMUM_TEMPERATURE,5.0,10.0]))
+
         with tempfile.TemporaryDirectory() as tmp_dir:
             filename = os.path.join(tmp_dir,'magnetization.dat')
             magnetization_a.data_file(filename)
@@ -455,7 +542,10 @@ class StaticMagneticSusceptibility:
     Arguments
     ---------
     T_list : list of float
-        List of the temperature value used in evaluation of the susceptibility.
+        List of the temperature value used in evaluation of the
+        susceptibility. A temperature at or below MINIMUM_TEMPERATURE is
+        raised to it, since the susceptibility is not defined at zero
+        temperature; see the attribute below.
 
     Optional arguments
     ------------------
@@ -468,16 +558,30 @@ class StaticMagneticSusceptibility:
     Attributes
     ----------
     T_list : list of float
-        List of the temperature value used in evaluation of the susceptibility.
+        List of the temperature value used in evaluation of the
+        susceptibility, with the temperatures at or below
+        MINIMUM_TEMPERATURE raised to it.
     susceptibility : list of float
         List of the values of susceptibility.
     B : float
         Magnitude of the measurement field in teslas. The default is 0.1.
     n_T_points : int
         The number of temperature points.
+    MINIMUM_TEMPERATURE : float
+        The lowest temperature, in kelvins, the susceptibility is evaluated
+        at. What is measured is the magnetization, which follows from the
+        Boltzmann populations of the states and is not defined at zero
+        temperature, so a temperature point at or below this limit is
+        raised to it. Note that the chiT product itself tends to zero as
+        the temperature does, so the first point of a range starting at
+        zero is essentially zero either way; see the module constant
+        MINIMUM_TEMPERATURE, which sets the limit.
 
     Private methods
     ---------------
+    __checked_temperature_list(T_list) : list of float
+        Return the temperature list with the temperatures at or below
+        MINIMUM_TEMPERATURE raised to it.
 
     Public methods
     --------------
@@ -505,6 +609,10 @@ class StaticMagneticSusceptibility:
     """
 
     __UNIT_NOTE = "The listed susceptibility is the chiT product in units chiT / cm^3 K / mol."
+
+    # The module constant is published as an attribute of the class, so
+    # that the limit can be read, and lowered, through the class itself.
+    MINIMUM_TEMPERATURE = MINIMUM_TEMPERATURE
 
     def data_table(self):
         """Return a table of the susceptibility as an instance of
@@ -609,14 +717,39 @@ class StaticMagneticSusceptibility:
         return str(self.data_table())
 
     
+    def __checked_temperature_list(self, T_list):
+        """Return the temperature list with every temperature at or below
+        MINIMUM_TEMPERATURE raised to it, so that the Boltzmann populations
+        stay defined. A negative temperature is an error rather than
+        something to be corrected quietly.
+        """
+        for T in T_list:
+            if float(T) < 0.0:
+                print("ERROR in StaticMagneticSusceptibility.")
+                print("ERROR: Negative temperature: " + str(float(T)) + ".")
+                print("Error termination.")
+                sys.exit(1)
+
+        checked_list = [max(float(T),self.MINIMUM_TEMPERATURE) for T in T_list]
+
+        # A temperature range is usually given as a numpy array, e.g. as
+        # numpy.linspace(0,300,301), and stays one.
+        if isinstance(T_list,np.ndarray):
+            return np.array(checked_list, dtype=np.float64)
+
+        return checked_list
+
+
     def __init__(self, T_list,
                  susceptibility=None,
                  B=0.1):
-        """Just set up the arguments as attributes."""
-        self.T_list = T_list
+        """Just set up the arguments as attributes. The temperatures too
+        close to zero are raised to MINIMUM_TEMPERATURE.
+        """
+        self.T_list = self.__checked_temperature_list(T_list)
         self.B      = B
 
-        self.n_T_points = len(T_list)
+        self.n_T_points = len(self.T_list)
 
         if susceptibility is None:
             self.susceptibility = []
@@ -687,6 +820,24 @@ class StaticMagneticSusceptibility:
         check('comparison table renders',
               len(str(susceptibility_a.comparison_table(susceptibility_b))) > 0)
 
+        # The susceptibility is not defined at zero temperature, so a
+        # temperature point at or below the limit is raised to it and the
+        # rest of the range is left as it is. A range given as a numpy
+        # array stays one.
+        zero_T = cls([0.0,0.5*cls.MINIMUM_TEMPERATURE,2.0])
+        check('a zero temperature is raised to the limit',
+              zero_T.T_list[0] == cls.MINIMUM_TEMPERATURE)
+        check('a temperature below the limit is raised to it',
+              zero_T.T_list[1] == cls.MINIMUM_TEMPERATURE)
+        check('the temperatures above the limit are left as they are',
+              zero_T.T_list[2] == 2.0)
+
+        array_T = cls(np.linspace(0.0,300.0,301))
+        check('a temperature range given as an array stays an array',
+              isinstance(array_T.T_list,np.ndarray)
+              and array_T.T_list[0] == cls.MINIMUM_TEMPERATURE
+              and array_T.T_list[-1] == 300.0)
+
         with tempfile.TemporaryDirectory() as tmp_dir:
             filename = os.path.join(tmp_dir,'susceptibility.dat')
             susceptibility_a.data_file(filename)
@@ -709,19 +860,30 @@ class StaticMagneticSusceptibility:
 
 
 class StaticMagneticProperties:
-    """A class to evaluate static magnetic properties of an electron system based on the
-    matrix representations of the field-free Hamiltonian and magnetic moment operator
-    given as input.
+    """A class to evaluate static magnetic properties of an electron system
+    from the field-free Hamiltonian and the magnetic moment operator of the
+    system given as input.
+
+    The properties are those measured of a static sample. What an experiment
+    measures is in both cases the magnetization: the magnetization itself is
+    reported as such, and the magnetic susceptibility is obtained by dividing
+    the powder magnetization measured in a small field by the strength of
+    that field. The susceptibility is reported as the chi*T product (see
+    StaticMagneticSusceptibility).
 
     Arguments
     ---------
-    hamiltonian : array of complex128
-        Matrix representation of the Hamiltonian.
-    magnetic_moment : list of complex128
-        A list containing the matrix representations of the three Cartesian components
-        of the magnetic moment operator.
+    hamiltonian : PseudoSpinOperator or GeneralOperatorMatrix
+        The field-free Hamiltonian of the system. The operator must carry
+        its matrix representation, i.e. it must have been constructed with
+        store_operator_matrix set to True.
+    magnetic_moment : PseudoSpinVectorOperator or GeneralVectorOperatorMatrix
+        The magnetic moment operator of the system, holding the three
+        Cartesian components. The components must carry their matrix
+        representations.
     grid : ZCWGrid or LebedevLaikovGrid or SimpleGrid
-        Grid used for powder integration.
+        Grid used for powder integration. See the note on the accuracy of
+        the grid below.
     units : EnergyUnitSystem
         The energy unit system.
 
@@ -753,11 +915,17 @@ class StaticMagneticProperties:
 
     Attributes
     ----------
-    hamiltonian : array of complex128
-        Matrix representation of the Hamiltonian.
-    magnetic_moment : list of complex128
-        A list containing the matrix representations of the three Cartesian components
-        of the magnetic moment operator.
+    hamiltonian : PseudoSpinOperator or GeneralOperatorMatrix
+        The field-free Hamiltonian of the system.
+    magnetic_moment : PseudoSpinVectorOperator or GeneralVectorOperatorMatrix
+        The magnetic moment operator of the system.
+    hamiltonian_matrix : array of complex128
+        The matrix representation of the Hamiltonian, taken from the
+        Hamiltonian operator upon class initiation.
+    magnetic_moment_matrix : array of complex128
+        The matrix representations of the three Cartesian components of the
+        magnetic moment operator, stored as one n_basis x n_basis x 3 array
+        in the memory order the Fortran routines expect.
     grid : ZCWGrid or LebedevLaikovGrid or SimpleGrid
         Grid used for powder integration.
     units : EnergyUnitSystem
@@ -796,22 +964,65 @@ class StaticMagneticProperties:
 
     Class methods
     -------------
-    from_electron_exchange_system(electron_exchange_system, grid, units,
+    from_electron_exchange_system(electron_exchange_system, grid,
                                   susceptibility=None,
                                   magnetization=None,
                                   print_output=False,
                                   sample_orientation='powder',
                                   n=1.0)
-        Instead of providing the operator matrices, provide an instance of
-        ElectronExchangeSystem that contains the information necessary
-        for the generation of the required matrices. The main purpose of this
+        Instead of providing the operators, provide an instance of
+        ElectronExchangeSystem that carries them. The main purpose of this
         class method is to simplify the interface.
+    from_ab_initio_system(ab_initio_system, grid,
+                          susceptibility=None,
+                          magnetization=None,
+                          print_output=False,
+                          sample_orientation='powder',
+                          n=1.0)
+        The counterpart of from_electron_exchange_system for an
+        AbInitioElectronExchangeSystem, which constructs its operators on
+        request instead of storing them.
     run_tests(print_output=True) : boolean
         Initiate the class and run a set of internal tests. Return True if all
         tests passed.
-    run_tests(print_output=True) : boolean
-        Initiate the class and run a set of internal tests. Return True if all
-        tests passed.
+
+    Note on the accuracy of the powder integration
+    ----------------------------------------------
+    The cost of the calculation is directly proportional to the number of
+    grid points: the Hamiltonian is diagonalized once per grid point and per
+    field strength, and that diagonalization dominates the calculation.
+    Choosing the grid is therefore the one decision that sets the cost of a
+    calculation of the static magnetic properties.
+
+    The two grids behave quite differently, and which one is the better
+    depends on the property:
+
+      - The susceptibility is measured in a small field, where the
+        magnetization is linear in the field. The powder average is then an
+        integral of a quadratic form over the sphere, which the
+        Lebedev--Laikov grid integrates exactly: it reaches machine
+        precision already at grid_quality = 7 (86 points), whereas the ZCW
+        grid converges only as a power of the number of points.
+
+      - The magnetization is measured in a field strong enough to saturate
+        the moment. The magnetization of a strongly anisotropic system is
+        then close to the modulus of the projection of the easy axis on the
+        field direction, i.e. a function with a cusp rather than a smooth
+        one. A quadrature exact for polynomials gains little from that
+        exactness: the Lebedev--Laikov grid converges slowly and
+        erratically, and the uniformly distributed ZCW grid is roughly an
+        order of magnitude cheaper at a given accuracy.
+
+    Since the magnetization is the harder of the two and the susceptibility
+    is accurate on either grid, the ZCW grid is the better choice overall
+    and the recommended one for a calculation of both properties. The
+    default settings of both grid classes, ZCWGrid(5) (233 points) and
+    LebedevLaikovGrid(17) (590 points), integrate both properties of the
+    strongly anisotropic Dy(III) benchmark system to better than 1.0e-3 of
+    the converged value; the benchmark is tabulated in the class
+    documentation of the two grid classes. A calculation of the
+    susceptibility alone is well converged with a much smaller
+    Lebedev--Laikov grid, LebedevLaikovGrid(7) or so.
     """
 
     def __calculate_magnetization_at_fixed_field(self,T_list,B):
@@ -822,24 +1033,24 @@ class StaticMagneticProperties:
 
         if self.sample_orientation == 'powder':
             M_value_list = fu.powder_magnetization_utils.\
-                           powder_magnetization(self.hamiltonian,
-                                                self.magnetic_moment,
+                           powder_magnetization(self.hamiltonian_matrix,
+                                                self.magnetic_moment_matrix,
                                                 T_list,B,
                                                 self.grid.vectors,
                                                 self.grid.weights,
                                                 self.units.k_B)
         elif self.sample_orientation == 'free':
             M_value_list = fu.powder_magnetization_utils.\
-                           free_rotation_magnetization(self.hamiltonian,
-                                                       self.magnetic_moment,
+                           free_rotation_magnetization(self.hamiltonian_matrix,
+                                                       self.magnetic_moment_matrix,
                                                        T_list,B,
                                                        self.grid.vectors,
                                                        self.grid.weights,
                                                        self.units.k_B)
         elif self.sample_orientation == 'maximal':
             M_value_list, vectors = fu.powder_magnetization_utils.\
-                                    maximum_magnetization(self.hamiltonian,
-                                                          self.magnetic_moment,
+                                    maximum_magnetization(self.hamiltonian_matrix,
+                                                          self.magnetic_moment_matrix,
                                                           T_list,B,
                                                           self.grid.vectors,
                                                           self.units.k_B)
@@ -903,10 +1114,12 @@ class StaticMagneticProperties:
                  print_output=False,
                  sample_orientation='powder',
                  n=1.0):
-        """Store the operator matrices as attributes. Depending on the optional
-        arguments, calculate the magnetic susceptibility and/or magnetization.
+        """Store the operators as attributes and take their matrix
+        representations into the form the Fortran routines expect. Depending
+        on the optional arguments, calculate the magnetic susceptibility
+        and/or magnetization.
         """
-        
+
         self.hamiltonian = hamiltonian
         self.magnetic_moment = magnetic_moment
         self.grid = grid
@@ -918,25 +1131,37 @@ class StaticMagneticProperties:
         allowed_sample_orientations = ['powder','free','maximal']
 
         if not self.sample_orientation in allowed_sample_orientations:
-            print("ERROR in MicroscopicElectronSystem.")
+            print("ERROR in StaticMagneticProperties.")
             print("ERROR: Unrecognized sample orientation:" + self.sample_orientation)
             print("Error termination.")
             sys.exit(1)
 
-        if not len(self.magnetic_moment) == 3:
-            print("ERROR in MicroscopicElectronSystem.")
+        moment_matrix_list = self.magnetic_moment.matrix_list()
+
+        if not len(moment_matrix_list) == 3:
+            print("ERROR in StaticMagneticProperties.")
             print("ERROR: Inconsistent number of magnetic moment operators.")
             print("Error termination.")
             sys.exit(1)
 
-        self.n_basis = self.hamiltonian.shape[0]
+        self.n_basis = self.hamiltonian.matrix.shape[0]
 
         for i in range(0,3):
-            if not self.magnetic_moment[i].shape[0] == self.n_basis:
-                print("ERROR in MicroscopicElectronSystem.")
+            if not moment_matrix_list[i].shape[0] == self.n_basis:
+                print("ERROR in StaticMagneticProperties.")
                 print("ERROR: Inconsistent operator dimensions.")
                 print("Error termination.")
                 sys.exit(1)
+
+        # The matrices are taken into the layout the Fortran routines expect
+        # once here rather than on every call into Fortran. The Cartesian
+        # component is the last index of the magnetic moment array, so that
+        # each component is contiguous in memory and can be handed to BLAS
+        # as it stands.
+        self.hamiltonian_matrix = np.asfortranarray(self.hamiltonian.matrix,
+                                                    dtype=np.complex128)
+        self.magnetic_moment_matrix = np.asfortranarray(
+            np.stack(moment_matrix_list,axis=-1), dtype=np.complex128)
 
         self.susceptibility = susceptibility
         self.magnetization = magnetization
@@ -955,18 +1180,39 @@ class StaticMagneticProperties:
                                       print_output=False,
                                       sample_orientation='powder',
                                       n=1.0):
-        """Instead of providing the operator matrices, provide an instance of
-        ElectronExchangeSystem that contains the information necessary
-        for the generation of the required matrices. The main purpose of this
+        """Instead of providing the operators, provide an instance of
+        ElectronExchangeSystem that carries them. The main purpose of this
         class method is to simplify the interface.
         """
-        hamiltonian = electron_exchange_system.hamiltonian.matrix
-        magnetic_moment = electron_exchange_system.magnetic_moment.matrix_list()
-        
-        return cls(hamiltonian,
-                   magnetic_moment,
+        return cls(electron_exchange_system.hamiltonian,
+                   electron_exchange_system.magnetic_moment,
                    grid,
                    electron_exchange_system.units,
+                   susceptibility=susceptibility,
+                   magnetization=magnetization,
+                   print_output=print_output,
+                   sample_orientation=sample_orientation,
+                   n=n)
+
+
+    @classmethod
+    def from_ab_initio_system(cls, ab_initio_system, grid,
+                              susceptibility=None,
+                              magnetization=None,
+                              print_output=False,
+                              sample_orientation='powder',
+                              n=1.0):
+        """The counterpart of from_electron_exchange_system for an instance
+        of AbInitioElectronExchangeSystem, which constructs its pseudospin
+        operators on request instead of storing them. The operators are
+        those of the pseudospin multiplet the ab initio states have been
+        projected onto, expressed in the coordinate frame of the tensors of
+        the system.
+        """
+        return cls(ab_initio_system.hamiltonian_operator(),
+                   ab_initio_system.magnetic_moment_operator(),
+                   grid,
+                   ab_initio_system.units,
                    susceptibility=susceptibility,
                    magnetization=magnetization,
                    print_output=print_output,
@@ -1001,12 +1247,19 @@ class StaticMagneticProperties:
         grid      = integration.LebedevLaikovGrid(3)
 
         # An isotropic spin-1/2 with g = 2: the field-free Hamiltonian is
-        # zero and the magnetic moment operator is mu = g*mu_B*S.
+        # zero and the magnetic moment operator is mu = g*mu_B*S. The
+        # operators are handed over as the operator instances the class
+        # takes, i.e. as a GeneralOperatorMatrix and a
+        # GeneralVectorOperatorMatrix built on the bare matrices.
         g = 2.0
         spin_matrix_list = debug_output.spin_matrices(1)
-        hamiltonian      = np.zeros((2,2), dtype=np.complex128)
-        magnetic_moment  = [g*tmp_units.mu_B*spin_matrix for spin_matrix
-                            in spin_matrix_list]
+        hamiltonian      = pseudospin_operators\
+                           .GeneralOperatorMatrix(np.zeros((2,2),
+                                                           dtype=np.complex128))
+        magnetic_moment  = pseudospin_operators\
+                           .GeneralVectorOperatorMatrix(
+                               [g*tmp_units.mu_B*spin_matrix for spin_matrix
+                                in spin_matrix_list])
 
         susceptibility = StaticMagneticSusceptibility([2.0,20.0,200.0],B=0.1)
         smp = cls(hamiltonian,magnetic_moment,grid,tmp_units,
@@ -1036,6 +1289,78 @@ class StaticMagneticProperties:
               abs(susceptibility_2.susceptibility[0]
                   - 2.0*susceptibility.susceptibility[0]) < 1.0e-8)
 
+        # A temperature range starting at zero is usable as it stands: the
+        # zero point is raised to the lowest temperature the Boltzmann
+        # populations are defined at, and the properties come out finite.
+        # The two-level system is fully polarized there, so the
+        # magnetization is the saturation value g*S = 1.
+        zero_T_magnetization = IsothermalStaticMagnetization([0.0,1.0],[7.0])
+        zero_T_susceptibility = StaticMagneticSusceptibility([0.0,2.0],B=0.1)
+        smp = cls(hamiltonian,magnetic_moment,grid,tmp_units,
+                  susceptibility=zero_T_susceptibility,
+                  magnetization=zero_T_magnetization)
+
+        check('a magnetization requested at zero temperature is finite',
+              np.all(np.isfinite(zero_T_magnetization.magnetization)))
+        check('a susceptibility requested at zero temperature is finite',
+              np.all(np.isfinite(zero_T_susceptibility.susceptibility)))
+        check('the magnetization at zero temperature is the saturation value',
+              abs(zero_T_magnetization.magnetization[0][0] - 1.0) < 1.0e-12)
+
+        # The class methods taking a system instead of the operators. Both
+        # systems below are the same isotropic S = 1/2 with g = 2 as above,
+        # so both must reproduce the Curie law.
+        from ouluspin.systems import electron_exchange_system
+
+        # The Hamiltonian of the free spin is zero, which is given to the
+        # system as a vanishing axial term.
+        zero_tensor = tensors.IwaharaChibotaruSphericalTensor\
+                             .from_one_site_cartesian_operator(0.0,'z',1)
+        moment_tensor = tensors.MixedCartesianIwaharaChibotaruSphericalTensor\
+                               .from_one_site_isotropic_operator(g,1)
+        exchange_system = electron_exchange_system\
+                          .ElectronExchangeSystem([1],[(zero_tensor,0)],
+                                                  [(moment_tensor,0)],
+                                                  tmp_units)
+
+        susceptibility_3 = StaticMagneticSusceptibility([2.0,20.0,200.0],B=0.1)
+        smp = cls.from_electron_exchange_system(exchange_system,grid,
+                                                susceptibility=susceptibility_3)
+        check('from_electron_exchange_system reproduces the Curie law',
+              np.allclose(susceptibility_3.susceptibility,0.375,rtol=2.0e-3))
+
+        # The ab initio system takes the Hamiltonian diagonalized, as it
+        # comes out of a quantum-chemical calculation.
+        basis = pseudospin_operators.PseudoSpinBasis([1])
+        diagonalized_hamiltonian = pseudospin_operators\
+                                   .GeneralOperatorMatrix(hamiltonian.matrix,
+                                                          diagonalize_operator_matrix=True,
+                                                          translate_eigenvalues=True)
+        ab_initio_system = electron_exchange_system\
+                           .AbInitioElectronExchangeSystem(diagonalized_hamiltonian,
+                                                           magnetic_moment,
+                                                           basis,tmp_units,
+                                                           R=np.identity(3))
+
+        susceptibility_4 = StaticMagneticSusceptibility([2.0,20.0,200.0],B=0.1)
+        smp = cls.from_ab_initio_system(ab_initio_system,grid,
+                                        susceptibility=susceptibility_4)
+        check('from_ab_initio_system reproduces the Curie law',
+              np.allclose(susceptibility_4.susceptibility,0.375,rtol=2.0e-3))
+
+        # The operators are stored as the instances given, and their matrix
+        # representations in the layout the Fortran routines expect, i.e.
+        # with the Cartesian component as the last index.
+        smp = cls(hamiltonian,magnetic_moment,grid,tmp_units)
+        check('the operator instances are stored as attributes',
+              (smp.hamiltonian is hamiltonian)
+              and (smp.magnetic_moment is magnetic_moment))
+        check('the magnetic moment matrices are stacked component last',
+              smp.magnetic_moment_matrix.shape == (2,2,3)
+              and all(np.allclose(smp.magnetic_moment_matrix[:,:,k],
+                                  magnetic_moment.matrix_list()[k])
+                      for k in range(0,3)))
+
         return debug_output.test_summary('StaticMagneticProperties',
                                          result_list,print_output)
 
@@ -1054,7 +1379,7 @@ class StaticTransitionMagneticMoments:
     relaxation of magnetization in single-molecule magnets as discussed in
 
         L. Ungur, M. Thewissen, J.-P. Costes, W. Wernsdorfer, L. F.
-        Chibotaru. Inorg. Chem. 2013, 52, 2097--2099.
+        Chibotaru. Inorg. Chem. 2013, 52, 6328--6337.
 
     The matrix elements are evaluated in the basis in which the projection
     of the magnetic moment is diagonal within each group of degenerate

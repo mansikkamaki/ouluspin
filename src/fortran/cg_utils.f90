@@ -282,7 +282,7 @@ contains
   function cg_by_m_recursion(j1,m1,j2,m2,J,M) result(rec_coeff)
     ! Evaluate the CG coefficient <j1,m1,j2,m2|J,M> by the numerically
     ! stable three-term recursion in m1 at fixed j1, j2, J and M
-    ! (Schulten--Gordon type recursion, cf. J. C. Luscombe and M. Luban,
+    ! (Schulten--Gordon type recursion, cf. J. H. Luscombe and M. Luban,
     ! Phys. Rev. E 57 (1998) 7274). All angular momentum arguments are
     ! integers equal to twice their physical value, exactly as in old_cg and
     ! cg. The recursion relation follows from the matrix elements of

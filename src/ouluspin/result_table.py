@@ -195,15 +195,16 @@ class ResultTable:
         bare, machine-readable form without the title, the rules and the
         explanatory texts is returned, with the column headers on a single
         comment line.
-    data_file(filename,plain=True)
-        Write the table into a text file.
-    odt_table(filename)
+    data_file(filename,plain=True,overwrite_file=False)
+        Write the table into a text file, appending it to an existing
+        file.
+    odt_table(filename,overwrite_file=False)
         Write the table into an OpenDocument text (.odt) file, appending
         it to an existing document.
-    docx_table(filename)
+    docx_table(filename,overwrite_file=False)
         Write the table into an Office Open XML (.docx) file, appending
         it to an existing document.
-    latex_table(filename,standalone=True) : str or None
+    latex_table(filename,standalone=True,overwrite_file=False) : str or None
         Write the table into a LaTeX file, appending it to an existing
         document, or return it as a string when the filename is None.
     latex_string_table(standalone=True) : str
@@ -734,26 +735,37 @@ class ResultTable:
         return tmp_str + "\n"
 
 
-    def data_file(self, filename, plain=True):
+    def data_file(self, filename, plain=True, overwrite_file=False):
         """Write the table into a text file.
+
+        When the file exists the table is appended to it, which makes it
+        possible to collect several tables into one file by calling the
+        method once per table.
 
         Arguments
         ---------
         filename : str
-            The name of the file to write.
+            The name of the file to write or to append to.
 
         Optional arguments
         ------------------
         plain : boolean
             Whether to write the bare, machine-readable form of the table
             (see string_table). Default is True.
+        overwrite_file : boolean
+            Whether an existing file is overwritten instead of the table
+            being appended to it. Default is False.
         """
-        f = open(filename, 'w')
+        if overwrite_file:
+            f = open(filename, 'w')
+        else:
+            f = open(filename, 'a')
+
         f.write(self.string_table(plain=plain))
         f.close()
 
 
-    def odt_table(self, filename):
+    def odt_table(self, filename, overwrite_file=False):
         """Write the table into an OpenDocument text (.odt) file.
 
         When the file exists the table is appended to the document,
@@ -773,13 +785,20 @@ class ResultTable:
         ---------
         filename : str
             The name of the file to write or to append to.
+
+        Optional arguments
+        ------------------
+        overwrite_file : boolean
+            Whether an existing file is overwritten by a new document
+            instead of the table being appended to it. Default is False.
         """
         from ouluspin import _documents
 
-        _documents.write_odt(self.__document_content(),filename)
+        _documents.write_odt(self.__document_content(),filename,
+                             overwrite_file=overwrite_file)
 
 
-    def docx_table(self, filename):
+    def docx_table(self, filename, overwrite_file=False):
         """Write the table into an Office Open XML (.docx) file.
 
         The method is the .docx counterpart of odt_table and behaves in
@@ -791,10 +810,17 @@ class ResultTable:
         ---------
         filename : str
             The name of the file to write or to append to.
+
+        Optional arguments
+        ------------------
+        overwrite_file : boolean
+            Whether an existing file is overwritten by a new document
+            instead of the table being appended to it. Default is False.
         """
         from ouluspin import _documents
 
-        _documents.write_docx(self.__document_content(),filename)
+        _documents.write_docx(self.__document_content(),filename,
+                              overwrite_file=overwrite_file)
 
 
     def __latex_number(self, text):
@@ -949,7 +975,7 @@ class ResultTable:
         return self.__latex_text(text)
 
 
-    def latex_table(self, filename, standalone=True):
+    def latex_table(self, filename, standalone=True, overwrite_file=False):
         """Write the table into a LaTeX file, or return it as a string.
 
         When the file exists the table is written at its end, before the
@@ -977,6 +1003,9 @@ class ResultTable:
             compileable LaTeX document instead of the table alone. The
             argument has no effect when the table is appended to an
             existing file. Default is True.
+        overwrite_file : boolean
+            Whether an existing file is overwritten by a new file instead
+            of the table being written at the end of it. Default is False.
         """
         header_lines, cell_body, alignments, widths = \
             self.__table_cells(typeset=True)
@@ -1077,7 +1106,8 @@ class ResultTable:
         # the end of the document.
         import os
 
-        if filename is not None and os.path.exists(filename):
+        if filename is not None and os.path.exists(filename) \
+           and not overwrite_file:
             f = open(filename)
             document = f.read()
             f.close()
@@ -1393,10 +1423,18 @@ class ResultTable:
         # as in the 'mu_z,i' of the transition moment tables.
         index_str = r'[A-Za-z0-9]+(?:,[A-Za-z0-9]+)*'
 
+        # A Greek letter may be followed directly by the symbol of another
+        # quantity, as in the 'chiT' product of the susceptibility, which is
+        # written without a space by the convention of the field. Such a
+        # trailing symbol is a single capital letter, so it cannot be
+        # confused with the continuation of an ordinary word: the 'nu' of
+        # 'number' is still not taken for a symbol, since it is followed by
+        # a lower-case letter.
         greek_str = ("(?<![A-Za-z])(?P<greek>"
                      + "|".join(sorted(cls.GREEK_LETTERS.keys(),
                                        key=len,reverse=True))
-                     + r")(?![A-Za-z])(?:_(?P<greek_sub>" + index_str + r"))?")
+                     + r")(?:_(?P<greek_sub>" + index_str + r"))?"
+                     r"(?P<greek_tail>[A-Z](?![A-Za-z0-9]))?(?![A-Za-z])")
 
         # The magnitude of a quantity, such as the '|X_k1q1|' of the tensor
         # tables or the '|mu_if|' of the transition moment tables, is
@@ -1444,18 +1482,27 @@ class ResultTable:
             for match in used_pattern.finditer(part):
                 add_text(part[position:match.start()])
 
+                def add_greek():
+                    """Add the atom of a Greek letter and, when the letter
+                    is followed directly by the symbol of another quantity
+                    as in 'chiT', the atom of that symbol as well.
+                    """
+                    atom_list.append(quantity(match.group('greek'),
+                                              match.group('greek_sub'),None))
+                    if match.group('greek_tail') is not None:
+                        atom_list.append(quantity(match.group('greek_tail'),
+                                                  None,None))
+
                 if unit:
                     # Only the units and the indices they carry are
                     # recognized within the unit of a header.
                     if match.group('greek') is not None:
-                        atom_list.append(quantity(match.group('greek'),
-                                                  match.group('greek_sub'),None))
+                        add_greek()
                     else:
                         atom_list.append(quantity(match.group('unit_base'),None,
                                                   match.group('unit_sup')))
                 elif match.group('greek') is not None:
-                    atom_list.append(quantity(match.group('greek'),
-                                              match.group('greek_sub'),None))
+                    add_greek()
                 elif match.group('bar_base') is not None:
                     atom_list.append(quantity(match.group('bar_base'),
                                               match.group('bar_sub'),
@@ -1947,12 +1994,31 @@ class ResultTable:
               len([line for line in plain_str.split("\n") if line.strip()]) == 3)
 
         filename = os.path.join(tempfile.gettempdir(),'ouluspin_result_table_test.dat')
+        if os.path.exists(filename):
+            os.remove(filename)
+
         table.data_file(filename)
         f = open(filename)
         file_str = f.read()
         f.close()
-        os.remove(filename)
         check('the data file contains the bare rendering', file_str == plain_str)
+
+        # A second table is appended to the file, unless the file is
+        # overwritten.
+        table.data_file(filename)
+        f = open(filename)
+        file_str = f.read()
+        f.close()
+        check('a second table is appended to the data file',
+              file_str == plain_str + plain_str)
+
+        table.data_file(filename,overwrite_file=True)
+        f = open(filename)
+        file_str = f.read()
+        f.close()
+        os.remove(filename)
+        check('the data file is overwritten with overwrite_file',
+              file_str == plain_str)
 
         # The LaTeX rendering. The numbers are set in math mode, as are the
         # symbols carrying a subscript or a superscript.
@@ -2150,7 +2216,6 @@ class ResultTable:
         f = open(latex_name)
         latex_file_str = f.read()
         f.close()
-        os.remove(latex_name)
 
         check('the LaTeX file is a compileable document',
               latex_file_str.count("\\documentclass") == 1)
@@ -2159,6 +2224,17 @@ class ResultTable:
         check('the appended table is written before the end of the document',
               latex_file_str.rfind("\\begin{tabular}")
               < latex_file_str.rfind("\\end{document}"))
+
+        latex_table_instance.latex_table(latex_name,overwrite_file=True)
+
+        f = open(latex_name)
+        latex_file_str = f.read()
+        f.close()
+        os.remove(latex_name)
+
+        check('the LaTeX file is overwritten with overwrite_file',
+              latex_file_str.count("\\begin{tabular}") == 1
+              and latex_file_str.count("\\documentclass") == 1)
 
         # The word-processor renderings. Both formats are ZIP archives of
         # XML documents, so the test checks that the archive holds the
@@ -2190,7 +2266,23 @@ class ResultTable:
             name_list = archive.namelist()
             document  = archive.read(content_entry).decode('utf-8')
             archive.close()
+
+            # The document is written anew when the file is overwritten,
+            # so it holds the single table instead of the two of the
+            # document written above.
+            if extension == '.odt':
+                latex_table_instance.odt_table(document_name,overwrite_file=True)
+            else:
+                latex_table_instance.docx_table(document_name,overwrite_file=True)
+
+            archive             = zipfile.ZipFile(document_name,'r')
+            overwritten_document = archive.read(content_entry).decode('utf-8')
+            archive.close()
             os.remove(document_name)
+
+            check('the ' + extension
+                  + ' document is overwritten with overwrite_file',
+                  overwritten_document.count(table_element) == 1)
 
             check('the ' + extension + ' document holds the expected entries',
                   all(entry in name_list for entry in entry_list))

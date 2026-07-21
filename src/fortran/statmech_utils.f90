@@ -62,6 +62,16 @@ contains
     ! argument normalize is set to .false., the expectation value sum will not
     ! be divided by the partition function. This is useful if alternative
     ! partition function is used by the calling procedure.
+    !
+    ! Only the diagonal elements <i|A|i> of the transformed operator enter
+    ! the expectation value, so the full transformation C^H * A * C is not
+    ! formed. The product X = A * C is evaluated with one call to zgemm and
+    ! the diagonal is then picked up as
+    !
+    !     <i|A|i> = sum_p conjg(C(p,i)) * X(p,i),
+    !
+    ! which costs one matrix multiplication instead of the two of the full
+    ! transformation and needs no second temporary matrix.
     implicit none (type,external)
 
     integer,                                     intent(in)  :: n_points, n_basis
@@ -72,20 +82,28 @@ contains
     logical,                                     intent(in)  :: normalize
     real(real64),    dimension(n_points),        intent(out) :: value_list
 
-    complex(real64), dimension(n_basis,n_basis) :: transformed_operator
+    complex(real64), dimension(n_basis,n_basis) :: X
     real(real64),    dimension(n_basis)         :: expectation_value_vector, propability_vector
-    
-    integer      :: T_index = 1, i = 0
-    real(real64) :: Q = dp_zero, T = dp_zero
-    
+
+    ! The local variables are deliberately left uninitialized in their
+    ! declarations: an initializer would give them the SAVE attribute, i.e.
+    ! one instance shared by every thread, and this routine is called from
+    ! inside the parallel loops of powder_magnetization_utils.
+    integer      :: T_index, i
+    real(real64) :: Q, T
+
+    ! BLAS parameters.
+    complex(real64), parameter :: ALPHA = cmplx(1.0,0.0,kind=real64), BETA = cmplx(0.0,0.0,kind=real64)
+
     real(real64), external :: ddot
+    external zgemm
 
     value_list = dp_zero
 
-    call basis_transformation(C,A,transformed_operator,n_basis,0)
+    call zgemm('N','N',n_basis,n_basis,n_basis,ALPHA,A,n_basis,C,n_basis,BETA,X,n_basis)
 
     do i = 1, n_basis
-       expectation_value_vector(i) = real(transformed_operator(i,i),kind=real64)
+       expectation_value_vector(i) = real(sum(conjg(C(:,i))*X(:,i)),kind=real64)
     end do
 
     ! Evaluate the expectation value.

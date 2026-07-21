@@ -137,6 +137,11 @@ class ResultPlot:
         The label of the horizontal axis.
     y_label : str
         The label of the vertical axis.
+    y_from_zero : boolean
+        Whether the vertical axis is drawn from zero instead of the range
+        Matplotlib picks for the data. Set for the chiT product of the
+        susceptibility, which is drawn from zero by the convention of the
+        field.
     title : str or None
         The title written above the plot.
     legend : boolean
@@ -241,11 +246,13 @@ class ResultPlot:
 
     def __from_susceptibility(self, source, style, label):
         """Build the data set of a plot of the chiT product as a function
-        of the temperature.
+        of the temperature. The vertical axis is drawn from zero, which is
+        the convention of the field for the chiT product.
         """
-        self.plot_type = 'standard_plot'
-        self.x_label   = "T / K"
-        self.y_label   = "chiT / cm^3 K mol^-1"
+        self.plot_type   = 'standard_plot'
+        self.x_label     = "T / K"
+        self.y_label     = "chiT / cm^3 K mol^-1"
+        self.y_from_zero = True
 
         if label is None:
             set_label = "chiT"
@@ -443,6 +450,7 @@ class ResultPlot:
         self.degeneracy_tolerance = 0.0
         self.x_label              = ""
         self.y_label              = ""
+        self.y_from_zero          = False
 
         if isinstance(source,properties.IsothermalStaticMagnetization):
             self.__from_magnetization(source,style,label)
@@ -523,6 +531,7 @@ class ResultPlot:
         instance.title         = title
         instance.x_label              = x_label
         instance.y_label              = y_label
+        instance.y_from_zero          = False
         instance.legend               = False
         instance.energy_cutoff        = None
         instance.degeneracy_tolerance = 0.0
@@ -545,6 +554,7 @@ class ResultPlot:
                                          for column in self.columns],
                 'x_label':              self.x_label,
                 'y_label':              self.y_label,
+                'y_from_zero':          self.y_from_zero,
                 'title':                self.title,
                 'legend':               self.legend,
                 'degeneracy_tolerance': self.degeneracy_tolerance}
@@ -728,6 +738,7 @@ class ResultPlot:
         result.title         = self.title
         result.x_label       = self.x_label
         result.y_label       = self.y_label
+        result.y_from_zero   = self.y_from_zero or other.y_from_zero
         result.energy_cutoff = None
 
         # The summed diagram holds the levels of both, so the wider of the
@@ -849,6 +860,25 @@ class ResultPlot:
               susceptibility_plot.x_label == "T / K")
         check('the susceptibility plot holds the data',
               len(susceptibility_plot.data_sets[0]['x']) == 3)
+        check('the susceptibility plot draws the vertical axis from zero',
+              susceptibility_plot.y_from_zero is True)
+        check('the vertical axis of the susceptibility states the chiT product',
+              susceptibility_plot.y_label.startswith("chiT"))
+
+        # The magnetization plot labels its data sets by the temperature,
+        # one data set per temperature point.
+        magnetization = properties.IsothermalStaticMagnetization(
+            [1.8,5.0],[0.0,1.0,2.0],
+            magnetization=np.array([[0.0,1.0,2.0],[0.0,0.5,1.0]]))
+
+        magnetization_plot = cls(magnetization)
+
+        check('the magnetization plot holds one data set per temperature',
+              len(magnetization_plot.data_sets) == 2)
+        check('the magnetization data sets are labelled by the temperature',
+              magnetization_plot.data_sets[0]['label'].startswith("T = "))
+        check('the magnetization plot does not force the axis to zero',
+              magnetization_plot.y_from_zero is False)
 
         # An energy level diagram of the eigenvalues of an operator. The
         # operator is an axial Zeeman splitting of a pseudospin S = 1/2.
@@ -900,6 +930,22 @@ class ResultPlot:
               [group[0] for group
                in _images.degenerate_groups([2.0,0.0,1.0],1.0e-6)]
               == [0.0,1.0,2.0])
+
+        # The typesetting of the labels, which the writer does with
+        # axis_label. The symbols are set in italics, i.e. as the
+        # mathematical text of Matplotlib, and the Greek letters are set as
+        # the letters. The labels of the data sets are typeset the same way
+        # as those of the axes, so that the legend of the magnetization
+        # plot carries an italic T.
+        chi_label = _images.axis_label(susceptibility_plot.y_label)
+        check('the chiT product is set as a Greek chi and an italic T',
+              chi_label.startswith("$\\chi$$T$"))
+        check('the unit of the susceptibility is set upright',
+              "\\mathrm{cm}^{3}" in chi_label)
+        check('the temperature of a legend is set in italics',
+              _images.axis_label("T = 1.800 K") == "$T$ = 1.800 K")
+        check('an ordinary word is not taken for a Greek letter',
+              _images.axis_label("number of states") == "number of states")
 
         # The effective barrier of the transition magnetic moments.
         moment_tensor = tensors.MixedCartesianIwaharaChibotaruSphericalTensor\

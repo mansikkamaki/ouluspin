@@ -653,7 +653,7 @@ def next_table_index(document, prefix):
     return index
 
 
-def write_odt(content, filename):
+def write_odt(content, filename, overwrite_file=False):
     """Write the table into an OpenDocument text (.odt) file, appending it
     to the document when the file already exists and creating the document
     when it does not.
@@ -664,8 +664,14 @@ def write_odt(content, filename):
         The content of the table (see the module docstring).
     filename : str
         The name of the file to write.
+
+    Optional arguments
+    ------------------
+    overwrite_file : boolean
+        Whether an existing file is overwritten by a new document instead
+        of the table being appended to it. Default is False.
     """
-    if os.path.exists(filename):
+    if os.path.exists(filename) and not overwrite_file:
         archive  = zipfile.ZipFile(filename,'r')
         document = archive.read('content.xml').decode('utf-8')
         archive.close()
@@ -966,7 +972,7 @@ def docx_table_body(content):
     return tmp_str
 
 
-def write_docx(content, filename):
+def write_docx(content, filename, overwrite_file=False):
     """Write the table into an Office Open XML (.docx) file, appending it
     to the document when the file already exists and creating the document
     when it does not.
@@ -977,8 +983,14 @@ def write_docx(content, filename):
         The content of the table (see the module docstring).
     filename : str
         The name of the file to write.
+
+    Optional arguments
+    ------------------
+    overwrite_file : boolean
+        Whether an existing file is overwritten by a new document instead
+        of the table being appended to it. Default is False.
     """
-    if os.path.exists(filename):
+    if os.path.exists(filename) and not overwrite_file:
         archive  = zipfile.ZipFile(filename,'r')
         document = archive.read('word/document.xml').decode('utf-8')
         archive.close()

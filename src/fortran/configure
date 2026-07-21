@@ -18,6 +18,11 @@
 #     PYTHON=<python3>     ./configure --python=<python3>
 #     LAPACK_LIBS='...'    ./configure --lapack-libs='...'
 #     ONEAPI_ROOT=<dir>    ./configure --oneapi-root=<dir>
+#                          ./configure --disable-openmp
+#
+# The powder integration routines of powder_magnetization_utils are
+# parallelized over the grid points with OpenMP, which is enabled by
+# default and can be turned off with --disable-openmp.
 #
 # Supported compilers: ifort (Intel classic), ifx (Intel oneAPI; requires
 # numpy >= 1.26) and gfortran. The generated make.inc is a plain text file
@@ -28,6 +33,7 @@ ONEAPI_ROOT="${ONEAPI_ROOT:-/opt/intel/oneapi}"
 FC="${FC:-}"
 PYTHON="${PYTHON:-}"
 LAPACK_LIBS="${LAPACK_LIBS:-}"
+ENABLE_OPENMP="yes"
 
 usage() {
     cat <<EOF
@@ -43,6 +49,8 @@ Options:
                         found, then OpenBLAS, then reference LAPACK/BLAS)
   --oneapi-root=<dir>   Root of an Intel oneAPI installation (default:
                         \$ONEAPI_ROOT or /opt/intel/oneapi)
+  --disable-openmp      Build without OpenMP, i.e. leave the powder
+                        integration serial (default: OpenMP enabled)
   -h, --help            Show this help and exit
 EOF
 }
@@ -58,6 +66,7 @@ for arg in "$@"; do
         --python=*)      PYTHON="${arg#--python=}" ;;
         --lapack-libs=*) LAPACK_LIBS="${arg#--lapack-libs=}" ;;
         --oneapi-root=*) ONEAPI_ROOT="${arg#--oneapi-root=}" ;;
+        --disable-openmp) ENABLE_OPENMP="no" ;;
         -h|--help)       usage; exit 0 ;;
         *)               usage; fail "unknown option: $arg" ;;
     esac
@@ -140,6 +149,14 @@ case $FC_NAME in
 esac
 
 OPTFLAGS="-O3 -funroll-loops"
+
+# OpenMP. The compile-time flag goes into F90FLAGS and the runtime library
+# into the link line. The library is named explicitly rather than passed as
+# the compiler flag, since the distutils backend of f2py hands the link
+# flags on as file names and rejects anything starting with -q or -f.
+OMPFLAGS=""
+OMP_LIBS=""
+
 case $FC_NAME in
     ifort*)
         # -heap-arrays avoids stack overflows with automatic arrays and
@@ -147,11 +164,19 @@ case $FC_NAME in
         F2PY_FCOMPILER="intelem"
         F90FLAGS="-heap-arrays -stand f18"
         F77FLAGS="-O3"
+        if [ "$ENABLE_OPENMP" = "yes" ]; then
+            OMPFLAGS="-qopenmp"
+            OMP_LIBS="-liomp5"
+        fi
         ;;
     ifx*)
         F2PY_FCOMPILER=""
         F90FLAGS="-heap-arrays -stand f18"
         F77FLAGS="-O3"
+        if [ "$ENABLE_OPENMP" = "yes" ]; then
+            OMPFLAGS="-qopenmp"
+            OMP_LIBS="-liomp5"
+        fi
         if [ "$F2PY_BACKEND" = "distutils" ]; then
             fail "ifx is not supported by the numpy.distutils backend of \
 f2py (numpy $NUMPY_VERSION); use ifort or gfortran, or a numpy >= 1.26"
@@ -163,8 +188,14 @@ f2py (numpy $NUMPY_VERSION); use ifort or gfortran, or a numpy >= 1.26"
         F2PY_FCOMPILER="gnu95"
         F90FLAGS="-std=f2018"
         F77FLAGS="-O3 -std=legacy"
+        if [ "$ENABLE_OPENMP" = "yes" ]; then
+            OMPFLAGS="-fopenmp"
+            OMP_LIBS="-lgomp"
+        fi
         ;;
 esac
+
+F90FLAGS="$F90FLAGS $OMPFLAGS"
 
 # ---------------------------------------------------------------------------
 # LAPACK/BLAS libraries (zgemm, zheev, ddot). Preference order: Intel MKL,
@@ -213,6 +244,10 @@ fi
     echo ""
     echo "LAPACK_LIBS = $LAPACK_LIBS"
     echo ""
+    echo "# The OpenMP runtime library. Empty when the module is built"
+    echo "# without OpenMP, i.e. with a serial powder integration."
+    echo "OMP_LIBS = $OMP_LIBS"
+    echo ""
     RUNTIME_LIBDIRS=""
     [ -n "$FC_LIBDIR" ] && RUNTIME_LIBDIRS="$FC_LIBDIR"
     if [ -n "${MKL_DIR:-}" ]; then
@@ -246,4 +281,9 @@ echo "configure: Python interpreter:  $PYTHON (numpy $NUMPY_VERSION)"
 echo "configure: f2py backend:        $F2PY_BACKEND"
 echo "configure: Fortran compiler:    $FC_PATH"
 echo "configure: LAPACK/BLAS:         $LAPACK_LIBS"
+if [ -n "$OMPFLAGS" ]; then
+    echo "configure: OpenMP:              $OMPFLAGS $OMP_LIBS"
+else
+    echo "configure: OpenMP:              disabled (serial powder integration)"
+fi
 echo "configure: wrote make.inc -- now run 'make'"

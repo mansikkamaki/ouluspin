@@ -95,7 +95,7 @@ $(MODULE).pyf: $(F90_SOURCES)
 # fortran_utils.so, which the import machinery accepts regardless of the
 # interpreter tag.
 $(MODULE).so: $(MODULE).pyf $(F77_OBJECT) $(F90_SOURCES)
-	$(PYTHON) -m numpy.f2py -c $(F2PY_FLAGS) $(LAPACK_LIBS) \
+	$(PYTHON) -m numpy.f2py -c $(F2PY_FLAGS) $(LAPACK_LIBS) $(OMP_LIBS) \
 	    $(MODULE).pyf $(F77_OBJECT) $(F90_SOURCES)
 	@set -e; for f in $(MODULE).cpython-*.so; do \
 	    if [ -e "$$f" ]; then mv "$$f" $(MODULE).so; fi; \

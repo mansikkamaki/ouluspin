@@ -15,6 +15,10 @@
 #   F90FLAGS     Flags for compiling the Fortran 90 sources.
 #   OPTFLAGS     Optimization flags (f2py adds -fPIC itself).
 #   LAPACK_LIBS  Linker flags providing LAPACK/BLAS (zgemm, zheev, ddot).
+#   OMP_LIBS     Linker flags providing the OpenMP runtime. The powder
+#                integration of powder_magnetization_utils is parallelized
+#                over the grid points with OpenMP; leave this empty and drop
+#                the OpenMP flag from F90FLAGS to build a serial module.
 #   F2PY_FLAGS   Backend-specific flags passed to "python -m numpy.f2py -c".
 #
 # --- Variant 1: gfortran + system LAPACK, numpy < 1.26 (distutils) --------
@@ -22,9 +26,10 @@
 # FC = gfortran
 # PYTHON = python3
 # F77FLAGS = -O3 -std=legacy
-# F90FLAGS = -std=f2018
+# F90FLAGS = -std=f2018 -fopenmp
 # OPTFLAGS = -O3 -funroll-loops
 # LAPACK_LIBS = -llapack -lblas
+# OMP_LIBS = -lgomp
 # F2PY_FLAGS = --fcompiler=gnu95 --opt="$(OPTFLAGS)" --f90flags="$(F90FLAGS)"
 #
 # --- Variant 2: gfortran + OpenBLAS, numpy >= 1.26 (meson) ----------------
@@ -32,9 +37,10 @@
 # FC = gfortran
 # PYTHON = python3
 # F77FLAGS = -O3 -std=legacy
-# F90FLAGS = -std=f2018
+# F90FLAGS = -std=f2018 -fopenmp
 # OPTFLAGS = -O3 -funroll-loops
 # LAPACK_LIBS = -lopenblas
+# OMP_LIBS = -lgomp
 # export FC
 # export FFLAGS := $(OPTFLAGS) $(F90FLAGS)
 # F2PY_FLAGS = --backend meson
@@ -44,8 +50,9 @@
 # FC = /opt/intel/oneapi/compiler/latest/linux/bin/intel64/ifort
 # PYTHON = /opt/intel/oneapi/intelpython/latest/bin/python3
 # F77FLAGS = -O3
-# F90FLAGS = -heap-arrays -stand f18
+# F90FLAGS = -heap-arrays -stand f18 -qopenmp
 # OPTFLAGS = -O3 -funroll-loops
 # LAPACK_LIBS = -L/opt/intel/oneapi/mkl/latest/lib/intel64 -lmkl_rt
+# OMP_LIBS = -liomp5
 # export PATH := /opt/intel/oneapi/compiler/latest/linux/bin/intel64:$(PATH)
 # F2PY_FLAGS = --fcompiler=intelem --opt="$(OPTFLAGS)" --f90flags="$(F90FLAGS)"

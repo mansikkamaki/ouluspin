@@ -63,6 +63,13 @@ LEVEL_HALF_WIDTH = 0.35
 DIAGRAM_LEVEL_HALF_WIDTH = 0.11
 DIAGRAM_LEVEL_GAP        = 0.05
 
+# The width of the curves of a standard plot, in points, and the size of
+# the markers drawn on them. The curves are drawn heavy enough to stay
+# clearly visible when the figure is scaled down to the width of a column
+# of a publication.
+DATA_LINE_WIDTH = 2.0
+MARKER_SIZE     = 4.5
+
 # The width of the arrows of an effective barrier, in points, between the
 # weakest and the strongest transition drawn.
 MIN_ARROW_WIDTH = 0.4
@@ -192,7 +199,12 @@ def mathtext_symbol(text):
 
 
 def draw_standard_plot(axes, content):
-    """Draw the data sets of a standard plot into the given axes."""
+    """Draw the data sets of a standard plot into the given axes.
+
+    The labels of the data sets name physical quantities the same way the
+    axis labels do, e.g. 'T = 1.800 K', so they are typeset by axis_label
+    and the symbols end up in italics in the legend as well.
+    """
     for data_set in content['data_sets']:
         style = data_set.get('style','line')
 
@@ -209,13 +221,21 @@ def draw_standard_plot(axes, content):
         label = data_set.get('label',"")
         if label == "":
             label = None
+        else:
+            label = axis_label(label)
 
         axes.plot(data_set['x'],data_set['y'],
                   linestyle=line_style,
                   marker=marker_style,
-                  markersize=3.5,
-                  linewidth=1.4,
+                  markersize=MARKER_SIZE,
+                  linewidth=DATA_LINE_WIDTH,
                   label=label)
+
+    # The susceptibility is reported as the chi*T product, which is drawn
+    # from zero up by the convention of the field, so that the curves of
+    # different compounds can be compared by eye.
+    if content.get('y_from_zero',False):
+        axes.set_ylim(bottom=0.0)
 
 
 def degenerate_groups(energy_list, tolerance):

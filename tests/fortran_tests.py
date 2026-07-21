@@ -891,7 +891,9 @@ def test_powder_magnetization_utils():
     # Isotropic spin-1/2: H = 0, magnetic moment = Pauli matrices. The powder
     # magnetization must equal tanh(B / (kB T)).
     H = np.zeros((2, 2), dtype=np.complex128)
-    moment = np.stack([SX, SY, SZ]).astype(np.complex128)
+    # The Cartesian component of the magnetic moment operator is the last
+    # index of the array, i.e. the operators are passed as (n, n, 3).
+    moment = np.stack([SX, SY, SZ], axis=-1).astype(np.complex128)
     T = np.array([0.5, 1.0, 2.0, 10.0])
     B = 0.8
     kB = 1.0
@@ -915,6 +917,22 @@ def test_powder_magnetization_utils():
     maxM, maxvec = pm.maximum_magnetization(H, moment, T, B, grid_v, kB)
     check("maximum_magnetization = tanh(B/kT)",
           close(maxM, np.tanh(B / (kB * T)), tol=1e-2))
+
+    # project_magnetic_moment: mu(n) = sum_j n_j mu_j.
+    projected = pm.project_magnetic_moment(moment, np.array([0.0, 0.0, 1.0]))
+    check("project_magnetic_moment along z", close(projected, SZ))
+
+    projected = pm.project_magnetic_moment(moment, np.array([1.0, 2.0, 3.0]))
+    check("project_magnetic_moment of a general direction",
+          close(projected, SX + 2.0 * SY + 3.0 * SZ))
+
+    # diagonalize_projected_hamiltonian: the same field as above, given as
+    # the projected operator and the magnitude of the field.
+    val2, vec2 = pm.diagonalize_projected_hamiltonian(
+        H, SZ.astype(np.complex128), B,
+        compute_eigenvectors=1, translate_eigenvalues=1)
+    check("diagonalize_projected_hamiltonian eigenvalues",
+          close(np.sort(val2), np.array([0.0, 2 * B])))
 
 
 # ---------------------------------------------------------------------------

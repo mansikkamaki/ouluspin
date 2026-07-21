@@ -38,7 +38,7 @@ module cfp_utils
   !
   ! where T is the matrix of the transposition of the last two electrons.
   ! T is evaluated from the CFPs of the previous level and 6j recoupling
-  ! coefficients (the spectral method of Bayman and Lande, Nucl. Phys. 1966,
+  ! coefficients (the spectral method of Bayman and Landé, Nucl. Phys. 1966,
   ! 77, 1). P has eigenvalues exactly one (physical states) and zero
   ! (spurious states), and the components of the eigenvalue-one eigenvectors
   ! are the CFPs.
