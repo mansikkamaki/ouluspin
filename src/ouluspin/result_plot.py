@@ -67,7 +67,9 @@ class ResultPlot:
 
     All the options are stored as attributes and can be changed afterwards,
     so that the same instance can be written several times with a different
-    appearance.
+    appearance. The options that belong to the image rather than to its
+    content, i.e. the size of the image, the font size and the typeface,
+    are given to the writing methods themselves.
 
     Arguments
     ---------
@@ -171,6 +173,11 @@ class ResultPlot:
         Build the column of an energy level diagram.
     __barrier_cutoff(energies,moments)
         Return the highest energy drawn in an effective barrier plot.
+    __length_in_inches(value,name,resolution)
+        Return a size of an image in inches, the unit being read from the
+        value when it is given as a string.
+    __figure_size(width,height,size_ratio,resolution)
+        Return the width and the height of the image in inches.
     __route_order(levels)
         Return the order the states are passed in along the relaxation
         pathway, used to point the arrows of the barrier plot.
@@ -197,7 +204,8 @@ class ResultPlot:
 
     # The defaults of the writing methods. The resolution is high enough
     # for the plots of a publication, and the draft copy is legible on the
-    # screen without being precise.
+    # screen without being precise. The width is given in inches, which is
+    # the unit Matplotlib measures a figure in.
     DEFAULT_RESOLUTION = 600
     DRAFT_RESOLUTION   = 150
     DEFAULT_WIDTH      = 6.0
@@ -206,6 +214,13 @@ class ResultPlot:
     # The default compression of the raster formats.
     DEFAULT_PNG_COMPRESSION  = 9
     DEFAULT_TIFF_COMPRESSION = 'lzw'
+
+    # The units a size of an image can be given in, as the length of one
+    # unit in inches. The pixel is not a physical length, so it is not
+    # listed here but is converted through the resolution of the image.
+    __LENGTH_UNITS = {'cm': 1.0/2.54,
+                      'mm': 0.1/2.54,
+                      'in': 1.0}
 
     def __error(self, message):
         """Report an error and stop. The plots are written at the end of a
@@ -216,6 +231,97 @@ class ResultPlot:
         print("ERROR: " + message)
         print("Error termination.")
         sys.exit(1)
+
+
+    def __length_in_inches(self, value, name, resolution):
+        """Return a size of an image in inches, i.e. in the unit Matplotlib
+        measures a figure in.
+
+        The size is given either as a plain number, which is read as
+        centimetres, or as a string carrying the unit, e.g. '7.5 cm',
+        '2.0in' or '900 px', with or without a space between the number and
+        the unit. The pixel is not a physical length, so a size given in
+        pixels is turned into one through the resolution of the image, and
+        the image then carries the asked-for number of pixels.
+
+        Arguments
+        ---------
+        value : float or str
+            The size, with or without the unit.
+        name : str
+            The name of the size, used in the error messages.
+        resolution : int
+            The resolution of the image in dots per inch, which converts a
+            size given in pixels.
+        """
+        if isinstance(value,str):
+            text = value.strip().lower()
+            unit = ""
+
+            for unit_name in list(self.__LENGTH_UNITS.keys()) + ['px']:
+                if text.endswith(unit_name):
+                    unit = unit_name
+                    text = text[:-len(unit_name)].strip()
+                    break
+
+            if unit == "":
+                self.__error("The unit of the " + name + " is not recognized: '"
+                             + str(value) + "'.\n"
+                             "ERROR: The recognized units are cm, mm, in and "
+                             "px.")
+
+            try:
+                number = float(text)
+            except ValueError:
+                self.__error("The " + name + " is not a number: '"
+                             + str(value) + "'.")
+        else:
+            # A plain number is read as centimetres, which is the unit the
+            # figures of a publication are ordinarily measured in.
+            unit = 'cm'
+
+            try:
+                number = float(value)
+            except (TypeError,ValueError):
+                self.__error("The " + name + " is not a number: "
+                             + str(value) + ".")
+
+        if number <= 0.0:
+            self.__error("The " + name + " must be positive.")
+
+        if unit == 'px':
+            return number/float(resolution)
+
+        return number*self.__LENGTH_UNITS[unit]
+
+
+    def __figure_size(self, width, height, size_ratio, resolution):
+        """Return the width and the height of the image in inches.
+
+        The two sizes given together fix the size of the image and the
+        size ratio is then not used. One size alone fixes the image
+        together with the size ratio, and neither leaves the image the
+        default width of the class.
+        """
+        if width is not None:
+            image_width = self.__length_in_inches(width,'width',resolution)
+        else:
+            image_width = None
+
+        if height is not None:
+            image_height = self.__length_in_inches(height,'height',resolution)
+        else:
+            image_height = None
+
+        if image_width is None and image_height is None:
+            image_width  = self.DEFAULT_WIDTH
+            image_height = image_width/size_ratio
+        elif image_height is None:
+            image_height = image_width/size_ratio
+        elif image_width is None:
+            image_width = image_height*size_ratio
+
+        return image_width, image_height
 
 
     def __from_magnetization(self, source, style, label):
@@ -561,11 +667,15 @@ class ResultPlot:
 
 
     def __write(self, filename, file_format,
+                width=None,
+                height=None,
                 size_ratio=None,
                 resolution=None,
                 draft_copy=False,
                 overwrite=False,
-                compression=None):
+                compression=None,
+                font_size=None,
+                typeface=None):
         """Write the plot on disk in the given format. The arguments are
         the ones of the public writing methods, which document them.
         """
@@ -583,6 +693,31 @@ class ResultPlot:
         if resolution <= 0:
             self.__error("The resolution must be positive.")
 
+        # The font size and the typeface are checked here rather than when
+        # the figure is drawn, so that a mistake in them is reported the
+        # way the other errors of the class are.
+        if font_size is not None:
+            try:
+                font_size = float(font_size)
+            except (TypeError,ValueError):
+                self.__error("The font size is not a number: "
+                             + str(font_size) + ".")
+
+            if font_size <= 0.0:
+                self.__error("The font size must be positive.")
+
+        if typeface is not None and not _images.typeface_known(typeface):
+            self.__error("Unknown typeface: " + str(typeface) + ".\n"
+                         "ERROR: The recognized typefaces are "
+                         + ", ".join(_images.typeface_names()) + ".")
+
+        # The size of the image is a physical size, so it is the same in
+        # the draft copy as in the image itself; a size given in pixels is
+        # turned into a physical one through the resolution that was asked
+        # for, and the draft copy then carries fewer pixels.
+        image_width, image_height = self.__figure_size(width,height,
+                                                       size_ratio,resolution)
+
         name_list = [(filename,resolution)]
 
         if draft_copy:
@@ -599,18 +734,24 @@ class ResultPlot:
 
         for name, name_resolution in name_list:
             _images.write_plot(content,name,file_format,
-                               width=self.DEFAULT_WIDTH,
-                               size_ratio=size_ratio,
+                               width=image_width,
+                               height=image_height,
                                resolution=name_resolution,
-                               compression=compression)
+                               compression=compression,
+                               font_size=font_size,
+                               typeface=typeface)
 
 
     def png_plot(self, filename,
+                 width=None,
+                 height=None,
                  size_ratio=None,
                  resolution=None,
                  draft_copy=False,
                  overwrite=False,
-                 compression=None):
+                 compression=None,
+                 font_size=None,
+                 typeface=None):
         """Write the plot into a PNG file.
 
         Arguments
@@ -620,9 +761,25 @@ class ResultPlot:
 
         Optional arguments
         ------------------
+        width : float or str or None
+            The width of the image. A plain number is read as centimetres
+            and a string carries the unit, e.g. '7.5 cm', '2.0in' or
+            '900 px', with or without a space between the number and the
+            unit; the recognized units are cm, mm, in and px. A width given
+            in pixels is turned into a physical width through the
+            resolution. Default is None, in which case the width follows
+            the height and the size ratio, or is the default width of the
+            class when neither is given.
+        height : float or str or None
+            The height of the image, given the same way as the width.
+            Default is None, in which case the height follows the width and
+            the size ratio.
         size_ratio : float or None
             The ratio of the width of the plot to its height. Default is
             None, in which case the default ratio of the class is used.
+            The ratio is used only when one of the width and the height is
+            left out; giving both fixes the size of the image and the ratio
+            is then not used.
         resolution : int or None
             The resolution of the image in dots per inch. Default is None,
             in which case the default resolution of the class is used,
@@ -638,24 +795,43 @@ class ResultPlot:
         compression : int or None
             The compression level of the PNG file, from 0 to 9. Default is
             None, in which case the level 9 of the class is used.
+        font_size : float or None
+            The main font size of the plot in points, i.e. the size of the
+            numbers along the axes; the labels of the axes are set one
+            point larger and the legends one point smaller. Default is
+            None, in which case the default size of the library is used.
+        typeface : str or None
+            The typeface the plot is set in, i.e. 'serif', 'sans-serif' or
+            'monospace'. The names 'sans' and 'mono' are accepted as well.
+            Default is None, in which case the serif face of the library is
+            used, which is the usual choice of the figures of a
+            publication.
         """
         if compression is None:
             compression = self.DEFAULT_PNG_COMPRESSION
 
         self.__write(filename,'png',
+                     width=width,
+                     height=height,
                      size_ratio=size_ratio,
                      resolution=resolution,
                      draft_copy=draft_copy,
                      overwrite=overwrite,
-                     compression=compression)
+                     compression=compression,
+                     font_size=font_size,
+                     typeface=typeface)
 
 
     def tiff_plot(self, filename,
+                  width=None,
+                  height=None,
                   size_ratio=None,
                   resolution=None,
                   draft_copy=False,
                   overwrite=False,
-                  compression=None):
+                  compression=None,
+                  font_size=None,
+                  typeface=None):
         """Write the plot into a TIFF file.
 
         The arguments are the ones of the png_plot method, except that the
@@ -667,30 +843,43 @@ class ResultPlot:
             compression = self.DEFAULT_TIFF_COMPRESSION
 
         self.__write(filename,'tiff',
+                     width=width,
+                     height=height,
                      size_ratio=size_ratio,
                      resolution=resolution,
                      draft_copy=draft_copy,
                      overwrite=overwrite,
-                     compression=compression)
+                     compression=compression,
+                     font_size=font_size,
+                     typeface=typeface)
 
 
     def pdf_plot(self, filename,
+                 width=None,
+                 height=None,
                  size_ratio=None,
                  resolution=None,
                  draft_copy=False,
-                 overwrite=False):
+                 overwrite=False,
+                 font_size=None,
+                 typeface=None):
         """Write the plot into a PDF file, i.e. as vector graphics.
 
         The arguments are the ones of the png_plot method. A PDF file
         carries the plot as vector graphics, so the resolution only
         affects the raster parts of the image, if any, and the draft copy
-        is rarely needed.
+        is rarely needed. The resolution still converts a size given in
+        pixels into a physical one.
         """
         self.__write(filename,'pdf',
+                     width=width,
+                     height=height,
                      size_ratio=size_ratio,
                      resolution=resolution,
                      draft_copy=draft_copy,
-                     overwrite=overwrite)
+                     overwrite=overwrite,
+                     font_size=font_size,
+                     typeface=typeface)
 
 
     def __add__(self, other):
@@ -991,6 +1180,68 @@ class ResultPlot:
 
         check('the arrows of the barrier follow the relaxation pathway',route_ok)
 
+        # The sizes of an image. A plain number is read as centimetres and
+        # a string carries its own unit; a size in pixels is a physical
+        # size only through the resolution.
+        inch = 1.0/2.54
+
+        check('a plain size is read as centimetres',
+              abs(plot._ResultPlot__length_in_inches(2.54,'width',600) - 1.0)
+              < 1.0e-12)
+        check('the unit is read from a string',
+              abs(plot._ResultPlot__length_in_inches("25.4 mm",'width',600)
+                  - 1.0) < 1.0e-12)
+        check('the unit is read without a space as well',
+              abs(plot._ResultPlot__length_in_inches("2.0in",'width',600) - 2.0)
+              < 1.0e-12)
+        check('a size in pixels follows the resolution',
+              abs(plot._ResultPlot__length_in_inches("900px",'width',300) - 3.0)
+              < 1.0e-12)
+
+        # The width and the height together fix the image, and one of them
+        # alone fixes it together with the size ratio.
+        size = plot._ResultPlot__figure_size("8 cm","4 cm",4.0/3.0,600)
+        check('the two sizes given together fix the image',
+              (abs(size[0] - 8.0*inch) < 1.0e-12)
+              and (abs(size[1] - 4.0*inch) < 1.0e-12))
+
+        size = plot._ResultPlot__figure_size("8 cm",None,2.0,600)
+        check('the height follows the width and the size ratio',
+              abs(size[1] - 4.0*inch) < 1.0e-12)
+
+        size = plot._ResultPlot__figure_size(None,"4 cm",2.0,600)
+        check('the width follows the height and the size ratio',
+              abs(size[0] - 8.0*inch) < 1.0e-12)
+
+        size = plot._ResultPlot__figure_size(None,None,2.0,600)
+        check('the default size is used when neither size is given',
+              (abs(size[0] - cls.DEFAULT_WIDTH) < 1.0e-12)
+              and (abs(size[1] - 0.5*cls.DEFAULT_WIDTH) < 1.0e-12))
+
+        # The typefaces and the font sizes, which the writer turns into the
+        # settings of the drawing library.
+        check('the typefaces are listed',
+              ('serif' in _images.typeface_names())
+              and ('sans-serif' in _images.typeface_names()))
+        check('a typeface is recognized regardless of the case',
+              _images.typeface_known('Serif'))
+        check('the aliases of a typeface are recognized',
+              _images.typeface_known('sans') and _images.typeface_known('mono'))
+        check('an unknown typeface is not recognized',
+              not _images.typeface_known('gothic'))
+        check('the typeface sets the family of the fonts',
+              _images.typeface_style('sans')['font.family'] == 'sans-serif')
+        check('the typeface sets the mathematical fonts along with it',
+              _images.typeface_style('serif')['mathtext.fontset'] == 'stix')
+        check('the font size sets the main size',
+              _images.font_size_style(14.0)['font.size'] == 14.0)
+        check('the labels of the axes follow the main font size',
+              _images.font_size_style(14.0)['axes.labelsize'] == 15.0)
+        check('the legends follow the main font size',
+              _images.font_size_style(14.0)['legend.fontsize'] == 13.0)
+        check('the fixed appearance is kept beside the font settings',
+              _images.plot_style(14.0,'sans')['xtick.direction'] == 'in')
+
         # The writing of the files. The plots are written only when the
         # plotting library is available.
         try:
@@ -1037,6 +1288,42 @@ class ResultPlot:
             check('the draft copy is smaller than the image',
                   os.path.getsize(os.path.join(directory,'draft_draft.png'))
                   < os.path.getsize(draft_name))
+
+            # The size of the image, the font size and the typeface are
+            # given to the writing methods. The size is checked on the
+            # image itself, which carries the width in pixels, i.e. the
+            # physical width times the resolution.
+            sized_name = os.path.join(directory,'sized.png')
+            plot.png_plot(sized_name,width="600 px",height="300px",
+                          resolution=300,font_size=8.0,typeface='sans')
+
+            check('the plot is written in the asked-for size',
+                  os.path.getsize(sized_name) > 0)
+
+            # The width in pixels stands in the header of a PNG file, in
+            # the four bytes following the signature and the header of the
+            # IHDR chunk. The frame of the plot is written with a tight
+            # bounding box, so the width is close to but not exactly the
+            # one asked for.
+            png_data  = open(sized_name,'rb').read(24)
+            png_width = int.from_bytes(png_data[16:20],'big')
+
+            check('the image carries about the asked-for number of pixels',
+                  300 < png_width < 900)
+
+            # The typeface reaches the drawing, so the same plot set in two
+            # faces does not give the same image.
+            serif_name = os.path.join(directory,'serif.png')
+            sans_name  = os.path.join(directory,'sans.png')
+
+            plot.png_plot(serif_name,resolution=cls.DRAFT_RESOLUTION,
+                          typeface='serif')
+            plot.png_plot(sans_name,resolution=cls.DRAFT_RESOLUTION,
+                          typeface='sans-serif')
+
+            check('the typeface reaches the written image',
+                  not open(serif_name,'rb').read()
+                      == open(sans_name,'rb').read())
 
             # The other kinds of plots are written as well.
             barrier_name = os.path.join(directory,'barrier.pdf')

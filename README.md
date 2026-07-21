@@ -276,12 +276,30 @@ exchange operator.
   an italic *E* over cm⁻¹ and as μ<sub>B</sub>.
 
   The plot is written with `png_plot(filename)`, `tiff_plot(filename)` and
-  `pdf_plot(filename)`. All of them take `size_ratio` and `resolution`
-  (600 dpi by default, high enough for a publication), `draft_copy=True`
-  to write a low-resolution copy beside the image for manuscript drafts,
-  and `overwrite=False`, which makes writing over an existing file an
-  error. PNG files are written with compression level 9 and TIFF files
+  `pdf_plot(filename)`. All of them take `resolution` (600 dpi by default,
+  high enough for a publication), `draft_copy=True` to write a
+  low-resolution copy beside the image for manuscript drafts, and
+  `overwrite=False`, which makes writing over an existing file an error.
+  PNG files are written with compression level 9 and TIFF files
   LZW-compressed by default; `compression` overrides both.
+
+  The size of the image is given with `width` and `height`. A plain number
+  is read as centimetres and a string carries its own unit, e.g.
+  `width="8.5 cm"`, `width="3.35in"` or `width="1000px"`, with or without
+  a space before the unit; the units are `cm`, `mm`, `in` and `px`, and a
+  size in pixels is turned into a physical one through `resolution`. Given
+  together the two fix the image and `size_ratio` is not used; one alone is
+  completed by `size_ratio` (4/3 by default). The image comes out in
+  exactly the size that was asked for, so a figure meant for the column of
+  a journal can be written in the width it is to be printed in.
+
+  `font_size` sets the main font size in points, i.e. the numbers along the
+  axes, with the axis labels one point larger and the legends one point
+  smaller. `typeface` sets the face the plot is set in: `'serif'` (the
+  default, the usual choice of a publication in the field), `'sans-serif'`
+  and `'monospace'`, the names `'sans'` and `'mono'` being accepted as
+  well. The mathematical fonts follow the face, so the symbols match the
+  text around them.
 
   Two compatible plots are combined with `+`, e.g. two χ*T* curves into
   one plot field or two level structures side by side. The criteria are

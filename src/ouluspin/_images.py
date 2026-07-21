@@ -81,18 +81,12 @@ MAX_ARROW_WIDTH = 4.0
 ARROW_THRESHOLD = 1.0e-3
 
 # The appearance of the plots. The plots are meant for the figures of a
-# publication, so a serif font is used and the frame and the ticks are
-# drawn heavy enough to stay visible when the figure is scaled down to the
-# width of a column.
+# publication, so the frame and the ticks are drawn heavy enough to stay
+# visible when the figure is scaled down to the width of a column. The
+# settings that follow the typeface and the font size are added to these by
+# plot_style().
 PLOT_STYLE = {
-    'font.family':         'serif',
-    'font.serif':          ['STIXGeneral','DejaVu Serif'],
-    'mathtext.fontset':    'stix',
-    'font.size':           11.0,
     'axes.linewidth':      1.2,
-    'axes.labelsize':      12.0,
-    'xtick.labelsize':     11.0,
-    'ytick.labelsize':     11.0,
     'xtick.direction':     'in',
     'ytick.direction':     'in',
     'xtick.top':           True,
@@ -101,10 +95,121 @@ PLOT_STYLE = {
     'ytick.major.width':   1.2,
     'xtick.major.size':    5.0,
     'ytick.major.size':    5.0,
-    'legend.fontsize':     10.0,
-    'savefig.bbox':        'tight',
-    'savefig.pad_inches':  0.05,
 }
+
+# The margin left around the drawing when the axes are fitted into the
+# figure, in units of the font size. The figure is laid out from the inside
+# instead of being cropped to its content after it has been drawn, so that
+# the image carries exactly the size that was asked for; a figure meant for
+# the column of a publication has to come out in the width it is to be
+# printed in.
+LAYOUT_PAD = 0.4
+
+# The main font size of the plots, in points, and the typeface used when
+# none is asked for. A serif face is the usual choice of the figures of a
+# publication in the field.
+DEFAULT_FONT_SIZE = 11.0
+DEFAULT_TYPEFACE  = 'serif'
+
+# The typefaces the plots can be set in. Each is a family of Matplotlib
+# together with the list of the faces tried within it and the set of the
+# mathematical fonts that goes with it, so that the symbols set in
+# mathematical text match the ordinary text around them. The lists end in
+# the faces that Matplotlib carries with itself, so that a plot is drawn in
+# the asked-for style even on a system with no fonts of its own installed.
+TYPEFACES = {
+    'serif':      {'family':  'serif',
+                   'faces':   ['STIXGeneral','Times New Roman','DejaVu Serif'],
+                   'mathtext':'stix'},
+    'sans-serif': {'family':  'sans-serif',
+                   'faces':   ['Helvetica','Arial','DejaVu Sans'],
+                   'mathtext':'stixsans'},
+    'monospace':  {'family':  'monospace',
+                   'faces':   ['Courier New','DejaVu Sans Mono'],
+                   'mathtext':'dejavusans'},
+}
+
+# The names the typefaces are also known by, so that the obvious spellings
+# of a face are all accepted.
+TYPEFACE_ALIASES = {
+    'sans':        'sans-serif',
+    'sans serif':  'sans-serif',
+    'sansserif':   'sans-serif',
+    'sans_serif':  'sans-serif',
+    'mono':        'monospace',
+    'typewriter':  'monospace',
+    'roman':       'serif',
+}
+
+
+def typeface_names():
+    """Return the names of the typefaces the plots can be set in."""
+    return sorted(TYPEFACES.keys())
+
+
+def typeface_known(typeface):
+    """Return whether the given name names a typeface the plots can be set
+    in, the names being read regardless of the case and of the aliases.
+    """
+    name = str(typeface).strip().lower()
+
+    return TYPEFACE_ALIASES.get(name,name) in TYPEFACES
+
+
+def typeface_style(typeface):
+    """Return the settings of Matplotlib that set the plot in the given
+    typeface. A RuntimeError is raised for a face that is not recognized.
+    """
+    name = str(typeface).strip().lower()
+    name = TYPEFACE_ALIASES.get(name,name)
+
+    if not name in TYPEFACES:
+        raise RuntimeError("Unknown typeface: " + str(typeface) + ". "
+                           "The recognized typefaces are "
+                           + ", ".join(typeface_names()) + ".")
+
+    face = TYPEFACES[name]
+
+    return {'font.family':      face['family'],
+            'font.' + face['family']: list(face['faces']),
+            'mathtext.fontset': face['mathtext']}
+
+
+def font_size_style(font_size):
+    """Return the settings of Matplotlib that set the font sizes of the
+    plot. The given size is the main font size, i.e. the one of the numbers
+    along the axes; the labels of the axes are set one point larger and the
+    legends one point smaller, which is the proportion the plots have
+    always been drawn in.
+    """
+    size = float(font_size)
+
+    if size <= 0.0:
+        raise RuntimeError("The font size must be positive.")
+
+    return {'font.size':       size,
+            'axes.labelsize':  size + 1.0,
+            'axes.titlesize':  size + 1.0,
+            'xtick.labelsize': size,
+            'ytick.labelsize': size,
+            'legend.fontsize': max(1.0,size - 1.0)}
+
+
+def plot_style(font_size=None, typeface=None):
+    """Return the settings of Matplotlib the plot is drawn in, i.e. the
+    fixed appearance of the library together with the settings that follow
+    the given font size and typeface.
+    """
+    if font_size is None:
+        font_size = DEFAULT_FONT_SIZE
+    if typeface is None:
+        typeface = DEFAULT_TYPEFACE
+
+    style = dict(PLOT_STYLE)
+    style.update(typeface_style(typeface))
+    style.update(font_size_style(font_size))
+
+    return style
 
 
 def pyplot():
@@ -380,9 +485,11 @@ def draw_effective_barrier(axes, content):
 
 def write_plot(content, filename, file_format,
                width=6.0,
-               size_ratio=4.0/3.0,
+               height=4.5,
                resolution=600,
-               compression=None):
+               compression=None,
+               font_size=None,
+               typeface=None):
     """Draw the plot and write it on disk.
 
     Arguments
@@ -398,31 +505,38 @@ def write_plot(content, filename, file_format,
     ------------------
     width : float
         The width of the image in inches. Default is 6.0.
-    size_ratio : float
-        The ratio of the width of the image to its height. Default is 4/3.
+    height : float
+        The height of the image in inches. Default is 4.5, i.e. the width
+        divided by the ratio 4/3.
     resolution : int
         The resolution of the image in dots per inch. Default is 600.
     compression : int or str or None
         The compression of the raster formats, i.e. the compression level
         of a PNG file or the name of the compression of a TIFF file.
         Default is None, in which case the default of the format is used.
+    font_size : float or None
+        The main font size of the plot in points. Default is None, in which
+        case the default size of the module is used.
+    typeface : str or None
+        The typeface the plot is set in (see typeface_names). Default is
+        None, in which case the default typeface of the module is used.
     """
     plt = pyplot()
 
     # The appearance is set for this figure alone, so that the settings of
     # a user who draws plots of their own beside the library are not
     # changed by writing a plot.
-    with plt.rc_context(rc=PLOT_STYLE):
+    with plt.rc_context(rc=plot_style(font_size,typeface)):
         return __write_figure(plt,content,filename,file_format,
-                              width,size_ratio,resolution,compression)
+                              width,height,resolution,compression)
 
 
 def __write_figure(plt, content, filename, file_format,
-                   width, size_ratio, resolution, compression):
+                   width, height, resolution, compression):
     """Draw the figure and save it. Called by write_plot within the
     appearance settings of the library.
     """
-    figure, axes = plt.subplots(figsize=(width,width/size_ratio))
+    figure, axes = plt.subplots(figsize=(width,height))
 
     try:
         if content['plot_type'] == 'effective_barrier':
@@ -443,7 +557,7 @@ def __write_figure(plt, content, filename, file_format,
         if content['legend']:
             axes.legend(frameon=False)
 
-        figure.tight_layout()
+        figure.tight_layout(pad=LAYOUT_PAD)
 
         save_arguments = {'dpi': resolution, 'format': format_name(file_format)}
         pil_arguments  = pil_options(file_format,compression)
