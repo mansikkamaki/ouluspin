@@ -20,7 +20,600 @@ from ouluspin._fortran import fortran_utils as fu
 from ouluspin import _debug as output
 
 
-class ElectronExchangeSystem:
+class PseudoSpinSystem:
+    """The common base of the pseudospin systems of the library.
+
+    The class collects the analysis that depends only on the pseudospin
+    Hamiltonian and the pseudospin magnetic moment operator of a system,
+    and not on where those operators came from. Both
+    ElectronExchangeSystem, which builds them from tensors given by the
+    user, and AbInitioElectronExchangeSystem, which extracts them from the
+    results of a quantum-chemical calculation, inherit from it, so that the
+    two are analysed through one and the same interface.
+
+    The class is not instantiated on its own and takes no constructor
+    arguments of its own; it is a base class only. A subclass must provide
+    the following, which the methods here use:
+
+    basis : PseudoSpinBasis
+        The basis of the pseudospin system.
+    units : EnergyUnitSystem
+        The energy unit system.
+    kramers_system : boolean
+        Whether the system is a Kramers (True) or a non-Kramers (False)
+        system; see the kramers_system_from_basis class method.
+    input_frame_rotation : Rotation
+        The rotation from the input coordinate frame to the frame the
+        pseudospin operators are expressed in, so that the magnetic axes
+        can be reported with respect to the input frame. The identity when
+        the operators are already expressed in the input frame.
+    hamiltonian_operator() : PseudoSpinOperator
+        The pseudospin Hamiltonian of the system, carrying its matrix
+        representation and its eigenvalues.
+    magnetic_moment_operator() : PseudoSpinVectorOperator
+        The pseudospin magnetic moment operator of the system, carrying the
+        matrix representations of its three Cartesian components.
+
+    A subclass is free to store these operators or to construct them on
+    request; the methods here call the two methods and do not assume
+    either. Since the class cannot be instantiated by itself it carries no
+    run_tests class method of its own, and its methods are covered by the
+    run_tests of both subclasses.
+
+    Public methods
+    --------------
+    kramers_system_from_basis(basis) : boolean
+        Static method returning whether the system spanned by the given
+        basis is a Kramers system.
+    static_transition_magnetic_moments(n_states=None) : StaticTransitionMagneticMoments
+        Construct and return the StaticTransitionMagneticMoments instance
+        of the system.
+    static_magnetic_properties(grid,...) : StaticMagneticProperties
+        Construct and return the StaticMagneticProperties instance of the
+        system, i.e. the powder magnetization and susceptibility.
+    quantization_axis() : array of float64
+        Return the quantization axis of the system, i.e. the z axis of the
+        frame the pseudospin operators and the spherical tensors are
+        written in, as a unit vector in the input coordinate frame.
+    ground_doublet_magnetic_axis() : array of float64
+        Return the principal magnetic axis of the ground
+        Kramers/Ising/pseudo doublet as a unit vector in the input
+        coordinate frame.
+    pseudospin_doublet(states) : PseudoSpinDoublet
+        Construct and return the PseudoSpinDoublet instance of the doublet
+        spanned by the two pseudospin eigenstates given in the states
+        tuple, with the g-tensor reported in the input axis frame.
+    pseudospin_doublet_index_list(pseudospin) : list of tuple of int
+        Return the states of the pseudospin multiplet grouped into
+        doublets, as the list of index tuples the doublet methods take.
+    pseudospin_doublet_list(doublets) : list
+        Construct and return the PseudoSpinDoublet instances of one or
+        several pseudospin doublets.
+    pseudospin_doublet_summary_table(doublets) : ResultTable
+        Construct and return a compound table of one or several pseudospin
+        doublets with one line per doublet.
+    pseudospin_doublet_table(doublets) : str
+        Construct and return a tabulation string of one or several
+        pseudospin doublets, each tabulated in full.
+
+    Private methods
+    ---------------
+    __error(message)
+        Report an error and stop, naming the class of the instance.
+    """
+
+    @staticmethod
+    def kramers_system_from_basis(basis):
+        """Return whether the pseudospin system spanned by the given basis
+        is a Kramers system, i.e. one whose states are degenerate in pairs
+        by Kramers' theorem in the absence of a magnetic field.
+
+        A system is a Kramers system when it holds an odd number of
+        electrons, i.e. when its TOTAL spin is half-integer. The total spin
+        of a system of several sites is half-integer exactly when the sum
+        of the pseudospins of the sites is half-integer, i.e. when the sum
+        of the pseudospins in the doubled form used throughout the library
+        is odd.
+
+        Note that the parity of the DIMENSION of the basis does not decide
+        this for a system of more than one site: the dimension is the
+        product of the dimensions of the sites, so it is even as soon as a
+        single site carries a half-integer pseudospin. Two S = 1/2 sites,
+        for instance, span a basis of four states but hold two electrons,
+        so the system is not a Kramers system at all: its states are a
+        singlet and a triplet, none of them degenerate by Kramers'
+        theorem. For a system of one site the two criteria agree.
+
+        Arguments
+        ---------
+        basis : PseudoSpinBasis
+            The basis of the pseudospin system.
+        """
+        return sum(basis.pseudospin_list) % 2 == 1
+
+
+    def __error(self, message):
+        """Report an error and stop. The message names the class of the
+        instance rather than this base class, so that the error points at
+        the system the user actually built.
+        """
+        print("ERROR in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("Error: " + line)
+        print("Error termination.")
+        sys.exit(1)
+
+
+    def static_transition_magnetic_moments(self, n_states=None):
+        """Construct and return the StaticTransitionMagneticMoments
+        instance of the system, evaluated from the pseudospin Hamiltonian
+        and magnetic moment operators of this system.
+
+        Optional arguments
+        ------------------
+        n_states : int
+            The number of lowest eigenstates included. The default is
+            None, in which case all pseudospin states are included.
+        """
+        if n_states is None:
+            n_states = self.basis.n_basis
+
+        return properties.StaticTransitionMagneticMoments(self.magnetic_moment_operator(),
+                                                          self.hamiltonian_operator(),
+                                                          n_states,
+                                                          self.units)
+
+
+    def static_magnetic_properties(self, grid,
+                                   susceptibility=None,
+                                   magnetization=None,
+                                   sample_orientation='powder',
+                                   n=1.0,
+                                   print_output=None):
+        """Construct and return the StaticMagneticProperties instance of
+        the system, i.e. the powder magnetization and magnetic
+        susceptibility evaluated from the pseudospin Hamiltonian and the
+        pseudospin magnetic moment operator of this system.
+
+        The properties are NOT calculated here; the returned instance
+        calculates them when its calculate_magnetization and
+        calculate_susceptibility methods are called, so that a system can
+        be handed the specifications of several calculations in turn.
+
+        Both properties are obtained by integrating over the orientations
+        of the molecule, so both are invariant under the choice of the
+        coordinate frame the operators of the system are expressed in: the
+        frame does not enter the result, and a system whose quantization
+        axis was chosen one way gives the same magnetization and
+        susceptibility as the same system quantized another way.
+
+        Arguments
+        ---------
+        grid : ZCWGrid or LebedevLaikovGrid or SimpleGrid
+            The grid used for the powder integration. See
+            StaticMagneticProperties for which grid suits which property
+            and for the recommended grid qualities.
+
+        Optional arguments
+        ------------------
+        susceptibility : StaticMagneticSusceptibility or None
+            The specification of the susceptibility calculation. Default is
+            None, in which case the susceptibility is not calculated.
+        magnetization : IsothermalStaticMagnetization or None
+            The specification of the magnetization calculation. Default is
+            None, in which case the magnetization is not calculated.
+        sample_orientation : str
+            How the orientations of the individual molecules are taken into
+            account, i.e. 'powder' (default), 'free' or 'maximal'. See
+            StaticMagneticProperties.
+        n : float
+            The number of magnetic subsystems per mole of the sample.
+            Default is 1.0.
+        print_output : boolean or None
+            Whether the calculation prints output. Default is None, in
+            which case the setting of this system is used.
+        """
+        if print_output is None:
+            print_output = getattr(self,'print_output',False)
+
+        return properties.StaticMagneticProperties(
+            self.hamiltonian_operator(),
+            self.magnetic_moment_operator(),
+            grid,
+            self.units,
+            susceptibility=susceptibility,
+            magnetization=magnetization,
+            print_output=print_output,
+            sample_orientation=sample_orientation,
+            n=n)
+
+
+    def __oriented_unit_vector(self, vector, name):
+        """Return the given vector normalized to unit length and given the
+        sign convention of the axes of the library.
+
+        An axis has no direction, so the sign of a vector representing one
+        is arbitrary. It is fixed here by making the FIRST component that
+        is not numerically zero positive, so that the same system always
+        gives the same vector.
+
+        The sign is deliberately not decided by the component of the
+        largest magnitude: the largest magnitude is often shared by two
+        components (an axis such as (1,1,-1)/sqrt(3) is nothing unusual for
+        a molecule of a high symmetry), the tie is then broken by the
+        floating-point noise of the last digits, and the same axis can come
+        out with either sign. Which component comes first is settled before
+        any arithmetic, so only a component that is numerically zero needs
+        a tolerance, and the components are scanned in order until one is
+        clearly nonzero.
+
+        The name of the axis is used in the error message raised for a
+        vector that cannot be normalized.
+        """
+        axis = np.array(vector, dtype=np.float64)
+        norm = la.norm(axis)
+
+        if norm <= 0.0:
+            self.__error("The " + name + " of the system came out as a vector of\n"
+                         "zero length and cannot be normalized.")
+
+        axis = axis/norm
+
+        for i in range(0,3):
+            if abs(axis[i]) > 1.0e-8:
+                if axis[i] < 0.0:
+                    axis = -axis
+                break
+
+        return axis
+
+
+    def quantization_axis(self):
+        """Return the quantization axis of the system as a unit vector
+        expressed in the input coordinate frame, i.e. in the frame the
+        operators of the system were given or calculated in.
+
+        The quantization axis is the axis the pseudospin is quantized
+        along: the z axis of the frame the pseudospin operators and the
+        spherical tensors of the system are written in. It is the axis of
+        the projection M that labels the pseudospin basis states, and the
+        component q of every Iwahara--Chibotaru operator O_{k,q} is counted
+        with respect to it.
+
+        How the axis was chosen is recorded in the tensor_frame attribute
+        of the system. When it was chosen as the principal magnetic axis of
+        the ground Kramers/Ising/pseudo doublet, which is the usual choice,
+        this method and ground_doublet_magnetic_axis return the same
+        vector; when it was chosen otherwise, the two differ.
+
+        The axis is read off the input_frame_rotation attribute, which
+        relates the input frame to the frame of the pseudospin operators by
+        v_current = R * v_input. The axis that appears as the z axis in the
+        current frame is therefore R^T applied to the unit vector along z,
+        i.e. the third row of R.
+
+        The axis has no direction, so the sign of the vector is fixed by
+        making the first component that is not numerically zero positive.
+        """
+        rotation_matrix = np.array(self.input_frame_rotation.rotation_matrix,
+                                   dtype=np.float64)
+
+        return self.__oriented_unit_vector(rotation_matrix[2,:],
+                                           'quantization axis')
+
+
+    def ground_doublet_magnetic_axis(self):
+        """Return the principal magnetic axis of the ground
+        Kramers/Ising/pseudo doublet of the system as a unit vector
+        expressed in the input coordinate frame, i.e. in the frame the
+        operators of the system were given or calculated in.
+
+        The principal (main) magnetic axis of a doublet is the principal
+        axis of its g-tensor belonging to the largest principal g value,
+        which is the convention of the field for the strongly axial
+        doublets of a single-molecule magnet. The axis is evaluated here
+        from the g-tensor of the doublet spanned by the two lowest
+        pseudospin eigenstates, expressed in the input frame, i.e. from
+        pseudospin_doublet((0,1)).input_frame_g_tensor.
+
+        This is the axis the pseudospin is quantized along whenever the
+        quantization axis was chosen as the principal magnetic axis of the
+        ground doublet; see quantization_axis, which returns the axis that
+        was actually used.
+
+        The definition of the main axis is only meaningful for a doublet
+        that is axial enough for the largest principal g value to stand
+        alone. For a planar or nearly isotropic doublet, whose two largest
+        principal g values are (nearly) degenerate, the axis is fixed by
+        numerical noise in the diagonalization and carries no physical
+        meaning; this is a property of the definition and not of the
+        evaluation.
+
+        The axis has no direction, so the sign of the vector is fixed by
+        making the first component that is not numerically zero positive.
+        """
+        g_tensor = self.pseudospin_doublet((0,1)).input_frame_g_tensor
+
+        g_values     = np.array(g_tensor.eigenvalues, dtype=np.float64)
+        eigenvectors = np.array(g_tensor.eigenvectors, dtype=np.float64)
+
+        main_axis = eigenvectors[:,int(np.argmax(np.abs(g_values)))]
+
+        return self.__oriented_unit_vector(main_axis,
+                                           'ground doublet magnetic axis')
+
+
+    def pseudospin_doublet(self, states):
+        """Construct and return the PseudoSpinDoublet instance of the
+        doublet spanned by the two pseudospin eigenstates whose indices are
+        given in the states tuple.
+
+        The coordinate frames are tracked: the doublet is constructed from
+        the pseudospin operators of this system (expressed in the frame of
+        the tensor_frame attribute) and receives the input_frame_rotation
+        of this system, so that its g-tensor is reported in the input axis
+        frame following the convention of the library. The Kramers
+        classification of the system (the kramers_system attribute) is
+        passed on to the doublet.
+
+        Arguments
+        ---------
+        states : tuple of int
+            The indices of the two pseudospin eigenstates spanning the
+            doublet.
+        """
+        return properties.PseudoSpinDoublet\
+                         .from_pseudospin_operator(states,
+                                                   self.hamiltonian_operator(),
+                                                   self.magnetic_moment_operator(),
+                                                   self.units,
+                                                   kramers=self.kramers_system,
+                                                   rotation=self.input_frame_rotation)
+
+
+    def pseudospin_doublet_index_list(self, pseudospin):
+        """Return the states of the pseudospin multiplet grouped into
+        doublets, as the list of index tuples the doublet methods take.
+
+        The pseudospin is given in the doubled form used throughout the
+        library, i.e. 15 for S = 15/2, and the multiplet holds pseudospin
+        + 1 states. How they group depends on the parity of the multiplet:
+
+        A Kramers system, i.e. one of a half-integer pseudospin (an odd
+        value of the argument), holds an even number of states, which are
+        exactly degenerate in pairs by Kramers' theorem. The states are
+        grouped into the doublets (0,1), (2,3), ... and every state
+        belongs to one.
+
+        A non-Kramers system, i.e. one of an integer pseudospin (an even
+        value of the argument), holds an odd number of states, so one of
+        them is left over as a singlet. The doublets of such a system are
+        quasi-doublets, i.e. pairs of states split by the tunneling gap,
+        so the states are paired to leave the smallest total splitting
+        within the pairs: the singlet is placed where it costs the least.
+        It is returned as a tuple of a single index, which the
+        pseudospin_doublet_list method turns into the energy of the state.
+
+        The singlet cannot be the ground state, since the principal
+        magnetic axes of the system are those of the ground doublet and a
+        singlet carries none; that case is an error.
+
+        Arguments
+        ---------
+        pseudospin : int
+            The pseudospin of the multiplet in the doubled form, i.e. 15
+            for the J = 15/2 multiplet of a Dy(III) ion. The multiplet must
+            fit into the basis of the system.
+        """
+        n_states = pseudospin + 1
+
+        if n_states > self.basis.n_basis:
+            self.__error("The pseudospin " + str(pseudospin) + " needs "
+                         + str(n_states) + " states,\n"
+                         "but the basis of the system holds only "
+                         + str(self.basis.n_basis) + ".")
+
+        # A half-integer pseudospin, i.e. a Kramers system: the states are
+        # degenerate in pairs and every state belongs to a doublet.
+        if pseudospin % 2 == 1:
+            return [(2*i,2*i+1) for i in range(0,n_states//2)]
+
+        # An integer pseudospin, i.e. a non-Kramers system. The states are
+        # ordered by energy, so the pairs are formed of neighbouring states
+        # and the singlet splits the multiplet in two: the states below it
+        # pair among themselves and so do the states above it. The singlet
+        # therefore stands at an even position, and the one leaving the
+        # smallest total splitting within the pairs is chosen.
+        energy_list = self.hamiltonian_operator().eigenvalues[:n_states]
+
+        def pairing_cost(singlet_index):
+            """The total splitting within the pairs when the state of the
+            given index is left as the singlet.
+            """
+            cost = 0.0
+
+            for i in range(0,singlet_index,2):
+                cost += abs(energy_list[i+1] - energy_list[i])
+
+            for i in range(singlet_index+1,n_states-1,2):
+                cost += abs(energy_list[i+1] - energy_list[i])
+
+            return cost
+
+        singlet_index = 0
+        smallest_cost = None
+
+        for candidate in range(0,n_states,2):
+            cost = pairing_cost(candidate)
+
+            if smallest_cost is None or cost < smallest_cost:
+                smallest_cost = cost
+                singlet_index = candidate
+
+        if singlet_index == 0:
+            self.__error("The ground state of the non-Kramers multiplet is a singlet,\n"
+                         "i.e. it is not part of a quasi-doublet. The principal\n"
+                         "magnetic axes of the system are those of the ground\n"
+                         "doublet, so they cannot be determined for such a system.")
+
+        index_list = [(i,i+1) for i in range(0,singlet_index,2)]
+        index_list.append((singlet_index,))
+        index_list.extend([(i,i+1) for i in range(singlet_index+1,n_states-1,2)])
+
+        return index_list
+
+
+    def pseudospin_doublet_list(self, doublets):
+        """Construct and return a list of PseudoSpinDoublet instances of the
+        listed pseudospin doublets of the system. The doublets are
+        constructed with the pseudospin_doublet method, i.e. with the full
+        frame bookkeeping of the system, but the Hamiltonian and the
+        magnetic moment operators are constructed only once for the whole
+        list.
+
+        Doublets that have already been constructed are passed through
+        unchanged, so that a list obtained from this method can be given
+        to the tabulation methods without constructing the doublets a
+        second time.
+
+        Arguments
+        ---------
+        doublets : tuple of int, PseudoSpinDoublet or list
+            Either a single tuple with the indices of the two pseudospin
+            eigenstates spanning a doublet, a single already constructed
+            PseudoSpinDoublet, or a list of either, in which case all the
+            listed doublets are constructed.
+        """
+        if isinstance(doublets,(tuple,properties.PseudoSpinDoublet)):
+            doublet_list = [doublets]
+        elif isinstance(doublets,list):
+            doublet_list = doublets
+        else:
+            self.__error("The doublets argument must be a tuple of two state indices,\n"
+                         "a PseudoSpinDoublet, or a list of either.")
+
+        # The operators are needed only when a doublet still has to be
+        # constructed.
+        hamiltonian_operator     = None
+        magnetic_moment_operator = None
+
+        instance_list = []
+
+        for states in doublet_list:
+            if isinstance(states,properties.PseudoSpinDoublet):
+                instance_list.append(states)
+                continue
+
+            # The energy of a singlet state, i.e. the result of an earlier
+            # call of this method, is passed through as it is, so that a
+            # list obtained from this method can be handed to the
+            # tabulation methods as it stands.
+            if isinstance(states,(int,float,np.integer,np.floating)):
+                instance_list.append(float(states))
+                continue
+
+            if hamiltonian_operator is None:
+                hamiltonian_operator     = self.hamiltonian_operator()
+                magnetic_moment_operator = self.magnetic_moment_operator()
+
+            # A singlet state of a non-Kramers system is given as a tuple
+            # of one index. It spans no doublet, so there is nothing to
+            # construct; its energy is passed on, which is what the
+            # tabulation methods take for a state that is not part of a
+            # doublet.
+            if len(states) == 1:
+                instance_list.append(
+                    float(hamiltonian_operator.eigenvalues[states[0]]))
+                continue
+
+            if not len(states) == 2:
+                self.__error("Each doublet must be given as a tuple of two state indices,\n"
+                             "or a singlet as a tuple of one index.")
+
+            instance_list.append(
+                properties.PseudoSpinDoublet
+                          .from_pseudospin_operator(tuple(states),
+                                                    hamiltonian_operator,
+                                                    magnetic_moment_operator,
+                                                    self.units,
+                                                    kramers=self.kramers_system,
+                                                    rotation=self.input_frame_rotation))
+
+        return instance_list
+
+
+    def pseudospin_doublet_summary_table(self, doublets):
+        """Construct and return a compound table of the listed pseudospin
+        doublets of the system as an instance of ResultTable, with one line
+        per doublet. The table is built by the
+        pseudospin_doublet_compound_table class method of ResultTable; see
+        it for the structure of the table, which differs between Kramers
+        and non-Kramers systems.
+
+        Arguments
+        ---------
+        doublets : tuple of int, PseudoSpinDoublet or list
+            The doublets to tabulate, in any of the forms accepted by the
+            pseudospin_doublet_list method. Passing a list of already
+            constructed doublets avoids constructing them twice when both
+            tabulation methods are used.
+        """
+        return result_table.ResultTable\
+                           .pseudospin_doublet_compound_table(
+                               self.pseudospin_doublet_list(doublets),
+                               self.units)
+
+
+    def pseudospin_doublet_table(self, doublets):
+        """Construct and return a human-readable tabulation string of one
+        or several pseudospin doublets of the system, with the properties
+        of each doublet tabulated separately and in full.
+
+        Each tabulated doublet is constructed with the pseudospin_doublet
+        method: the g-tensors and their principal magnetic axes are given
+        in the INPUT axis frame, i.e. the frame the operators of the system
+        were given or calculated in, which is also stated explicitly in the
+        output. The energy of each
+        doublet is the eigenvalue of the lower of its two states. A
+        compact one-line-per-doublet summary of the same doublets is given
+        by the pseudospin_doublet_summary_table method.
+
+        Arguments
+        ---------
+        doublets : tuple of int, PseudoSpinDoublet or list
+            The doublets to tabulate, in any of the forms accepted by the
+            pseudospin_doublet_list method. Passing a list of already
+            constructed doublets avoids constructing them twice when both
+            tabulation methods are used.
+        """
+        tmp_str  = "    PSEUDOSPIN DOUBLETS\n\n"
+        tmp_str += "    The g-tensors and their principal magnetic axes are given in the\n"
+        tmp_str += "    input axis frame.\n\n"
+
+        for doublet in self.pseudospin_doublet_list(doublets):
+            # A singlet state of a non-Kramers system spans no doublet and
+            # has none of the properties tabulated below, so only its
+            # energy is stated.
+            if not isinstance(doublet,properties.PseudoSpinDoublet):
+                tmp_str += "    SINGLET,   E = {0:12.4f} {1}\n\n"\
+                           .format(float(doublet),self.units.energy_unit_str)
+                continue
+
+            if doublet.state_energies is None:
+                energy_str = "not available"
+            else:
+                energy_str = "{0:12.4f} {1}".format(min(doublet.state_energies),
+                                                    self.units.energy_unit_str)
+
+            tmp_str += "    DOUBLET ({0},{1}),   E = {2}\n\n"\
+                       .format(doublet.states[0],doublet.states[1],energy_str)
+            tmp_str += str(doublet)
+            tmp_str += "\n"
+
+        return tmp_str
+
+
+class ElectronExchangeSystem(PseudoSpinSystem):
     """A class to set up the different exchange and Zeeman interactions in a general
     pseudospin system consisting of multiple spin sites. Each described by a Zeeman
     and zero-field splitting (ZFS) or crystal-field (CF) tensors given in the general
@@ -108,23 +701,75 @@ class ElectronExchangeSystem:
         The number of spin sites in the system.
     basis : PseudoSpinBasis
         The basis used in construction of the operators.
+    n_basis : int
+        The dimension of the basis, i.e. the number of states of the system.
+    kramers_system : boolean
+        Whether the system is a Kramers (True) or a non-Kramers (False)
+        system, i.e. whether the sum of the pseudospins of the sites is
+        half-integer; see PseudoSpinSystem.kramers_system_from_basis.
+    hamiltonian_tensor_list : list of IwaharaChibotaruSphericalTensor
+        The tensors of the Hamiltonian, each a copy of the tensor given in
+        the corresponding tuple inflated to the sites of the whole system.
+        The tensors of the caller are not modified.
+    magnetic_moment_tensor_list : list of MixedCartesianIwaharaChibotaruSphericalTensor
+        The tensors of the magnetic moment, each the tensor given in the
+        corresponding tuple multiplied by -mu_B and inflated to the sites
+        of the whole system.
+    tensor_frame : str
+        The coordinate frame label attached to the tensors of the system,
+        i.e. 'input axis frame': the tensors are used in the frame they
+        were given in and no rotation is applied to them.
+    input_frame_rotation : Rotation
+        The rotation from the input coordinate frame to the frame of the
+        operators of the system, i.e. the identity for this class, since
+        the operators are used in the frame the tensors were given in. It
+        is carried so that the doublet methods inherited from
+        PseudoSpinSystem report the magnetic axes in that frame.
     energy_print_threshold : float or None
         The energy threshold above which eigenvalues are omitted from the
         printed output; see the corresponding optional argument.
 
     Private methods
     ---------------
-    __construct_hamiltonian(B)
-        Construct the Hamiltonian consisting of Zeeman, ZFS and exchange terms
-        using the field vector given as an argument, and store it as an attribute.
-        The Hamiltonian is diagonalized upon construction.
+    __construct_hamiltonian()
+        Construct the field-independent terms of the Hamiltonian, i.e. the ZFS
+        and exchange terms, and store the operator as an attribute. The
+        Hamiltonian is diagonalized upon construction.
     __construct_magnetic_moment_operators()
         Construct the operators of the three Cartesian components of the magnetic
         moment and store them as attributes. Construction of the operator matrices
         is requested upon their construction but they are not diagonalized.
+    __inflation_list(tensor_tuple) : list of int
+        Return the inflation list of a tensor tuple and check its site
+        indices.
+    __system_error(message)
+        Report an error in the construction of the system and stop.
 
     Public methods
     --------------
+    hamiltonian_operator() : PseudoSpinOperator
+        Return the field-free pseudospin Hamiltonian of the system.
+    magnetic_moment_operator() : PseudoSpinVectorOperator
+        Return the pseudospin magnetic moment operator of the system.
+    hamiltonian_tensor() : IwaharaChibotaruSphericalTensor
+        Construct and return the irreducible tensor representation of the
+        whole field-free Hamiltonian, i.e. the sum of the given tensors.
+    magnetic_moment_tensor() : MixedCartesianIwaharaChibotaruSphericalTensor
+        Construct and return the mixed Cartesian--spherical tensor
+        representation of the whole magnetic moment operator.
+
+    The analysis that depends only on the pseudospin operators is inherited
+    from PseudoSpinSystem: static_transition_magnetic_moments,
+    static_magnetic_properties, quantization_axis,
+    ground_doublet_magnetic_axis, pseudospin_doublet,
+    pseudospin_doublet_index_list, pseudospin_doublet_list,
+    pseudospin_doublet_summary_table and pseudospin_doublet_table. See the
+    base class for their documentation. The tensors of this class are used
+    in the frame they were given in, so the quantization axis is by
+    construction the z axis of that frame; the principal magnetic axis of
+    the ground doublet, which is where the pseudospin would be quantized in
+    the conventional frame, is returned by ground_doublet_magnetic_axis and
+    is in general a different vector.
 
     Class methods
     -------------
@@ -132,6 +777,50 @@ class ElectronExchangeSystem:
         Initiate the class and run a set of internal tests. Return True if all
         tests passed.
     """
+
+    def __inflation_list(self, tensor_tuple):
+        """Return the inflation list of the given tensor tuple, i.e. the
+        list of ones and zeros that inflate_dimension takes: a one at the
+        position of every site the tensor acts on and a zero at every other
+        site of the system.
+
+        The site indices of the tuple are checked here, since an index that
+        does not name a site of the system, or a site named twice, would
+        otherwise produce an inflation list of the wrong number of ones and
+        fail inside the tensor with a message that does not say which
+        tensor was at fault.
+        """
+        site_list = list(tensor_tuple[1:])
+
+        for site in site_list:
+            if not isinstance(site,(int,np.integer)):
+                self.__system_error("The site indices of a tensor tuple must be integers,\n"
+                                    "but one of them is " + repr(site) + ".")
+
+            if site < 0 or site >= self.n_sites:
+                self.__system_error("A tensor tuple names the site " + str(site)
+                                    + ", but the system holds\n"
+                                    "the sites 0 to " + str(self.n_sites - 1) + ".")
+
+        if not len(set(site_list)) == len(site_list):
+            self.__system_error("A tensor tuple names the same site more than once: "
+                                + str(site_list) + ".")
+
+        if len(site_list) == 0:
+            self.__system_error("A tensor tuple names no site at all. Each tuple must\n"
+                                "hold the tensor followed by the sites it acts on.")
+
+        return [1 if i in site_list else 0 for i in range(0,self.n_sites)]
+
+
+    def __system_error(self, message):
+        """Report an error in the construction of the system and stop."""
+        print("ERROR in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("Error: " + line)
+        print("Error termination.")
+        sys.exit(1)
+
 
     def __construct_hamiltonian(self):
         """Construct the field-independent terms of the Hamiltonian and store them
@@ -147,21 +836,26 @@ class ElectronExchangeSystem:
 
         for tensor_tuple in self.hamiltonian_tensor_tuple_list:
 
-            inflation_list = []
-            for i in range(0,self.n_sites):
-                if i in tensor_tuple:
-                    inflation_list.append(1)
-                else:
-                    inflation_list.append(0)
+            inflation_list = self.__inflation_list(tensor_tuple)
 
-            tensor = tensor_tuple[0]
+            # inflate_dimension modifies the tensor in place, so the tensor
+            # of the caller is copied before it is inflated. Inflating it
+            # directly would leave the caller holding a tensor of a grown
+            # number of sites: the same tuple list could then not be used
+            # to construct a second system (the second inflation fails on
+            # the number of sites), and one tensor object could not be
+            # reused for several site tuples.
+            tensor = deepcopy(tensor_tuple[0])
             tensor.inflate_dimension(inflation_list)
+            tensor.frame = self.tensor_frame
             tensor_list.append(tensor)
-                        
+
+        self.hamiltonian_tensor_list = tensor_list
+
         # Operator matrix
         if self.print_output:
             print("      Operator matrix ...")
-                
+
         self.hamiltonian = pseudospin_operators\
             .PseudoSpinOperator(self.basis, tensor_list, self.units,
                                 eigenvalue_print_limit=self.energy_print_threshold,
@@ -193,19 +887,20 @@ class ElectronExchangeSystem:
         mixed_tensor_list = []
 
         for tensor_tuple in self.magnetic_moment_tensor_tuple_list:
-            inflation_list = []
-            for i in range(0,self.n_sites):
-                if i in tensor_tuple:
-                    inflation_list.append(1)
-                else:
-                    inflation_list.append(0)
+            inflation_list = self.__inflation_list(tensor_tuple)
 
             # The multiplication returns a new instance, so the inflation does
             # not modify the mixed tensor stored in the tuple list.
             mixed_tensor = -self.units.mu_B * tensor_tuple[0]
             mixed_tensor.inflate_dimension(inflation_list)
 
+            mixed_tensor.frame = self.tensor_frame
+            for component in mixed_tensor.component_list:
+                component.frame = self.tensor_frame
+
             mixed_tensor_list.append(mixed_tensor)
+
+        self.magnetic_moment_tensor_list = mixed_tensor_list
 
         if self.print_output:
             print("      Operator matrix ...")
@@ -223,11 +918,123 @@ class ElectronExchangeSystem:
             print()
 
     
+    def hamiltonian_operator(self):
+        """Return the field-free pseudospin Hamiltonian of the system as a
+        PseudoSpinOperator instance, carrying its matrix representation and
+        its eigenvalues, the lowest of which is zero.
+
+        The operator is built once when the system is constructed and is
+        the hamiltonian attribute; this method returns it so that the
+        system offers the same interface as
+        AbInitioElectronExchangeSystem, which constructs its operators on
+        request. The returned instance is the one the system holds, not a
+        copy, so it must not be modified in place.
+        """
+        return self.hamiltonian
+
+
+    def magnetic_moment_operator(self):
+        """Return the pseudospin magnetic moment operator of the system as
+        a PseudoSpinVectorOperator instance, carrying the matrix
+        representations of its three Cartesian components.
+
+        The operator already includes the factor -mu_B, i.e. it is the
+        magnetic moment itself and not the g-tensor that was given to the
+        constructor. It is built once when the system is constructed and is
+        the magnetic_moment attribute; this method returns it so that the
+        system offers the same interface as
+        AbInitioElectronExchangeSystem. The returned instance is the one
+        the system holds, not a copy, so it must not be modified in place.
+        """
+        return self.magnetic_moment
+
+
+    def hamiltonian_tensor(self):
+        """Construct and return the irreducible tensor representation of
+        the whole field-free Hamiltonian of the system, i.e. the sum of the
+        tensors given to the constructor, each inflated to the sites of the
+        whole system.
+
+        The tensors given to the constructor describe the system one term
+        at a time, each acting on its own sites; the tensor returned here
+        is the single tensor of the whole system, which is what the ITO
+        table and the tensor algebra of the library take. The returned
+        tensor is a new instance and carries the coordinate frame label of
+        the system (see the tensor_frame attribute), so it can be modified
+        freely without affecting the system.
+        """
+        total_tensor = deepcopy(self.hamiltonian_tensor_list[0])
+
+        for tensor in self.hamiltonian_tensor_list[1:]:
+            total_tensor = total_tensor + tensor
+
+        total_tensor.frame = self.tensor_frame
+
+        return total_tensor
+
+
+    def magnetic_moment_tensor(self):
+        """Construct and return the mixed Cartesian--spherical tensor
+        representation of the whole magnetic moment operator of the system,
+        i.e. the sum of the magnetic moment tensors given to the
+        constructor, each multiplied by -mu_B and inflated to the sites of
+        the whole system.
+
+        NOTE that the tensors given to the constructor imply the g-tensor,
+        whereas the tensor returned here is the magnetic moment itself: the
+        multiplication by the negative Bohr magneton has been carried out,
+        as it has in the magnetic_moment attribute.
+
+        The returned tensor is a new instance and carries the coordinate
+        frame label of the system, so it can be modified freely without
+        affecting the system.
+        """
+        total_tensor = deepcopy(self.magnetic_moment_tensor_list[0])
+
+        for tensor in self.magnetic_moment_tensor_list[1:]:
+            total_tensor = total_tensor + tensor
+
+        total_tensor.frame = self.tensor_frame
+        for component in total_tensor.component_list:
+            component.frame = self.tensor_frame
+
+        return total_tensor
+
+
     def __repr__(self):
-        # Note that this class does not itself store susceptibility or
-        # magnetization instances; they may be attached by external code.
-        """Return a human-readable summary of the system."""
-        tmp_str = ""
+        """Return a human-readable summary of the system: what the system
+        holds and the lowest of its energy levels.
+
+        A susceptibility or a magnetization attached to the instance by
+        external code is appended, as it has always been; this class does
+        not itself store such instances.
+        """
+        tmp_str  = "    ELECTRON EXCHANGE SYSTEM\n\n"
+        tmp_str += "    Number of spin sites          {0:12d}\n".format(self.n_sites)
+        tmp_str += "    Pseudospins (2S)              " \
+                   + " ".join(str(pseudospin)
+                              for pseudospin in self.pseudospin_list) + "\n"
+        tmp_str += "    Dimension of the basis        {0:12d}\n".format(self.n_basis)
+        tmp_str += "    Kramers system                {0:>12}\n".format(
+            "yes" if self.kramers_system else "no")
+        tmp_str += "    Coordinate frame              " + self.tensor_frame + "\n\n"
+
+        # The lowest levels, which say what kind of a system it is at a
+        # glance. The whole spectrum is available through the Hamiltonian
+        # operator itself, so only the beginning of it is stated here.
+        n_printed = min(8,len(self.hamiltonian.eigenvalues))
+
+        tmp_str += "    Lowest energy levels / " + self.units.energy_unit_str + "\n"
+        for i in range(0,n_printed):
+            tmp_str += "      {0:4d}  {1:16.6f}\n".format(
+                i,float(self.hamiltonian.eigenvalues[i]))
+
+        if n_printed < len(self.hamiltonian.eigenvalues):
+            tmp_str += "      ... {0} further states\n".format(
+                len(self.hamiltonian.eigenvalues) - n_printed)
+
+        tmp_str += "\n"
+
         if getattr(self,'susceptibility',None) is not None:
             tmp_str += str(self.susceptibility)
         if getattr(self,'magnetization',None) is not None:
@@ -251,11 +1058,32 @@ class ElectronExchangeSystem:
 
         self.n_sites = len(self.pseudospin_list)
 
+        if self.n_sites == 0:
+            self.__system_error("The pseudospin list is empty, so the system holds no\n"
+                                "spin sites at all.")
+
+        # All tensors of this class are given in one common coordinate
+        # frame and no rotation is applied to them, so the frame of the
+        # operators IS the input frame and the rotation relating the two is
+        # the identity. The doublet methods inherited from PseudoSpinSystem
+        # therefore report the magnetic axes in the frame the tensors were
+        # given in, which is what the user of this class expects.
+        self.tensor_frame         = 'input axis frame'
+        self.input_frame_rotation = tensors.Rotation(np.identity(3, dtype=np.float64))
+
         tikk = time.time()
         if self.print_output:
             print(self.units)
             print("    Constructing basis ...")
         self.basis = pseudospin_operators.PseudoSpinBasis(self.pseudospin_list)
+
+        self.n_basis = self.basis.n_basis
+
+        # Whether the system is a Kramers system, i.e. one of an odd
+        # number of electrons, is decided by the parity of the SUM of the
+        # pseudospins and not by the parity of the dimension of the basis;
+        # see kramers_system_from_basis.
+        self.kramers_system = self.kramers_system_from_basis(self.basis)
 
         tokk = time.time()
         if self.print_output:
@@ -325,12 +1153,193 @@ class ElectronExchangeSystem:
         check('magnitude of the total magnetic moment',
               abs(max(abs(mu_z_eigenvalues)) - 2.0*tmp_units.mu_B) < 1.0e-10)
 
+        # The tensors of the caller must not be modified by the
+        # construction: the tensors are inflated to the sites of the whole
+        # system, which grows their number of sites, so the system has to
+        # work on copies. Otherwise the same tuple list could not be used
+        # twice, which is what the second construction below checks.
+        one_site_zfs = tensors.IwaharaChibotaruSphericalTensor\
+                              .from_one_site_cartesian_operator(-5.0,'z',1)
+        zfs_rank_list = deepcopy(one_site_zfs.rank_list)
+
+        tuple_list = [(heisenberg,0,1),(one_site_zfs,0)]
+
+        first_system  = cls([1,1],tuple_list,moment_tensor_tuple_list,tmp_units)
+
+        check('the tensors of the caller are not inflated in place',
+              one_site_zfs.rank_list == zfs_rank_list)
+
+        second_system = cls([1,1],tuple_list,moment_tensor_tuple_list,tmp_units)
+
+        check('the same tuple list can be used to build a second system',
+              np.allclose(first_system.hamiltonian.eigenvalues,
+                          second_system.hamiltonian.eigenvalues))
+
+        # The site indices of a tensor tuple are checked. The errors stop
+        # the interpreter, so only the accepted case is exercised here.
+        check('a tensor tuple naming every site of the system is accepted',
+              first_system.n_sites == 2)
+
+        # Whether the system is a Kramers system follows the sum of the
+        # pseudospins and not the parity of the dimension of the basis. Two
+        # S = 1/2 sites span four states but hold two electrons, so the
+        # system is NOT a Kramers system; its states are a singlet and a
+        # triplet.
+        check('two S = 1/2 sites do not make a Kramers system',
+              (system.n_basis == 4) and (system.kramers_system is False))
+        check('one half-integer site makes a Kramers system',
+              cls.kramers_system_from_basis(
+                  pseudospin_operators.PseudoSpinBasis([3])) is True)
+        check('three half-integer sites make a Kramers system',
+              cls.kramers_system_from_basis(
+                  pseudospin_operators.PseudoSpinBasis([1,1,1])) is True)
+        check('a half-integer and an integer site make a Kramers system',
+              cls.kramers_system_from_basis(
+                  pseudospin_operators.PseudoSpinBasis([1,2])) is True)
+        check('two integer sites do not make a Kramers system',
+              cls.kramers_system_from_basis(
+                  pseudospin_operators.PseudoSpinBasis([2,2])) is False)
+
+        # The operators of the system are returned by the methods that the
+        # base class calls, so that the two systems of the module offer the
+        # same interface.
+        check('hamiltonian_operator returns the Hamiltonian of the system',
+              system.hamiltonian_operator() is system.hamiltonian)
+        check('magnetic_moment_operator returns the moment of the system',
+              system.magnetic_moment_operator() is system.magnetic_moment)
+
+        # The tensors of the whole system, i.e. the sum of the tensors of
+        # the tuples. The Hamiltonian tensor must reproduce the operator
+        # matrix of the system.
+        total_tensor = system.hamiltonian_tensor()
+
+        check('the Hamiltonian tensor carries the frame of the system',
+              total_tensor.frame == system.tensor_frame)
+        check('the Hamiltonian tensor reproduces the operator matrix',
+              np.allclose(debug_output.operator_matrix_from_tensor(total_tensor,
+                                                                   [1,1]),
+                          system.hamiltonian.matrix))
+
+        # The tensor is a new instance, so purging it must not disturb the
+        # system.
+        total_tensor.purge_ranks()
+        check('the returned tensor is independent of the system',
+              np.allclose(system.hamiltonian.eigenvalues,[0.0,J,J,J]))
+
+        moment_tensor_total = system.magnetic_moment_tensor()
+        moment_operator     = pseudospin_operators\
+                              .PseudoSpinVectorOperator(system.basis,
+                                                        [moment_tensor_total],
+                                                        tmp_units,
+                                                        diagonalize_operator_matrix=False,
+                                                        store_operator_matrix=True,
+                                                        translate_eigenvalues=False)
+
+        check('the magnetic moment tensor reproduces the moment operators',
+              all(np.allclose(moment_operator.operator_list[alpha].matrix,
+                              moment_matrix_list[alpha],atol=1.0e-10)
+                  for alpha in range(0,3)))
+
+        # The analysis inherited from PseudoSpinSystem. The tensors are
+        # used in the frame they were given in, so the quantization axis is
+        # the z axis of that frame.
+        check('the quantization axis is the z axis of the given frame',
+              np.allclose(system.quantization_axis(),[0.0,0.0,1.0]))
+
+        # An axial single-site system, i.e. an S = 3/2 ion of an easy-axis
+        # zero-field splitting H = D*S_z^2 with D < 0, whose ground doublet
+        # |+-3/2> has its magnetic axis along z and which IS a Kramers
+        # system. The ZFS is given as the Cartesian tensor diag(0,0,D); the
+        # from_one_site_cartesian_operator constructor would give a term
+        # linear in S_z, i.e. an axial Zeeman splitting, whose states are
+        # equally spaced and form no doublets at all.
+        axial_zfs = tensors.IwaharaChibotaruSphericalTensor\
+                           .from_one_site_cartesian_tensor(
+                               np.diag([0.0,0.0,-10.0]),3)
+        axial_moment = tensors.MixedCartesianIwaharaChibotaruSphericalTensor\
+                              .from_one_site_isotropic_operator(2.0,3)
+
+        axial_system = cls([3],[(axial_zfs,0)],[(axial_moment,0)],tmp_units)
+
+        check('the axial system is a Kramers system',
+              axial_system.kramers_system is True)
+        check('the ground doublet magnetic axis of an axial system is z',
+              np.allclose(axial_system.ground_doublet_magnetic_axis(),
+                          [0.0,0.0,1.0],atol=1.0e-8))
+        check('the quantization axis agrees with it in the given frame',
+              np.allclose(axial_system.quantization_axis(),
+                          axial_system.ground_doublet_magnetic_axis(),
+                          atol=1.0e-8))
+
+        # The ground doublet |+-3/2> of the axial system has g = (0,0,6).
+        ground_doublet = axial_system.pseudospin_doublet((0,1))
+        check('the ground doublet g values are those of the |+-3/2> doublet',
+              np.allclose(sorted(abs(value) for value
+                                 in ground_doublet.g_tensor.eigenvalues),
+                          [0.0,0.0,6.0],atol=1.0e-6))
+
+        # The grouping of the multiplet into doublets and the tabulations.
+        index_list = axial_system.pseudospin_doublet_index_list(3)
+        check('the multiplet is grouped into doublets',
+              index_list == [(0,1),(2,3)])
+
+        doublet_list = axial_system.pseudospin_doublet_list(index_list)
+        check('the doublets are constructed from the index list',
+              len(doublet_list) == 2)
+        check('an already constructed doublet is passed through',
+              axial_system.pseudospin_doublet_list(doublet_list)[0]
+              is doublet_list[0])
+
+        summary_table = axial_system.pseudospin_doublet_summary_table(doublet_list)
+        check('the compound doublet table is built',
+              len(summary_table.string_table()) > 0)
+        check('the full doublet tabulation is built',
+              "DOUBLET" in axial_system.pseudospin_doublet_table(doublet_list))
+
+        # The transition magnetic moments of the axial system: the states
+        # are |+-3/2> and |+-1/2> with <mu_z> = -+ g*mu_B*M.
+        transition_moments = axial_system.static_transition_magnetic_moments()
+        check('the transition magnetic moments are evaluated',
+              np.allclose(np.sort(np.abs(transition_moments.expectation_values)),
+                          [1.0,1.0,3.0,3.0]))
+
+        # The static magnetic properties, i.e. the main purpose of the
+        # class. The method is inherited from PseudoSpinSystem, so it works
+        # on the operators of the system whichever way they were built. The
+        # chi*T product of an isolated S = 1/2 with g = 2 is
+        # 0.375 cm^3 K mol^-1 at any temperature.
+        from ouluspin import integration
+
+        free_spin = cls([1],[(tensors.IwaharaChibotaruSphericalTensor
+                                     .from_one_site_cartesian_operator(0.0,'z',1),0)],
+                        [(tensors.MixedCartesianIwaharaChibotaruSphericalTensor
+                                 .from_one_site_isotropic_operator(2.0,1),0)],
+                        tmp_units)
+
+        susceptibility = properties.StaticMagneticSusceptibility([2.0,10.0])
+        magnetic_properties = free_spin.static_magnetic_properties(
+            integration.LebedevLaikovGrid(7),susceptibility=susceptibility)
+
+        magnetic_properties.calculate_susceptibility()
+
+        # The susceptibility is evaluated from the magnetization in a
+        # small but finite field, so the chiT product deviates from the
+        # exact value by a little more than the numerical accuracy.
+        check('static_magnetic_properties evaluates the chiT product',
+              np.allclose(magnetic_properties.susceptibility.susceptibility,
+                          [0.375,0.375],atol=1.0e-3))
+
+        # The representation states what the system holds.
+        check('the representation states the content of the system',
+              ("Number of spin sites" in repr(system))
+              and ("Lowest energy levels" in repr(system)))
+
         return debug_output.test_summary('ElectronExchangeSystem',
                                          result_list,print_output)
 
 
 
-class AbInitioElectronExchangeSystem:
+class AbInitioElectronExchangeSystem(PseudoSpinSystem):
     """A class to construct a pseudospin system from a the results of a
     quantum chemical calculation. The class takes as arguments matrix
     representations of the Hamiltonian, the Cartesian components of
@@ -414,7 +1423,8 @@ class AbInitioElectronExchangeSystem:
         The energy unit system.
     kramers_system : boolean
         Whether this system is a Kramers (True) or a non-Kramers (False)
-        system.
+        system, i.e. whether the sum of the pseudospins of the sites is
+        half-integer; see PseudoSpinSystem.kramers_system_from_basis.
     reorder_list : list of int
         The pseudospin states are chosen as the eigenstates of the
         magnetic moment operator. By default it is assumed that the
@@ -480,40 +1490,17 @@ class AbInitioElectronExchangeSystem:
     magnetic_moment_operator() : PseudoSpinVectorOperator
         Construct and return the pseudospin magnetic moment operator of
         the system as a PseudoSpinVectorOperator instance.
-    static_transition_magnetic_moments(n_states=None) : StaticTransitionMagneticMoments
-        Construct and return the StaticTransitionMagneticMoments instance
-        of the system.
-    quantization_axis() : array of float64
-        Return the quantization axis of the system, i.e. the z axis of the
-        frame the pseudospin operators and the spherical tensors are
-        written in, as a unit vector in the input coordinate frame.
-    ground_doublet_magnetic_axis() : array of float64
-        Return the principal magnetic axis of the ground
-        Kramers/Ising/pseudo doublet as a unit vector in the input
-        coordinate frame. This is the quantization axis unless an explicit
-        R was given to the constructor.
-    pseudospin_doublet(states) : PseudoSpinDoublet
-        Construct and return the PseudoSpinDoublet instance of the doublet
-        spanned by the two pseudospin eigenstates given in the states
-        tuple, with the g-tensor reported in the input axis frame.
-    pseudospin_doublet_index_list(pseudospin) : list of tuple of int
-        Return the states of the pseudospin multiplet grouped into
-        doublets, as the list of index tuples the doublet methods take. A
-        non-Kramers multiplet is left with one singlet, which is placed
-        where it leaves the smallest splitting within the doublets.
-    pseudospin_doublet_list(doublets) : list
-        Construct and return the PseudoSpinDoublet instances of one or
-        several pseudospin doublets, with the g-tensors reported in the
-        input axis frame. Already constructed doublets are passed through
-        unchanged, and a singlet given as a tuple of one index is turned
-        into the energy of that state.
-    pseudospin_doublet_summary_table(doublets) : ResultTable
-        Construct and return a compound table of one or several pseudospin
-        doublets with one line per doublet.
-    pseudospin_doublet_table(doublets) : str
-        Construct and return a tabulation string of one or several
-        pseudospin doublets, each tabulated in full, with the g-tensor axes
-        given in the input axis frame.
+
+    The analysis that depends only on the pseudospin operators is inherited
+    from PseudoSpinSystem: static_transition_magnetic_moments,
+    static_magnetic_properties, quantization_axis,
+    ground_doublet_magnetic_axis, pseudospin_doublet,
+    pseudospin_doublet_index_list, pseudospin_doublet_list,
+    pseudospin_doublet_summary_table and pseudospin_doublet_table. See the
+    base class for their documentation. With no explicit R given to the
+    constructor the quantization axis is the principal magnetic axis of the
+    ground doublet, so quantization_axis and ground_doublet_magnetic_axis
+    then return the same vector; with an explicit R they differ.
 
     Class methods
     -------------
@@ -542,7 +1529,7 @@ class AbInitioElectronExchangeSystem:
         matrices as they were given to the class, i.e. in the basis of
         the Hamiltonian eigenstates.
     __oriented_unit_vector(vector,name) : array of float64
-        Static helper normalizing a vector representing an axis to unit
+        Normalize a vector representing an axis to unit
         length and giving it the sign convention of the library, i.e.
         making the first component that is not numerically zero positive.
     __calculate_reorder_matrix() : array of float64
@@ -888,435 +1875,6 @@ class AbInitioElectronExchangeSystem:
                                                              translate_eigenvalues=False)
 
 
-    def static_transition_magnetic_moments(self, n_states=None):
-        """Construct and return the StaticTransitionMagneticMoments
-        instance of the system, evaluated from the pseudospin Hamiltonian
-        and magnetic moment operators of this system.
-
-        Optional arguments
-        ------------------
-        n_states : int
-            The number of lowest eigenstates included. The default is
-            None, in which case all pseudospin states are included.
-        """
-        if n_states is None:
-            n_states = self.n_basis
-
-        return properties.StaticTransitionMagneticMoments(self.magnetic_moment_operator(),
-                                                          self.hamiltonian_operator(),
-                                                          n_states,
-                                                          self.units)
-
-
-    @staticmethod
-    def __oriented_unit_vector(vector, name):
-        """Return the given vector normalized to unit length and given the
-        sign convention of the axes of the library.
-
-        An axis has no direction, so the sign of a vector representing one
-        is arbitrary. It is fixed here by making the FIRST component that
-        is not numerically zero positive, so that the same system always
-        gives the same vector.
-
-        The sign is deliberately not decided by the component of the
-        largest magnitude: the largest magnitude is often shared by two
-        components (an axis such as (1,1,-1)/sqrt(3) is nothing unusual for
-        a molecule of a high symmetry), the tie is then broken by the
-        floating-point noise of the last digits, and the same axis can come
-        out with either sign. Which component comes first is settled before
-        any arithmetic, so only a component that is numerically zero needs
-        a tolerance, and the components are scanned in order until one is
-        clearly nonzero.
-
-        The name of the axis is used in the error message raised for a
-        vector that cannot be normalized.
-        """
-        axis = np.array(vector, dtype=np.float64)
-        norm = la.norm(axis)
-
-        if norm <= 0.0:
-            print("ERROR in AbInitioElectronExchangeSystem.")
-            print("Error: The " + name + " of the system came out as a vector of")
-            print("       zero length and cannot be normalized.")
-            print("Error termination.")
-            sys.exit(1)
-
-        axis = axis/norm
-
-        for i in range(0,3):
-            if abs(axis[i]) > 1.0e-8:
-                if axis[i] < 0.0:
-                    axis = -axis
-                break
-
-        return axis
-
-
-    def quantization_axis(self):
-        """Return the quantization axis of the system as a unit vector
-        expressed in the input coordinate frame, i.e. in the frame of the
-        operator matrices given to the constructor.
-
-        The quantization axis is the axis the pseudospin is quantized
-        along: the z axis of the frame the pseudospin operators and the
-        spherical tensors returned by hamiltonian_tensor and
-        magnetic_moment_tensor are written in. It is the axis of the
-        projection M that labels the pseudospin basis states, and the
-        component q of every Iwahara--Chibotaru operator O_{k,q} is counted
-        with respect to it.
-
-        How the axis was chosen is recorded in the tensor_frame attribute.
-        By default it is the principal magnetic axis of the ground
-        Kramers/Ising/pseudo doublet, i.e. the vector returned by
-        ground_doublet_magnetic_axis, which is the usual choice. When an
-        explicit R was passed to the constructor, the axis is the one the
-        user chose instead and need not be a magnetic axis of the system at
-        all; the two methods then return different vectors.
-
-        The axis is read off the input_frame_rotation attribute, which
-        relates the input frame to the frame of the pseudospin operators by
-        v_current = R * v_input. The axis that appears as the z axis in the
-        current frame is therefore R^T applied to the unit vector along z,
-        i.e. the third row of R. Reading the axis from this attribute rather
-        than from R keeps it correct for the systems whose operators were
-        already rotated before the construction, e.g. those built by
-        from_average_aniso_data.
-
-        The axis has no direction, so the sign of the vector is fixed by
-        making the first component that is not numerically zero positive.
-        """
-        rotation_matrix = np.array(self.input_frame_rotation.rotation_matrix,
-                                   dtype=np.float64)
-
-        return self.__oriented_unit_vector(rotation_matrix[2,:],
-                                           'quantization axis')
-
-
-    def ground_doublet_magnetic_axis(self):
-        """Return the principal magnetic axis of the ground
-        Kramers/Ising/pseudo doublet of the system as a unit vector
-        expressed in the input coordinate frame, i.e. in the frame of the
-        operator matrices given to the constructor.
-
-        The principal (main) magnetic axis of a doublet is the principal
-        axis of its g-tensor belonging to the largest principal g value,
-        which is the convention of the field for the strongly axial
-        doublets of a single-molecule magnet. The axis is evaluated here
-        from the g-tensor of the doublet spanned by the two lowest
-        pseudospin eigenstates, expressed in the input frame, i.e. from
-        pseudospin_doublet((0,1)).input_frame_g_tensor.
-
-        This is the axis the pseudospin is quantized along unless the
-        quantization axis was chosen otherwise: with no explicit R given to
-        the constructor the two coincide and this method and
-        quantization_axis return the same vector, whereas with an explicit
-        R the quantization axis is the one the user chose and the two
-        differ. The tensor_frame attribute records which of the two cases
-        holds.
-
-        The definition of the main axis is only meaningful for a doublet
-        that is axial enough for the largest principal g value to stand
-        alone. For a planar or nearly isotropic doublet, whose two largest
-        principal g values are (nearly) degenerate, the axis is fixed by
-        numerical noise in the diagonalization and carries no physical
-        meaning; this is a property of the definition and not of the
-        evaluation.
-
-        The axis has no direction, so the sign of the vector is fixed by
-        making the first component that is not numerically zero positive.
-        """
-        g_tensor = self.pseudospin_doublet((0,1)).input_frame_g_tensor
-
-        g_values     = np.array(g_tensor.eigenvalues, dtype=np.float64)
-        eigenvectors = np.array(g_tensor.eigenvectors, dtype=np.float64)
-
-        main_axis = eigenvectors[:,int(np.argmax(np.abs(g_values)))]
-
-        return self.__oriented_unit_vector(main_axis,
-                                           'ground doublet magnetic axis')
-
-
-    def pseudospin_doublet(self, states):
-        """Construct and return the PseudoSpinDoublet instance of the
-        doublet spanned by the two pseudospin eigenstates whose indices are
-        given in the states tuple.
-
-        The coordinate frames are tracked: the doublet is constructed from
-        the pseudospin operators of this system (expressed in the frame of
-        the tensor_frame attribute) and receives the input_frame_rotation
-        of this system, so that its g-tensor is reported in the input axis
-        frame following the convention of the library. The Kramers
-        classification of the system (the kramers_system attribute) is
-        passed on to the doublet.
-
-        Arguments
-        ---------
-        states : tuple of int
-            The indices of the two pseudospin eigenstates spanning the
-            doublet.
-        """
-        return properties.PseudoSpinDoublet\
-                         .from_pseudospin_operator(states,
-                                                   self.hamiltonian_operator(),
-                                                   self.magnetic_moment_operator(),
-                                                   self.units,
-                                                   kramers=self.kramers_system,
-                                                   rotation=self.input_frame_rotation)
-
-
-    def pseudospin_doublet_index_list(self, pseudospin):
-        """Return the states of the pseudospin multiplet grouped into
-        doublets, as the list of index tuples the doublet methods take.
-
-        The pseudospin is given in the doubled form used throughout the
-        library, i.e. 15 for S = 15/2, and the multiplet holds pseudospin
-        + 1 states. How they group depends on the parity of the multiplet:
-
-        A Kramers system, i.e. one of a half-integer pseudospin (an odd
-        value of the argument), holds an even number of states, which are
-        exactly degenerate in pairs by Kramers' theorem. The states are
-        grouped into the doublets (0,1), (2,3), ... and every state
-        belongs to one.
-
-        A non-Kramers system, i.e. one of an integer pseudospin (an even
-        value of the argument), holds an odd number of states, so one of
-        them is left over as a singlet. The doublets of such a system are
-        quasi-doublets, i.e. pairs of states split by the tunneling gap,
-        so the states are paired to leave the smallest total splitting
-        within the pairs: the singlet is placed where it costs the least.
-        It is returned as a tuple of a single index, which the
-        pseudospin_doublet_list method turns into the energy of the state.
-
-        The singlet cannot be the ground state, since the principal
-        magnetic axes of the system are those of the ground doublet and a
-        singlet carries none; that case is an error.
-
-        Arguments
-        ---------
-        pseudospin : int
-            The pseudospin of the multiplet in the doubled form, i.e. 15
-            for the J = 15/2 multiplet of a Dy(III) ion. The multiplet must
-            fit into the basis of the system.
-        """
-        n_states = pseudospin + 1
-
-        if n_states > self.basis.n_basis:
-            print("ERROR in AbInitioElectronExchangeSystem.")
-            print("Error: The pseudospin " + str(pseudospin) + " needs "
-                  + str(n_states) + " states,")
-            print("       but the basis of the system holds only "
-                  + str(self.basis.n_basis) + ".")
-            print("Error termination.")
-            sys.exit(1)
-
-        # A half-integer pseudospin, i.e. a Kramers system: the states are
-        # degenerate in pairs and every state belongs to a doublet.
-        if pseudospin % 2 == 1:
-            return [(2*i,2*i+1) for i in range(0,n_states//2)]
-
-        # An integer pseudospin, i.e. a non-Kramers system. The states are
-        # ordered by energy, so the pairs are formed of neighbouring states
-        # and the singlet splits the multiplet in two: the states below it
-        # pair among themselves and so do the states above it. The singlet
-        # therefore stands at an even position, and the one leaving the
-        # smallest total splitting within the pairs is chosen.
-        energy_list = self.hamiltonian_operator().eigenvalues[:n_states]
-
-        def pairing_cost(singlet_index):
-            """The total splitting within the pairs when the state of the
-            given index is left as the singlet.
-            """
-            cost = 0.0
-
-            for i in range(0,singlet_index,2):
-                cost += abs(energy_list[i+1] - energy_list[i])
-
-            for i in range(singlet_index+1,n_states-1,2):
-                cost += abs(energy_list[i+1] - energy_list[i])
-
-            return cost
-
-        singlet_index = 0
-        smallest_cost = None
-
-        for candidate in range(0,n_states,2):
-            cost = pairing_cost(candidate)
-
-            if smallest_cost is None or cost < smallest_cost:
-                smallest_cost = cost
-                singlet_index = candidate
-
-        if singlet_index == 0:
-            print("ERROR in AbInitioElectronExchangeSystem.")
-            print("Error: The ground state of the non-Kramers multiplet is a singlet,")
-            print("       i.e. it is not part of a quasi-doublet. The principal")
-            print("       magnetic axes of the system are those of the ground")
-            print("       doublet, so they cannot be determined for such a system.")
-            print("Error termination.")
-            sys.exit(1)
-
-        index_list = [(i,i+1) for i in range(0,singlet_index,2)]
-        index_list.append((singlet_index,))
-        index_list.extend([(i,i+1) for i in range(singlet_index+1,n_states-1,2)])
-
-        return index_list
-
-
-    def pseudospin_doublet_list(self, doublets):
-        """Construct and return a list of PseudoSpinDoublet instances of the
-        listed pseudospin doublets of the system. The doublets are
-        constructed with the pseudospin_doublet method, i.e. with the full
-        frame bookkeeping of the system, but the Hamiltonian and the
-        magnetic moment operators are constructed only once for the whole
-        list.
-
-        Doublets that have already been constructed are passed through
-        unchanged, so that a list obtained from this method can be given
-        to the tabulation methods without constructing the doublets a
-        second time.
-
-        Arguments
-        ---------
-        doublets : tuple of int, PseudoSpinDoublet or list
-            Either a single tuple with the indices of the two pseudospin
-            eigenstates spanning a doublet, a single already constructed
-            PseudoSpinDoublet, or a list of either, in which case all the
-            listed doublets are constructed.
-        """
-        if isinstance(doublets,(tuple,properties.PseudoSpinDoublet)):
-            doublet_list = [doublets]
-        elif isinstance(doublets,list):
-            doublet_list = doublets
-        else:
-            print("ERROR in AbInitioElectronExchangeSystem.")
-            print("Error: The doublets argument must be a tuple of two state indices,")
-            print("       a PseudoSpinDoublet, or a list of either.")
-            print("Error termination.")
-            sys.exit(1)
-
-        # The operators are needed only when a doublet still has to be
-        # constructed.
-        hamiltonian_operator     = None
-        magnetic_moment_operator = None
-
-        instance_list = []
-
-        for states in doublet_list:
-            if isinstance(states,properties.PseudoSpinDoublet):
-                instance_list.append(states)
-                continue
-
-            # The energy of a singlet state, i.e. the result of an earlier
-            # call of this method, is passed through as it is, so that a
-            # list obtained from this method can be handed to the
-            # tabulation methods as it stands.
-            if isinstance(states,(int,float,np.integer,np.floating)):
-                instance_list.append(float(states))
-                continue
-
-            if hamiltonian_operator is None:
-                hamiltonian_operator     = self.hamiltonian_operator()
-                magnetic_moment_operator = self.magnetic_moment_operator()
-
-            # A singlet state of a non-Kramers system is given as a tuple
-            # of one index. It spans no doublet, so there is nothing to
-            # construct; its energy is passed on, which is what the
-            # tabulation methods take for a state that is not part of a
-            # doublet.
-            if len(states) == 1:
-                instance_list.append(
-                    float(hamiltonian_operator.eigenvalues[states[0]]))
-                continue
-
-            if not len(states) == 2:
-                print("ERROR in AbInitioElectronExchangeSystem.")
-                print("Error: Each doublet must be given as a tuple of two state indices,")
-                print("       or a singlet as a tuple of one index.")
-                print("Error termination.")
-                sys.exit(1)
-
-            instance_list.append(
-                properties.PseudoSpinDoublet
-                          .from_pseudospin_operator(tuple(states),
-                                                    hamiltonian_operator,
-                                                    magnetic_moment_operator,
-                                                    self.units,
-                                                    kramers=self.kramers_system,
-                                                    rotation=self.input_frame_rotation))
-
-        return instance_list
-
-
-    def pseudospin_doublet_summary_table(self, doublets):
-        """Construct and return a compound table of the listed pseudospin
-        doublets of the system as an instance of ResultTable, with one line
-        per doublet. The table is built by the
-        pseudospin_doublet_compound_table class method of ResultTable; see
-        it for the structure of the table, which differs between Kramers
-        and non-Kramers systems.
-
-        Arguments
-        ---------
-        doublets : tuple of int, PseudoSpinDoublet or list
-            The doublets to tabulate, in any of the forms accepted by the
-            pseudospin_doublet_list method. Passing a list of already
-            constructed doublets avoids constructing them twice when both
-            tabulation methods are used.
-        """
-        return result_table.ResultTable\
-                           .pseudospin_doublet_compound_table(
-                               self.pseudospin_doublet_list(doublets),
-                               self.units)
-
-
-    def pseudospin_doublet_table(self, doublets):
-        """Construct and return a human-readable tabulation string of one
-        or several pseudospin doublets of the system, with the properties
-        of each doublet tabulated separately and in full.
-
-        Each tabulated doublet is constructed with the pseudospin_doublet
-        method: the g-tensors and their principal magnetic axes are given
-        in the INPUT axis frame (the frame of the ab initio data), which
-        is also stated explicitly in the output. The energy of each
-        doublet is the eigenvalue of the lower of its two states. A
-        compact one-line-per-doublet summary of the same doublets is given
-        by the pseudospin_doublet_summary_table method.
-
-        Arguments
-        ---------
-        doublets : tuple of int, PseudoSpinDoublet or list
-            The doublets to tabulate, in any of the forms accepted by the
-            pseudospin_doublet_list method. Passing a list of already
-            constructed doublets avoids constructing them twice when both
-            tabulation methods are used.
-        """
-        tmp_str  = "    PSEUDOSPIN DOUBLETS\n\n"
-        tmp_str += "    The g-tensors and their principal magnetic axes are given in the\n"
-        tmp_str += "    input axis frame.\n\n"
-
-        for doublet in self.pseudospin_doublet_list(doublets):
-            # A singlet state of a non-Kramers system spans no doublet and
-            # has none of the properties tabulated below, so only its
-            # energy is stated.
-            if not isinstance(doublet,properties.PseudoSpinDoublet):
-                tmp_str += "    SINGLET,   E = {0:12.4f} {1}\n\n"\
-                           .format(float(doublet),self.units.energy_unit_str)
-                continue
-
-            if doublet.state_energies is None:
-                energy_str = "not available"
-            else:
-                energy_str = "{0:12.4f} {1}".format(min(doublet.state_energies),
-                                                    self.units.energy_unit_str)
-
-            tmp_str += "    DOUBLET ({0},{1}),   E = {2}\n\n"\
-                       .format(doublet.states[0],doublet.states[1],energy_str)
-            tmp_str += str(doublet)
-            tmp_str += "\n"
-
-        return tmp_str
-
-    
     def __check_time_reversal(self):
         """Check whether the pseudospin operators have the correct
         properties under the operation of time reversal. Retun a boolean
@@ -1386,10 +1944,12 @@ class AbInitioElectronExchangeSystem:
         self.n_basis = self.basis.n_basis
         self.n_full_basis = self.hamiltonian.n_basis
 
-        if self.n_basis % 2 == 0:
-            self.kramers_system = True
-        else:
-            self.kramers_system = False
+        # Whether the system is a Kramers system, i.e. one of an odd
+        # number of electrons, is decided by the parity of the SUM of the
+        # pseudospins and not by the parity of the dimension of the basis;
+        # the two agree for a system of one site but not for a system of
+        # several. See kramers_system_from_basis.
+        self.kramers_system = self.kramers_system_from_basis(self.basis)
 
         if not self.magnetic_moment.n_basis == self.n_full_basis:
             print("ERROR in AbInitioElectronicPseudoSpinSystem.")
@@ -1654,7 +2214,7 @@ class AbInitioElectronExchangeSystem:
                                                              average_hamiltonian,
                                                              average_magnetic_moment,
                                                              units,
-                                                             kramers=(basis.n_basis % 2 == 0))
+                                                             kramers=cls.kramers_system_from_basis(basis))
 
         principal_rotation = la.inv(ground_doublet.g_tensor.eigenvectors)
         if la.det(principal_rotation) < 0.0:
@@ -2307,7 +2867,7 @@ class AbInitioElectronExchangeSystem:
             # symmetry is the case in point: it and its negative must give
             # the same vector.
             tie_axis = np.array([1.0,1.0,-1.0])/np.sqrt(3.0)
-            oriented = system_int._AbInitioElectronExchangeSystem__oriented_unit_vector
+            oriented = system_int._PseudoSpinSystem__oriented_unit_vector
 
             check('the sign convention is stable against tied components',
                   np.allclose(oriented(tie_axis,'axis'),
@@ -2338,6 +2898,65 @@ class AbInitioElectronExchangeSystem:
             check('static_transition_magnetic_moments expectation values',
                   np.allclose(np.sort(np.abs(transition_moments.expectation_values)),
                               [1.0,1.0,3.0,3.0]))
+
+            # The static magnetic properties, through the method inherited
+            # from PseudoSpinSystem. System A is an easy-axis S = 3/2 ion
+            # of the gap 2|D_f|; at a temperature well below the gap only
+            # the |+-3/2> doublet is populated, so the powder chi*T product
+            # approaches that of an Ising doublet of g = (0,0,2*g*3/2).
+            # The powder chi is the mean of the three principal ones, each
+            # proportional to the square of its g value, so the product of
+            # an effective S = 1/2 doublet is S(S+1)/24*sum(g_i^2), i.e.
+            # sum(g_i^2)/32, which is 36/32 = 1.125 cm^3 K mol^-1 here and
+            # the familiar 0.375 for an isotropic g = 2. At a temperature
+            # well above the gap the whole S = 3/2 multiplet is populated
+            # and the product approaches the spin-only value
+            # g^2*S*(S+1)/8 = 1.875 cm^3 K mol^-1.
+            from ouluspin import integration
+
+            spin_only = g**2*(3.0/2.0)*(3.0/2.0 + 1.0)/8.0
+            ising     = (2.0*g*3.0/2.0)**2/32.0
+
+            aniso_susceptibility = properties.StaticMagneticSusceptibility(
+                [0.5,3000.0])
+            aniso_properties = system_int.static_magnetic_properties(
+                integration.LebedevLaikovGrid(7),
+                susceptibility=aniso_susceptibility)
+            aniso_properties.calculate_susceptibility()
+
+            chi_T = aniso_properties.susceptibility.susceptibility
+
+            # The low-temperature value approaches the Ising limit but does
+            # not reach it exactly: the susceptibility is evaluated from
+            # the magnetization in a small but finite field, and a moment
+            # of g_z = 6 is already slightly saturated by it at this
+            # temperature, while the mixing with the excited doublet adds a
+            # small temperature-independent (van Vleck) contribution. The
+            # tolerance is set to accommodate both; it is still far tighter
+            # than the difference to any other doublet the system could
+            # have (an isotropic one would give 0.375).
+            check('static_magnetic_properties reaches the Ising limit at low T',
+                  abs(chi_T[0] - ising) < 0.05)
+            check('static_magnetic_properties reaches the spin-only limit at high T',
+                  abs(chi_T[1] - spin_only) < 5.0e-3)
+
+            # The properties are evaluated by integrating over the
+            # orientations of the molecule, so they must not depend on the
+            # frame the operators are expressed in. System G carries the
+            # same physics as A rotated by 90 degrees about y, and the
+            # quantization axes of the two differ accordingly.
+            rotated_susceptibility = properties.StaticMagneticSusceptibility(
+                [0.5,3000.0])
+            rotated_properties = cls.from_aniso_data(filename_a,3,tmp_units,
+                                                     R=np.identity(3))\
+                                    .static_magnetic_properties(
+                                        integration.LebedevLaikovGrid(7),
+                                        susceptibility=rotated_susceptibility)
+            rotated_properties.calculate_susceptibility()
+
+            check('the magnetic properties do not depend on the frame',
+                  np.allclose(rotated_properties.susceptibility.susceptibility,
+                              chi_T,atol=1.0e-6))
 
             # The doublet method must attach the frame bookkeeping: the
             # main magnetic axis of the ground doublet in the INPUT frame

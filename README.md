@@ -412,16 +412,26 @@ Readers for quantum-chemistry outputs. All readers take an
 
 ### `ouluspin.systems`
 
-- **`electron_exchange_system.ElectronExchangeSystem`** — a general
-  multi-site pseudospin system defined by crystal-field/ZFS and exchange
-  tensors in the Iwahara–Chibotaru form, used to evaluate magnetization
-  and susceptibility.
-- **`electron_exchange_system.AbInitioElectronExchangeSystem`** — builds a
-  pseudospin system directly from ab initio operator matrices: projects
-  the Hamiltonian and magnetic moment onto a pseudospin basis, and
-  provides ITO decompositions (crystal-field and exchange parameters),
-  transition magnetic moments and doublet g-tensor analyses. The
-  projection and the crystal-field analysis follow [1,7].
+- **`electron_exchange_system.PseudoSpinSystem`** — the common base of the
+  two system classes below. It carries the analysis that depends only on
+  the pseudospin Hamiltonian and magnetic moment operator of a system and
+  not on where those came from, so both systems are analysed through one
+  interface: `static_transition_magnetic_moments`, `quantization_axis`,
+  `ground_doublet_magnetic_axis`, `pseudospin_doublet`,
+  `pseudospin_doublet_index_list`, `pseudospin_doublet_list`,
+  `pseudospin_doublet_summary_table`, `pseudospin_doublet_table` and
+  `static_magnetic_properties(grid,…)`, which returns the
+  `StaticMagneticProperties` instance that evaluates the powder
+  magnetization and susceptibility. It is not instantiated on its own.
+
+  The static method
+  `kramers_system_from_basis(basis)` decides whether a system is a Kramers
+  system: the criterion is that the **sum** of the pseudospins is
+  half-integer, i.e. that the system holds an odd number of electrons — not
+  that the dimension of the basis is even, which is a different statement
+  as soon as there is more than one site (two S = 1/2 sites span four
+  states but hold two electrons).
+
   `pseudospin_doublet_index_list(pseudospin)` groups the states of a
   multiplet into the doublets the tabulation methods take. A Kramers
   multiplet splits evenly into doublets; a non-Kramers one holds an odd
@@ -430,19 +440,48 @@ Readers for quantum-chemistry outputs. All readers take an
   by its energy alone. A non-Kramers system whose ground state is that
   singlet is an error, since the principal magnetic axes of the system are
   those of the ground doublet.
-  Two axes of the system are available as unit vectors in the input
-  coordinate frame, i.e. the frame of the operator matrices the system was
-  built from. `quantization_axis()` returns the axis the pseudospin is
-  quantized along, i.e. the *z* axis of the frame the pseudospin operators
-  and the spherical tensors are written in.
-  `ground_doublet_magnetic_axis()` returns the principal magnetic axis of
-  the ground Kramers/Ising/pseudo doublet, i.e. the principal axis of its
-  g-tensor belonging to the largest principal g value. The quantization
-  axis is by default chosen as that magnetic axis, so the two agree; when
-  an explicit `R` is passed to the constructor the quantization axis is the
-  one the user chose and the two differ. Both axes are directionless, so
-  the sign is fixed by making the component of the largest magnitude
-  positive.
+
+  Two axes are available as unit vectors in the input coordinate frame,
+  i.e. the frame the operators of the system were given or calculated in.
+  `quantization_axis()` returns the axis the pseudospin is quantized along,
+  i.e. the *z* axis of the frame the pseudospin operators and the spherical
+  tensors are written in. `ground_doublet_magnetic_axis()` returns the
+  principal magnetic axis of the ground Kramers/Ising/pseudo doublet, i.e.
+  the principal axis of its g-tensor belonging to the largest principal g
+  value. When the quantization axis was chosen as that magnetic axis, which
+  is the usual choice, the two agree; otherwise they differ. Both axes are
+  directionless, so the sign is fixed by making the first component that is
+  not numerically zero positive.
+
+- **`electron_exchange_system.ElectronExchangeSystem`** — a general
+  multi-site pseudospin system defined by crystal-field/ZFS and exchange
+  tensors in the Iwahara–Chibotaru form, used to evaluate magnetization and
+  susceptibility. The tensors are given as tuples of a tensor and the sites
+  it acts on, all expressed in one common coordinate frame; note that the
+  magnetic moment tensors imply the g-tensor, the multiplication by −μ_B
+  being carried out by the class. Copies of the tensors are inflated to the
+  sites of the whole system, so the tensors of the caller are left
+  untouched and one tuple list can be used to build several systems.
+
+  `hamiltonian_operator()` and `magnetic_moment_operator()` return the
+  operators of the system, and `hamiltonian_tensor()` and
+  `magnetic_moment_tensor()` return the tensor of the whole system (the sum
+  of the given tensors, inflated). Everything listed under
+  `PseudoSpinSystem` is available as well; since the tensors are used in
+  the frame they were given in, the quantization axis is by construction
+  the *z* axis of that frame, while `ground_doublet_magnetic_axis()` says
+  where the easy axis actually lies in it.
+
+- **`electron_exchange_system.AbInitioElectronExchangeSystem`** — builds a
+  pseudospin system directly from ab initio operator matrices: projects
+  the Hamiltonian and magnetic moment onto a pseudospin basis, and
+  provides ITO decompositions (crystal-field and exchange parameters),
+  transition magnetic moments and doublet g-tensor analyses. The
+  projection and the crystal-field analysis follow [1,7]. Everything listed
+  under `PseudoSpinSystem` is available; with no explicit `R` given to the
+  constructor the quantization axis is the principal magnetic axis of the
+  ground doublet, so the two axis methods return the same vector, and with
+  an explicit `R` they differ.
 
 ### Fortran extension (`ouluspin._fortran`)
 

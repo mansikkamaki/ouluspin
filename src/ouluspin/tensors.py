@@ -460,11 +460,13 @@ class IwaharaChibotaruSphericalTensor:
         Rotate the tensor using the Rotation instance given as an argument.
     ITO_table(symbol="X",title=None,order_of_magnitude=0,rank_threshold=0.0,half_table=False) : ResultTable
         Return a listing of all ITO expansions parameters.
-    inflate_dimension(site_list) : IwaharaChibotaruSphericalTensor
-        Return a new Iwahara--Chibotaru spherical tensor that corresponds to a tensor
-        acting on a system with more spin sites than included in this tensor. The new tensor
-        operator will still only act on the same spin sites as this tensor, but it will
-        include identity operators acting on other sites.
+    inflate_dimension(site_list)
+        Inflate the tensor IN PLACE so that it corresponds to a tensor acting on a
+        system with more spin sites than included in this tensor. The tensor
+        operator will still only act on the same spin sites as before, but it will
+        include identity operators acting on other sites. The method modifies the
+        instance and returns nothing, so a tensor that is still needed in its
+        original form must be copied before it is inflated.
     reorder_spin_sites(reorder_list) : IwaharaChibotaruTensor
         Reorder the spin sites according to indices in the list given as an argument,
         and return the reordered tensor. The list contains numbers 0,1,2,3,... up to the
@@ -882,10 +884,15 @@ class IwaharaChibotaruSphericalTensor:
 
 
     def inflate_dimension(self,site_list):
-        """Return a new Iwahara--Chibotaru spherical tensor that corresponds to a tensor
-        acting on a system with more spin sites than included in this tensor. The new tensor
-        operator will still only act on the same spin sites as this tensor, but it will
-        include identity operators acting on other sites.
+        """Inflate this Iwahara--Chibotaru spherical tensor IN PLACE so that it
+        corresponds to a tensor acting on a system with more spin sites than included
+        in this tensor. The tensor operator will still only act on the same spin sites
+        as before, but it will include identity operators acting on other sites.
+
+        The method modifies the instance and returns nothing. A tensor that is still
+        needed in its original form, e.g. one belonging to the caller, must therefore
+        be copied (deepcopy) before it is inflated; inflating it a second time is an
+        error, since its number of sites has already grown.
 
         The site list argument is a list of ones and zeros. The ones stand for the positions
         of the old sites in the new site list whereas zeros correspond to the sites to be
@@ -2110,9 +2117,11 @@ class MixedCartesianIwaharaChibotaruSphericalTensor:
 
 
     def inflate_dimension(self,site_list):
-        """Inflate all three components to a system with more spin sites. The new tensor
-        operator will still only act on the same spin sites as this tensor, but it will
-        include identity operators acting on other sites.
+        """Inflate all three components IN PLACE to a system with more spin sites. The
+        tensor operator will still only act on the same spin sites as before, but it
+        will include identity operators acting on other sites. The method modifies the
+        instance and returns nothing, so a tensor that is still needed in its original
+        form must be copied before it is inflated.
 
         The site list argument is a list of ones and zeros. The ones stand for the
         positions of the old sites in the new site list whereas zeros correspond to the

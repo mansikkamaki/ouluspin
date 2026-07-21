@@ -83,6 +83,7 @@ from ouluspin.integration import (
     ZCWGrid,
 )
 from ouluspin.systems.electron_exchange_system import (
+    PseudoSpinSystem,
     ElectronExchangeSystem,
     AbInitioElectronExchangeSystem,
 )
@@ -129,6 +130,7 @@ __all__ = [
     "LebedevLaikovGrid",
     "ZCWGrid",
     # Pseudospin systems.
+    "PseudoSpinSystem",
     "ElectronExchangeSystem",
     "AbInitioElectronExchangeSystem",
     # Quantum-chemistry interfaces.

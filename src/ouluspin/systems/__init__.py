@@ -7,7 +7,10 @@ pseudospin Hamiltonians.
 Modules
     electron_exchange_system   Systems of exchange-coupled electronic
                                multiplets (ElectronExchangeSystem,
-                               AbInitioElectronExchangeSystem).
+                               AbInitioElectronExchangeSystem), together
+                               with their common base PseudoSpinSystem,
+                               which carries the analysis that depends only
+                               on the pseudospin operators of a system.
 """
 
 from ouluspin.systems import electron_exchange_system
