@@ -347,9 +347,15 @@ class AbInitioElectronExchangeSystem:
     component of the magnetic moment operator, so that the basis
     behaves as a proper |S,M> basis under time reversal.
 
-    By default the pseudospin is quantized along the principal
-    magnetic axis of the ground Kramers/Ising/pseudo doublet. An
-    alternative rotation matrix can be passed as an optional argument.
+    The pseudospin is quantized along the quantization axis of the
+    system, which is the z axis of the frame the pseudospin operators
+    and the spherical tensors are written in and is returned by the
+    quantization_axis method. By default the quantization axis is
+    chosen as the principal magnetic axis of the ground
+    Kramers/Ising/pseudo doublet, which is the usual choice; an
+    alternative axis can be chosen by passing the rotation matrix R as
+    an optional argument, in which case the quantization axis is the
+    one the user chose and need not be a magnetic axis of the system.
 
     Arguments
     ---------
@@ -358,7 +364,13 @@ class AbInitioElectronExchangeSystem:
         contain the eigenvalues and eigenvectors as an attribute.
     magnetic_moment : GeneralVectorOperatorMatrix
         Matrix representations of the vector components of the
-        magnetic moment vector operator.
+        magnetic moment vector operator, written in the basis of the
+        eigenstates of the Hamiltonian and in the same order as its
+        eigenvalues. This is the form in which the matrices appear in a
+        SINGLE_ANISO datafile, where they are given together with the
+        spin-orbit energies. The class uses these matrices as they are,
+        both in the construction of the pseudospin operators and in the
+        determination of the frame rotation.
     basis : PseudoSpinBasis
         The basis defining the pseudospin system.
     units : EnergyUnitSystem
@@ -389,7 +401,13 @@ class AbInitioElectronExchangeSystem:
         contain the eigenvalue and eigenvectors as an attribute.
     magnetic_moment : GeneralVectorOperatorMatrix
         Matrix representations of the vector components of the
-        magnetic moment vector operator.
+        magnetic moment vector operator, written in the basis of the
+        eigenstates of the Hamiltonian and in the same order as its
+        eigenvalues. This is the form in which the matrices appear in a
+        SINGLE_ANISO datafile, where they are given together with the
+        spin-orbit energies. The class uses these matrices as they are,
+        both in the construction of the pseudospin operators and in the
+        determination of the frame rotation.
     basis : PseudoSpinBasis
         The basis defining the pseudospin system.
     units : EnergyUnitSystem
@@ -465,6 +483,15 @@ class AbInitioElectronExchangeSystem:
     static_transition_magnetic_moments(n_states=None) : StaticTransitionMagneticMoments
         Construct and return the StaticTransitionMagneticMoments instance
         of the system.
+    quantization_axis() : array of float64
+        Return the quantization axis of the system, i.e. the z axis of the
+        frame the pseudospin operators and the spherical tensors are
+        written in, as a unit vector in the input coordinate frame.
+    ground_doublet_magnetic_axis() : array of float64
+        Return the principal magnetic axis of the ground
+        Kramers/Ising/pseudo doublet as a unit vector in the input
+        coordinate frame. This is the quantization axis unless an explicit
+        R was given to the constructor.
     pseudospin_doublet(states) : PseudoSpinDoublet
         Construct and return the PseudoSpinDoublet instance of the doublet
         spanned by the two pseudospin eigenstates given in the states
@@ -511,7 +538,13 @@ class AbInitioElectronExchangeSystem:
     __calculate_rotation() : void
         Calculate g-tensor of the ground Kramers/Ising/pseudo doublet
         and store the transformation into its principal axis system
-        as an attribute.
+        as an attribute. The doublet is built from the magnetic moment
+        matrices as they were given to the class, i.e. in the basis of
+        the Hamiltonian eigenstates.
+    __oriented_unit_vector(vector,name) : array of float64
+        Static helper normalizing a vector representing an axis to unit
+        length and giving it the sign convention of the library, i.e.
+        making the first component that is not numerically zero positive.
     __calculate_reorder_matrix() : array of float64
         Calculate and return an orthogonal matrix based on the reorder_list
         attribute that can be used to reorder the states.
@@ -546,12 +579,30 @@ class AbInitioElectronExchangeSystem:
         as an attribute. The parity of the basis dimension determines
         whether the ground doublet is a Kramers doublet or a non-Kramers
         (quasi-)doublet, and this is passed on to the doublet explicitly.
+
+        The doublet is constructed from the magnetic moment matrices as
+        they were given to the class, i.e. in the basis of the Hamiltonian
+        eigenstates, which is the convention of the class and the one
+        __setup_numerical_matrices follows as well. The doublet is
+        therefore built directly rather than through the
+        from_general_operator_matrix class method of PseudoSpinDoublet,
+        which transforms the moment matrices by the eigenvectors of the
+        Hamiltonian and so expects them in the basis the Hamiltonian was
+        given in. Going through that method would transform the matrices
+        once too often whenever the Hamiltonian handed to the class is not
+        already diagonal, which would pair the wrong states into the ground
+        doublet and leave the frame rotation pointing along an axis that is
+        not a magnetic axis of the system at all. The energies of the
+        states are the eigenvalues of the Hamiltonian, in the same order.
         """
-        ground_kd = properties.PseudoSpinDoublet\
-                              .from_general_operator_matrix((0,1),self.hamiltonian,self.magnetic_moment,
-                                                            self.units,
-                                                            kramers=self.kramers_system,
-                                                            print_output=self.print_output)
+        ground_kd = properties.PseudoSpinDoublet(
+            (0,1),
+            [self.magnetic_moment.operator_list[alpha].matrix
+             for alpha in range(0,3)],
+            self.units,
+            energies=getattr(self.hamiltonian,'eigenvalues',None),
+            kramers=self.kramers_system,
+            print_output=self.print_output)
 
         if self.print_output:
             print("    Ground doublet Zeeman g-tensor:\n")
@@ -855,6 +906,134 @@ class AbInitioElectronExchangeSystem:
                                                           self.hamiltonian_operator(),
                                                           n_states,
                                                           self.units)
+
+
+    @staticmethod
+    def __oriented_unit_vector(vector, name):
+        """Return the given vector normalized to unit length and given the
+        sign convention of the axes of the library.
+
+        An axis has no direction, so the sign of a vector representing one
+        is arbitrary. It is fixed here by making the FIRST component that
+        is not numerically zero positive, so that the same system always
+        gives the same vector.
+
+        The sign is deliberately not decided by the component of the
+        largest magnitude: the largest magnitude is often shared by two
+        components (an axis such as (1,1,-1)/sqrt(3) is nothing unusual for
+        a molecule of a high symmetry), the tie is then broken by the
+        floating-point noise of the last digits, and the same axis can come
+        out with either sign. Which component comes first is settled before
+        any arithmetic, so only a component that is numerically zero needs
+        a tolerance, and the components are scanned in order until one is
+        clearly nonzero.
+
+        The name of the axis is used in the error message raised for a
+        vector that cannot be normalized.
+        """
+        axis = np.array(vector, dtype=np.float64)
+        norm = la.norm(axis)
+
+        if norm <= 0.0:
+            print("ERROR in AbInitioElectronExchangeSystem.")
+            print("Error: The " + name + " of the system came out as a vector of")
+            print("       zero length and cannot be normalized.")
+            print("Error termination.")
+            sys.exit(1)
+
+        axis = axis/norm
+
+        for i in range(0,3):
+            if abs(axis[i]) > 1.0e-8:
+                if axis[i] < 0.0:
+                    axis = -axis
+                break
+
+        return axis
+
+
+    def quantization_axis(self):
+        """Return the quantization axis of the system as a unit vector
+        expressed in the input coordinate frame, i.e. in the frame of the
+        operator matrices given to the constructor.
+
+        The quantization axis is the axis the pseudospin is quantized
+        along: the z axis of the frame the pseudospin operators and the
+        spherical tensors returned by hamiltonian_tensor and
+        magnetic_moment_tensor are written in. It is the axis of the
+        projection M that labels the pseudospin basis states, and the
+        component q of every Iwahara--Chibotaru operator O_{k,q} is counted
+        with respect to it.
+
+        How the axis was chosen is recorded in the tensor_frame attribute.
+        By default it is the principal magnetic axis of the ground
+        Kramers/Ising/pseudo doublet, i.e. the vector returned by
+        ground_doublet_magnetic_axis, which is the usual choice. When an
+        explicit R was passed to the constructor, the axis is the one the
+        user chose instead and need not be a magnetic axis of the system at
+        all; the two methods then return different vectors.
+
+        The axis is read off the input_frame_rotation attribute, which
+        relates the input frame to the frame of the pseudospin operators by
+        v_current = R * v_input. The axis that appears as the z axis in the
+        current frame is therefore R^T applied to the unit vector along z,
+        i.e. the third row of R. Reading the axis from this attribute rather
+        than from R keeps it correct for the systems whose operators were
+        already rotated before the construction, e.g. those built by
+        from_average_aniso_data.
+
+        The axis has no direction, so the sign of the vector is fixed by
+        making the first component that is not numerically zero positive.
+        """
+        rotation_matrix = np.array(self.input_frame_rotation.rotation_matrix,
+                                   dtype=np.float64)
+
+        return self.__oriented_unit_vector(rotation_matrix[2,:],
+                                           'quantization axis')
+
+
+    def ground_doublet_magnetic_axis(self):
+        """Return the principal magnetic axis of the ground
+        Kramers/Ising/pseudo doublet of the system as a unit vector
+        expressed in the input coordinate frame, i.e. in the frame of the
+        operator matrices given to the constructor.
+
+        The principal (main) magnetic axis of a doublet is the principal
+        axis of its g-tensor belonging to the largest principal g value,
+        which is the convention of the field for the strongly axial
+        doublets of a single-molecule magnet. The axis is evaluated here
+        from the g-tensor of the doublet spanned by the two lowest
+        pseudospin eigenstates, expressed in the input frame, i.e. from
+        pseudospin_doublet((0,1)).input_frame_g_tensor.
+
+        This is the axis the pseudospin is quantized along unless the
+        quantization axis was chosen otherwise: with no explicit R given to
+        the constructor the two coincide and this method and
+        quantization_axis return the same vector, whereas with an explicit
+        R the quantization axis is the one the user chose and the two
+        differ. The tensor_frame attribute records which of the two cases
+        holds.
+
+        The definition of the main axis is only meaningful for a doublet
+        that is axial enough for the largest principal g value to stand
+        alone. For a planar or nearly isotropic doublet, whose two largest
+        principal g values are (nearly) degenerate, the axis is fixed by
+        numerical noise in the diagonalization and carries no physical
+        meaning; this is a property of the definition and not of the
+        evaluation.
+
+        The axis has no direction, so the sign of the vector is fixed by
+        making the first component that is not numerically zero positive.
+        """
+        g_tensor = self.pseudospin_doublet((0,1)).input_frame_g_tensor
+
+        g_values     = np.array(g_tensor.eigenvalues, dtype=np.float64)
+        eigenvectors = np.array(g_tensor.eigenvectors, dtype=np.float64)
+
+        main_axis = eigenvectors[:,int(np.argmax(np.abs(g_values)))]
+
+        return self.__oriented_unit_vector(main_axis,
+                                           'ground doublet magnetic axis')
 
 
     def pseudospin_doublet(self, states):
@@ -1616,6 +1795,84 @@ class AbInitioElectronExchangeSystem:
         check('explicit R gives the user-defined frame label',
               system.tensor_frame == 'user-defined axis frame'
               and system.hamiltonian_tensor().frame == 'user-defined axis frame')
+
+        # With an explicit R the quantization axis is the one the user
+        # chose, i.e. the z axis of the identity frame here. The system is
+        # an S = 3/2 ion of an easy-plane zero-field splitting (D > 0), so
+        # its ground doublet is |+-1/2>, whose main magnetic axis is
+        # transverse; the two axes therefore differ, which is exactly the
+        # case the two methods are meant to tell apart.
+        check('an explicit R fixes the quantization axis',
+              np.allclose(system.quantization_axis(),[0.0,0.0,1.0],atol=1.0e-10))
+        check('the ground doublet axis is evaluated independently of R',
+              abs(np.dot(system.quantization_axis(),
+                         system.ground_doublet_magnetic_axis())) < 1.0e-6)
+
+        # ------------------------------------------------------------------
+        # The frame rotation determined by the class itself, i.e. with no R
+        # given, evaluated for a system whose easy axis is known but does
+        # not lie along a coordinate axis.
+        #
+        # The Hamiltonian handed to the class here is deliberately NOT
+        # diagonal, while the magnetic moment matrices are given in its
+        # eigenbasis, which is the documented convention of the class. This
+        # is the case that separates the two bases: a construction that
+        # transformed the moment matrices by the eigenvectors of the
+        # Hamiltonian once more would pair the wrong states into the ground
+        # doublet and return an axis that is not the easy axis at all.
+        # ------------------------------------------------------------------
+        tilt_axis = np.array([1.0,2.0,-2.0])
+        tilt_axis = tilt_axis/np.linalg.norm(tilt_axis)
+
+        # The proper rotation carrying the z axis onto the tilted axis
+        # (Rodrigues' formula; the two axes are not antiparallel).
+        cross_product = np.cross([0.0,0.0,1.0],tilt_axis)
+        cosine        = float(np.dot([0.0,0.0,1.0],tilt_axis))
+        cross_matrix  = np.array([[0.0,-cross_product[2],cross_product[1]],
+                                  [cross_product[2],0.0,-cross_product[0]],
+                                  [-cross_product[1],cross_product[0],0.0]])
+        tilt_rotation = np.identity(3) + cross_matrix \
+                        + np.dot(cross_matrix,cross_matrix)/(1.0 + cosine)
+
+        # An easy-axis S = 3/2 ion (D < 0), whose ground doublet |+-3/2> is
+        # quantized along the z axis of the spin, with the magnetic moment
+        # rotated so that the easy axis points along the tilted axis in the
+        # laboratory frame.
+        tilt_hamiltonian_matrix = -abs(D)*np.dot(spin_matrix_list[2],
+                                                 spin_matrix_list[2])
+        tilt_hamiltonian = pseudospin_operators\
+                           .GeneralOperatorMatrix(tilt_hamiltonian_matrix,
+                                                  diagonalize_operator_matrix=True,
+                                                  translate_eigenvalues=True)
+
+        tilt_moment_list = []
+        for alpha in range(0,3):
+            laboratory_moment = sum(tilt_rotation[alpha][beta]
+                                    *(-g*tmp_units.mu_B*spin_matrix_list[beta])
+                                    for beta in range(0,3))
+            tilt_moment_list.append(
+                np.dot(tilt_hamiltonian.eigenvectors.conj().T,
+                       np.dot(laboratory_moment,tilt_hamiltonian.eigenvectors)))
+
+        tilt_system = cls(tilt_hamiltonian,
+                          pseudospin_operators
+                          .GeneralVectorOperatorMatrix(tilt_moment_list),
+                          basis,tmp_units)
+
+        check('the frame rotation is determined from the true ground doublet',
+              np.allclose(tilt_system.quantization_axis(),tilt_axis,atol=1.0e-6))
+        check('the ground doublet axis agrees with the determined frame',
+              np.allclose(tilt_system.ground_doublet_magnetic_axis(),tilt_axis,
+                          atol=1.0e-6))
+
+        # The ground doublet of an easy-axis S = 3/2 ion is |+-3/2> with
+        # g = (0,0,2*3) = (0,0,6); finding it confirms that the states were
+        # paired correctly rather than mixed with the excited doublet.
+        tilt_g_values = sorted(abs(value) for value
+                               in tilt_system.pseudospin_doublet((0,1))
+                                             .g_tensor.eigenvalues)
+        check('the ground doublet g values are those of the |+-3/2> doublet',
+              np.allclose(tilt_g_values,[0.0,0.0,3.0*g],atol=1.0e-6))
         check('pseudospin Hamiltonian eigenvalues',
               np.allclose(np.linalg.eigvalsh(system.pseudospin_hamiltonian_matrix),
                           [0.0,0.0,gap,gap]))
@@ -1987,6 +2244,78 @@ class AbInitioElectronExchangeSystem:
                   and system_int.hamiltonian_tensor().frame
                       == 'principal magnetic axis frame')
 
+            # The principal magnetic axis of the ground doublet, reported in
+            # the input frame. System A is axial with an easy axis along the
+            # z axis of its own input frame, so the ground doublet |+-3/2>
+            # is quantized along z.
+            axis_a = system_int.ground_doublet_magnetic_axis()
+
+            check('the ground doublet magnetic axis is a unit vector',
+                  abs(np.linalg.norm(axis_a) - 1.0) < 1.0e-10)
+            check('the ground doublet magnetic axis of an axial system is z',
+                  np.allclose(axis_a,[0.0,0.0,1.0],atol=1.0e-8))
+
+            # With no explicit R the quantization axis is chosen as the
+            # principal magnetic axis of the ground doublet, so the two
+            # methods must return the same vector.
+            check('the quantization axis is a unit vector',
+                  abs(np.linalg.norm(system_int.quantization_axis()) - 1.0)
+                  < 1.0e-10)
+            check('without R the quantization axis is the ground doublet axis',
+                  np.allclose(system_int.quantization_axis(),axis_a,
+                              atol=1.0e-8))
+
+            # System G carries the same physics rotated by 90 degrees about
+            # y, i.e. its magnetic moment along the laboratory x axis is the
+            # one that was along z (mu_x = -g*S_z), so its easy axis lies
+            # along the x axis of its input frame. The axis is therefore
+            # read from the operators themselves and not from the frame the
+            # tensors happen to be written in.
+            system_g = cls.from_aniso_data(filename_g,3,tmp_units)
+            axis_g   = system_g.ground_doublet_magnetic_axis()
+
+            check('the ground doublet magnetic axis follows the input frame',
+                  np.allclose(axis_g,[1.0,0.0,0.0],atol=1.0e-6))
+            check('the quantization axis of a tilted system follows it as well',
+                  np.allclose(system_g.quantization_axis(),axis_g,atol=1.0e-6))
+
+            # The axis must agree with the main principal axis of the
+            # g-tensor of the ground doublet expressed in the input frame,
+            # which is the same quantity evaluated the long way round.
+            ground_doublet = system_g.pseudospin_doublet((0,1))
+            doublet_g      = np.array(ground_doublet.input_frame_g_tensor
+                                                    .eigenvalues)
+            doublet_axis   = np.array(ground_doublet.input_frame_g_tensor
+                                                    .eigenvectors)\
+                             [:,int(np.argmax(doublet_g))]
+
+            check('the ground doublet magnetic axis matches the doublet g-tensor',
+                  abs(abs(np.dot(axis_g,doublet_axis)) - 1.0) < 1.0e-6)
+
+            # The sign of a directionless axis is fixed by the convention
+            # that the first component that is not numerically zero is
+            # positive, so that the same system always gives the same
+            # vector.
+            first_nonzero = [component for component in axis_g
+                             if abs(component) > 1.0e-8][0]
+            check('the sign of the magnetic axis follows the convention',
+                  first_nonzero > 0.0)
+
+            # The convention must not depend on which of two components of
+            # an equal magnitude the noise of the last digits makes the
+            # larger. The axis (1,1,-1)/sqrt(3) of a system of a high
+            # symmetry is the case in point: it and its negative must give
+            # the same vector.
+            tie_axis = np.array([1.0,1.0,-1.0])/np.sqrt(3.0)
+            oriented = system_int._AbInitioElectronExchangeSystem__oriented_unit_vector
+
+            check('the sign convention is stable against tied components',
+                  np.allclose(oriented(tie_axis,'axis'),
+                              oriented(-tie_axis,'axis')))
+            check('the sign convention normalizes the vector',
+                  abs(np.linalg.norm(oriented(2.5*tie_axis,'axis')) - 1.0)
+                  < 1.0e-12)
+
             # The convenience constructors of the pseudospin operators and
             # the property classes, tested on the axial system A (ground
             # doublet |+-3/2>, gap 2|D_f|, mu = -g*mu_B*S).
@@ -2162,6 +2491,19 @@ class AbInitioElectronExchangeSystem:
                              [:,int(np.argmax(averaged_g))]
             check('doublet magnetic axes reported in the input frame',
                   abs(abs(np.dot(reference_axis,averaged_axis)) - 1.0) < 1.0e-6)
+
+            # The operators of an averaged system were already rotated
+            # before the construction, so its R attribute is the identity
+            # and the axis has to be read from input_frame_rotation. The
+            # axis must still be the main magnetic axis of the ground
+            # doublet in the laboratory frame.
+            average_axis = average_fg.ground_doublet_magnetic_axis()
+
+            check('the magnetic axis of an averaged system is in the input frame',
+                  abs(abs(np.dot(average_axis,reference_axis)) - 1.0) < 1.0e-6)
+            check('the quantization axis of an averaged system follows it',
+                  np.allclose(average_fg.quantization_axis(),average_axis,
+                              atol=1.0e-6))
 
         return debug_output.test_summary('AbInitioElectronExchangeSystem',
                                          result_list,print_output)

@@ -430,6 +430,19 @@ Readers for quantum-chemistry outputs. All readers take an
   by its energy alone. A non-Kramers system whose ground state is that
   singlet is an error, since the principal magnetic axes of the system are
   those of the ground doublet.
+  Two axes of the system are available as unit vectors in the input
+  coordinate frame, i.e. the frame of the operator matrices the system was
+  built from. `quantization_axis()` returns the axis the pseudospin is
+  quantized along, i.e. the *z* axis of the frame the pseudospin operators
+  and the spherical tensors are written in.
+  `ground_doublet_magnetic_axis()` returns the principal magnetic axis of
+  the ground Kramers/Ising/pseudo doublet, i.e. the principal axis of its
+  g-tensor belonging to the largest principal g value. The quantization
+  axis is by default chosen as that magnetic axis, so the two agree; when
+  an explicit `R` is passed to the constructor the quantization axis is the
+  one the user chose and the two differ. Both axes are directionless, so
+  the sign is fixed by making the component of the largest magnitude
+  positive.
 
 ### Fortran extension (`ouluspin._fortran`)
 
