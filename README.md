@@ -14,7 +14,7 @@ public class carries a detailed docstring documenting its constructor
 arguments, attributes and methods; the docstrings are the authoritative
 reference for the individual classes.
 
-The current version is **1.0.0**; see [Versioning](#versioning).
+The current version is **1.0.1**; see [Versioning](#versioning).
 
 ## Contents
 
@@ -201,11 +201,26 @@ exchange operator.
 ### `ouluspin.units`
 
 - **`EnergyUnitSystem`** — defines the energy unit of a calculation,
-  performs unit conversions and stores natural constants (Boltzmann
-  constant, Planck constant, Bohr and nuclear magnetons, etc.) expressed
-  in the chosen unit. Allowed energy units: `joule`, `wavenumber`,
-  `kelvin`, `millielectronvolt`, `electronvolt`. An instance of this
-  class is passed to essentially every other class in the library.
+  performs unit conversions and stores natural constants expressed in the
+  chosen unit. Allowed energy units: `joule`, `wavenumber`, `kelvin`,
+  `millielectronvolt`, `electronvolt`. An instance of this class is passed
+  to essentially every other class in the library, and it is what fixes
+  the unit every energy is read, stored and printed in; the readers of
+  `ouluspin.qc` convert the data of a quantum-chemistry output into it on
+  reading.
+
+  The constants are taken from `scipy.constants`. Those that carry an
+  energy — the Boltzmann constant `k_B`, the Planck constants `h` and
+  `hbar`, and the Bohr and nuclear magnetons `mu_B` and `mu_N` — are
+  stored in the chosen unit, which is what makes an expression such as
+  `mu_B*B` come out in the unit of the calculation, and each of them is
+  also available in SI as `k_B_si`, `h_si`, `mu_B_si` and so on. The
+  constants that carry no unit system of their own, i.e. the free-electron
+  g-factor `g_e` and the Avogadro constant `N_A`, are stored as they are.
+  `convert_energy_unit(value, unit)` converts a value given in another of
+  the allowed units into the unit of the system, and `energy_unit_str`
+  gives the abbreviation the tables and the plots label their axes with.
+  Printing the instance lists the unit, the constants and their values.
 
 ### `ouluspin.result_table`
 
@@ -343,55 +358,260 @@ exchange operator.
 
 ### `ouluspin.tensors`
 
-Tensor structures used to parametrize the operators. Spherical tensor
-objects support addition, scalar multiplication, rotation and conversion
-between formats.
+The tensor classes hold the **parameters** of an operator rather than its
+matrix: every operator of the library is written as an expansion in
+equivalent operators (an ITO expansion),
+
+$$
+\hat O = \sum_{k_1,q_1,k_2,q_2,\cdots} X_{k_1,q_1,k_2,q_2,\cdots}\,
+\hat O_{k_1,q_1}(\mathbf{\tilde S}_1)\,
+\hat O_{k_2,q_2}(\mathbf{\tilde S}_2)\cdots
+$$
+
+and a tensor instance stores the parameters *X* together with the ranks
+*k* and components *q* that name them. One (*k*, *q*) pair belongs to each
+spin site, so a one-site tensor carries rank sets of the form `[k, q]` and
+a two-site tensor `[k1, q1, k2, q2]`; a term with *k* = 0 on a site
+carries the identity there. The matrices themselves are built later, by
+`pseudospin_operators`, from a tensor and a basis.
+
+**Ranks and components are doubled**, exactly as the pseudospins are: a
+rank-one (vector) operator is stored with `k = 2`, a rank-two operator
+with `k = 4`, and `q` runs from `−k` to `k` in steps of two. The tables
+print the true values, so a term stored as `[4, −4]` prints as *k* = 2,
+*q* = −2.
+
+Two tensors of the same number of sites are added with `+`, which adds
+the parameters of equal rank sets, and multiplied by a scalar with `*`.
+Every tensor also carries a free-form `frame` label (e.g.
+`'input axis frame'`, `'principal magnetic axis frame'`) that the tables
+print, that survives an addition only when both operands agree on it, and
+that a rotation resets — after rotating, the caller relabels the frame it
+has arrived in.
 
 - **`IwaharaChibotaruSphericalTensor`** — an ITO expansion in the
   Iwahara–Chibotaru definition of the equivalent operators [3,4]; the
-  central parameter format of the library. Note that the definition was
-  later revised in [5], which the library does not follow.
+  central parameter format of the library, and the form in which
+  crystal-field and exchange parameters are reported. Note that the
+  definition was later revised in [5], which the library does not follow.
+
+  An instance is built from the parameters directly,
+  `IwaharaChibotaruSphericalTensor(rank_list, parameter_list)`, or from
+  the operator it is meant to represent (pseudospins as multiples of two;
+  the tensor is returned in the parameter form in every case):
+
+  | Class method | Operator |
+  | --- | --- |
+  | `from_one_site_cartesian_operator(X, a, S)` | *X*·*S̃<sub>a</sub>*, a single Cartesian component, e.g. of a magnetic moment |
+  | `from_two_site_isotropic_operator(X, S_A, S_B)` | *X*·**S̃**<sub>A</sub>·**S̃**<sub>B</sub>, a Heisenberg exchange term |
+  | `from_two_site_ising_operator(X, S_A, S_B)` | *X*·*S̃*<sub>A,z</sub>·*S̃*<sub>B,z</sub>, an Ising exchange term |
+  | `from_one_site_cartesian_tensor(M, S)` | **S̃**·**M**·**S̃**, e.g. a zero-field-splitting **D** tensor |
+  | `from_two_site_cartesian_tensor(M, S_A, S_B)` | **S̃**<sub>A</sub>·**M**·**S̃**<sub>B</sub>, an anisotropic exchange **J** tensor |
+  | `from_matrix_representation(matrix, basis)` | the expansion of an arbitrary operator matrix given in a `PseudoSpinBasis` |
+
+  The parameters are reported by `ITO_table(symbol='X', title=None,
+  order_of_magnitude=0, rank_threshold=0.0, half_table=False)`, one row
+  per term with the ranks, the components and the real part, imaginary
+  part and magnitude of the parameter. `rank_threshold` drops a whole rank
+  combination whose parameters are all smaller than the threshold, which
+  is what makes a crystal-field table readable, and `half_table=True`
+  prints only the terms of *q*<sub>1</sub> ≥ 0, the rest following from
+  them by a phase.
+
+  The expansion is manipulated with `rotate(rotation)`,
+  `purge_ranks(threshold=1.0e-6)` (drop negligible terms),
+  `time_reversal_conjugate()` and `hermitian_conjugate()`. For
+  multi-site tensors, `separate_tensors()` splits an expansion into the
+  one-site tensors of each site and a remainder holding the terms that act
+  on several sites at once — this is how a coupled Hamiltonian is
+  separated into single-ion crystal fields and an intersite exchange
+  operator (see `examples/two_site_crystal_field.py`);
+  `couple_two_site_tensor()` performs the reverse coupling of a two-site
+  tensor into a one-site one; `reorder_spin_sites(order)` permutes the
+  sites; and `inflate_dimension(site_list)` embeds a tensor into a system
+  of more sites by adding identity operators on the new ones. Note that
+  `inflate_dimension` modifies the instance **in place** and returns
+  nothing, so a tensor still needed in its original form is copied first.
+
+  Back to Cartesian form: `cartesian_vector(S)` returns the rank-one part
+  as a vector, `one_site_cartesian_tensor(S)` the rank-zero and rank-two
+  parts as a `CartesianTensor`, and `two_site_cartesian_tensor(S_A, S_B)`
+  the same for a two-site tensor.
+
 - **`ChibotaruUngurSphericalTensor`** — a single-site ITO expansion in the
-  Chibotaru–Ungur notation [1]; used as an input format (e.g. crystal-field
-  parameters printed by SINGLE_ANISO) and convertible to the
-  Iwahara–Chibotaru format.
-- **`MixedCartesianIwaharaChibotaruSphericalTensor`** — an ITO expansion of
-  a Cartesian vector operator (e.g. the magnetic moment): Cartesian in one
-  index, Iwahara–Chibotaru spherical in the others.
-- **`CartesianTensor`** — a Cartesian rank-two tensor (e.g. a g-tensor or
-  ZFS tensor), convertible to Iwahara–Chibotaru parameters.
-- **`Rotation`** — a rotation matrix and the corresponding Euler angles;
-  used to rotate tensors between coordinate frames.
+  Chibotaru–Ungur notation [1], which is the notation SINGLE_ANISO prints
+  its crystal-field parameters in. The expansion is given as the real
+  parameters (the coefficients of the operators *O<sub>n</sub><sup>m</sup>*)
+  and the imaginary ones (the coefficients of
+  *Ω<sub>n</sub><sup>m</sup>*) with their (*m*, *n*) rank–component pairs,
+  together with the pseudospin the equivalent operators were built for.
+  Its purpose is conversion: `iwahara_chibotaru_spherical_tensor()`
+  returns the same operator in the Iwahara–Chibotaru form that the rest of
+  the library uses, and `parameter_table(title)` tabulates the parameters
+  as they were given.
+
+- **`MixedCartesianIwaharaChibotaruSphericalTensor`** — an expansion of a
+  Cartesian **vector** operator, carrying one Cartesian index *a* beside
+  the spherical indices of the sites. The magnetic moment is such an
+  operator, and the parameters
+  *g<sup>a</sup><sub>k1,q1,…</sub>* generalize the usual g tensor: the
+  Zeeman Hamiltonian is their contraction with the field,
+
+  ```
+  H_Zeeman = sum_{a,k1,q1,...} B_a * g^a_{k1,q1,...} * O_{k1,q1}(S_1) * ...
+  ```
+
+  The instance holds the three Cartesian components as
+  `IwaharaChibotaruSphericalTensor` instances, reached with
+  `component('x')`; `contract_with_vector(B)` performs the contraction
+  above and returns the ordinary spherical tensor of one field direction,
+  and `one_site_cartesian_tensor(S)` returns the rank-one part as the g
+  tensor it corresponds to. It is built from an ab initio vector operator
+  with `from_general_vector_operator_matrix(vector_matrix, basis)` or, for
+  a free-ion-like moment, with
+  `from_one_site_isotropic_operator(parameter, S)` — the value
+  −*g<sub>J</sub>*·*μ*<sub>B</sub> gives the magnetic moment of a
+  multiplet of Landé factor *g<sub>J</sub>*. The methods it shares with
+  the scalar tensors (`rotate`, `purge_ranks`, `separate_tensors`,
+  `inflate_dimension`, `reorder_spin_sites`, `ITO_table`, the two
+  conjugates) act on the three components together.
+
+- **`CartesianTensor`** — an ordinary 3×3 tensor, i.e. the familiar form of
+  a g tensor, a zero-field-splitting **D** tensor or an exchange **J**
+  tensor. It decomposes the tensor into the parts that have a physical
+  meaning of their own — `trace()`, `isotropic_part()` (a third of the
+  trace), `symmetric_part()` (traceless, the anisotropy) and
+  `antisymmetric_part()` (the Dzyaloshinskii–Moriya-like part) — and
+  converts to the spherical form with `rank_two_ito(S)`, which needs a
+  symmetric tensor and returns the rank-zero and rank-two parameters, and
+  `rank_one_ito(axis, S)`, which returns the rank-one parameters of one
+  Cartesian row or column. A symmetric tensor is diagonalized upon
+  construction, so `eigenvalues` and `eigenvectors` hold the principal
+  values and principal axes; `principal_axis_table()` tabulates them (and
+  returns `None` for a tensor that is not symmetric) and `tensor_table()`
+  tabulates the tensor with its isotropic, symmetric and antisymmetric
+  parts.
+
+- **`Rotation`** — a rotation matrix together with the Euler angles of the
+  Z–Y–Z convention, *R* = *R<sub>z</sub>*(γ)·*R<sub>y</sub>*(β)·*R<sub>z</sub>*(α).
+  The matrix is checked on construction (real, orthogonal, determinant
+  +1, and consistent with the angles derived from it), so an instance
+  always represents a proper rotation. `wigner_D(J, M1, M2)` returns the
+  Wigner *D* matrix element of the rotation (all three arguments doubled),
+  which is what rotates a spherical tensor, and `inverse()` returns the
+  reverse rotation. Rotations are what carry a calculation between
+  coordinate frames: the qc readers return one with `read_rotation()`, and
+  the system classes use them to report every quantity in the input frame
+  of the ab initio calculation.
+
+A tensor and a basis are all that is needed to build and diagonalize an
+operator. Two coupled S = 1/2 sites, for instance:
+
+```python
+from ouluspin import tensors, pseudospin_operators, units as units_module
+
+units = units_module.EnergyUnitSystem('wavenumber')
+
+# Pseudospins are given as multiples of two, so [1,1] is two S = 1/2 sites.
+basis    = pseudospin_operators.PseudoSpinBasis([1,1])
+exchange = tensors.IwaharaChibotaruSphericalTensor\
+                  .from_two_site_isotropic_operator(-5.0, 1, 1)
+
+hamiltonian = pseudospin_operators.PseudoSpinOperator(basis, [exchange],
+                                                      units)
+print(hamiltonian.eigenvalue_table())
+```
+
+which gives the triplet at −1.25 cm⁻¹ and the singlet at 3.75 cm⁻¹, i.e.
+a splitting of 5 cm⁻¹: with this sign convention a negative parameter is
+a ferromagnetic coupling.
 
 ### `ouluspin.pseudospin_operators`
 
+Where `tensors` holds the parameters of an operator, this module holds its
+**matrix**: a basis plus a list of tensors gives a matrix representation,
+which is built by the Fortran extension and diagonalized.
+
 - **`PseudoSpinBasis`** — the basis states of a multi-site pseudospin
-  system (pseudospins given as multiples of two).
+  system, |*S*<sub>0</sub>,*M*<sub>0</sub>⟩ ⊗ |*S*<sub>1</sub>,*M*<sub>1</sub>⟩ ⊗ …,
+  constructed from the list of the pseudospins of the sites (as multiples
+  of two, so `[15,1]` is a *J* = 15/2 ion coupled to an *S* = 1/2 radical).
+  The states are ordered ascending in the projection and site by site, and
+  `basis_table()` prints them with their labels, which is the quickest way
+  to find the order a set of ab initio states has to be brought into.
+  `conjugate_state_list()` and `conjugate_state_table()` pair the states
+  that are time-reversal conjugates of each other, and
+  `unitary_part_of_time_reversal_operator()` gives the operator itself;
+  these are what the time-reversal checks of the system classes rest on.
+  The number of states is `n_basis` and the number of sites `n_sites`.
 - **`PseudoSpinOperator`** — constructs and diagonalizes a multi-site
-  pseudospin operator from a list of spherical tensors. Besides
-  `eigenvalue_table()` and `eigenvector_table()` it offers
-  `compact_eigenvector_table()`, which tabulates the composition of every
-  eigenstate on a single row, one column per basis state labelled by its
-  projection *M*; it is available for a basis of one spin site only, i.e.
-  for the *J* multiplet of a lanthanide(III) ion and the like.
+  pseudospin operator from a basis, a list of
+  `IwaharaChibotaruSphericalTensor` instances (which are summed) and an
+  `EnergyUnitSystem`. The operator is assumed Hermitian, and the
+  eigenvalues are ordered from the lowest up. `diagonalize_operator_matrix`
+  and `store_operator_matrix` decide how much work is done and how much is
+  kept, and `translate_eigenvalues=True` shifts the spectrum so that the
+  ground state sits at zero, which is what one wants of a Hamiltonian and
+  not of anything else. `construct_matrix()` returns the matrix itself.
+
+  The spectrum is reported by `eigenvalue_table()`, by
+  `eigenvector_table()`, which lists the composition of each eigenstate in
+  the basis states, and by `compact_eigenvector_table()`, which puts every
+  eigenstate on a single row with one column per basis state labelled by
+  its projection *M* — the familiar table of the composition of a
+  crystal-field spectrum, available for a basis of one spin site only,
+  i.e. for the *J* multiplet of a lanthanide(III) ion and the like. All of
+  them take a print limit, so that only the lowest states of a large basis
+  are tabulated. `from_vector_operator(basis, vector, mixed_tensors, units)`
+  builds the operator by contracting a Cartesian vector with mixed
+  Cartesian–spherical tensors, i.e. it is how a Zeeman operator of a given
+  field direction is constructed; the vector and the tensors must be
+  expressed in the same coordinate frame.
 - **`PseudoSpinVectorOperator`** — a vector (three-component) pseudospin
-  operator; a convenience interface over three `PseudoSpinOperator`
-  components.
+  operator, built from a basis and mixed Cartesian–spherical tensors. It
+  is the container of the magnetic moment operator of a pseudospin system;
+  `matrix_list()` returns the three Cartesian matrices, which is the form
+  the property calculations take.
 - **`GeneralOperatorMatrix`** — stores a matrix representation of an
   operator in an arbitrary basis (e.g. an ab initio Hamiltonian matrix)
-  and diagonalizes it; the standard container for ab initio input.
+  and diagonalizes it; the standard container for ab initio input, and the
+  form in which the readers of `ouluspin.qc` are handed to the system
+  classes. It takes the same `diagonalize_operator_matrix` and
+  `translate_eigenvalues` arguments as `PseudoSpinOperator` and carries
+  the resulting `eigenvalues` and `eigenvectors` as attributes.
 - **`GeneralVectorOperatorMatrix`** — the vector-operator counterpart of
-  `GeneralOperatorMatrix` (e.g. the three Cartesian components of the
-  magnetic moment operator).
+  `GeneralOperatorMatrix`, i.e. the three Cartesian components of a vector
+  operator such as the magnetic moment, diagonalized and reached with
+  `matrix_list()`.
 
 ### `ouluspin.properties`
 
 - **`StaticMagneticProperties`** — evaluates static magnetic properties
-  (isothermal magnetization, susceptibility) from the field-free
-  Hamiltonian and magnetic moment operators of a system, with powder
-  integration or fixed sample orientations. The class documentation
-  includes a benchmark-based recommendation for the integration grid,
-  which is what sets the cost of the calculation.
+  from the field-free Hamiltonian and the magnetic moment operator of a
+  system. What is calculated is decided by what is handed to it: an
+  `IsothermalStaticMagnetization` instance, a
+  `StaticMagneticSusceptibility` instance, or both, each of which states
+  the temperatures and fields to calculate at and holds the results
+  afterwards. The operators may be either the pseudospin operators of a
+  model or the ab initio matrices, and both must carry their matrix
+  representations; `from_electron_exchange_system(system, grid, …)` and
+  `from_ab_initio_system(system, grid, …)` take them from a system
+  instance instead, which is the usual route.
+
+  `sample_orientation` decides how the molecules of the sample are taken
+  to be oriented: `'powder'` (the default) integrates over the grid,
+  `'free'` lets the molecules rotate and weights the directions by
+  Boltzmann statistics, and `'maximal'` searches the grid for the
+  direction of the largest magnetization at each temperature. `n` is the
+  number of magnetic subsystems per mole of sample and simply scales the
+  result.
+
+  The cost of the calculation is proportional to the number of grid
+  points, since the Hamiltonian is diagonalized once per point and per
+  field strength; choosing the grid is therefore the one decision that
+  sets the cost. The class documentation carries a benchmark of the two
+  grids on a strongly anisotropic Dy(III) system and the recommendation
+  that follows from it (see [`ouluspin.integration`](#ouluspinintegration)).
 - **`IsothermalStaticMagnetization`** — stores and prints isothermal
   magnetization values as a function of field and temperature.
 - **`StaticMagneticSusceptibility`** — stores and prints the χT product
@@ -404,9 +624,16 @@ between formats.
   as it stands, and the raised point already gives the zero-temperature
   limit of the properties.
 - **`StaticTransitionMagneticMoments`** — stores and prints tables of
-  transition magnetic moment matrix elements between states. These are
-  read as the qualitative effective barrier of the reversal of the
-  magnetization of a single-molecule magnet [8].
+  transition magnetic moment matrix elements between states, i.e.
+  (|⟨I|μ<sub>x</sub>|J⟩| + |⟨I|μ<sub>y</sub>|J⟩| + |⟨I|μ<sub>z</sub>|J⟩|)/3.
+  These are read as the qualitative effective barrier of the reversal of
+  the magnetization of a single-molecule magnet [8], and `ResultPlot`
+  draws exactly that picture from an instance. The elements are evaluated
+  in the basis that diagonalizes the projection of the magnetic moment
+  within each group of degenerate states, not in the arbitrary basis a
+  diagonalization returns for a degenerate subspace — otherwise both the
+  expectation values and the matrix elements between two doublets would
+  depend on that arbitrary choice.
 - **`PseudoSpinDoublet`** — properties of a doublet described by an
   effective S = 1/2: the g-tensor and its principal axes, the tunneling
   gap, the energies of the two states, and the Kramers/non-Kramers
@@ -414,16 +641,31 @@ between formats.
 
 ### `ouluspin.integration`
 
-Spherical grids for powder averaging:
+Spherical grids for powder averaging. A grid point is an orientation, i.e.
+a point on the unit sphere: every grid carries its points as Cartesian
+unit vectors in `vectors` together with their `weights` (the ZCW grid
+also keeps the Euler angles they were built from), and `n_grid_points`
+counts them. A grid is handed as it is to `StaticMagneticProperties`, and
+`data_table()` tabulates the points.
 
-- **`LebedevLaikovGrid`** — Lebedev–Laikov quadrature grids [9] (built on
-  the original Fortran 77 routines). Exact for the susceptibility already
-  at a very small grid; converges slowly for the saturated magnetization.
 - **`ZCWGrid`** — Zaremba–Conroy–Wolfsberg grids, in the form of Appendix 1
-  of [10]. The better choice when the magnetization is calculated, and the
-  better choice overall.
+  of [10]. The size is set by the parameter `M` (default 5, i.e. 233
+  points), and `integration_range` covers the whole `'sphere'` (default),
+  a `'hemisphere'` or an `'octant'`, the smaller ranges being usable when
+  the symmetry of the system allows it. The points are distributed
+  uniformly, which is what makes this the better choice when the
+  magnetization is calculated, and the better choice overall.
+- **`LebedevLaikovGrid`** — Lebedev–Laikov quadrature grids [9] (built on
+  the original Fortran 77 routines). The size is set by `grid_quality`, an
+  integer from 1 to 32 (default 17, i.e. 590 points). The grid is a
+  quadrature exact for polynomials up to an order, so it integrates the
+  susceptibility exactly already at `grid_quality = 7` (86 points); the
+  saturated magnetization is not a smooth function of the direction, and
+  there it converges slowly and erratically.
 - **`SimpleGrid`** — one or three Cartesian unit vectors, for single-axis
-  or axis-resolved calculations.
+  or axis-resolved calculations rather than powder averaging.
+  `grid_type=0` (default) gives the three unit vectors and `grid_type=1` a
+  single direction given by `grid_vector`.
 
 ### `ouluspin.data_tables`
 
@@ -543,17 +785,44 @@ Spherical grids for powder averaging:
 ### `ouluspin.qc`
 
 Readers for quantum-chemistry outputs. All readers take an
-`EnergyUnitSystem` and convert data to the chosen unit on reading.
+`EnergyUnitSystem` and convert data to the chosen unit on reading. The
+quantities they return are the input of everything else in the library,
+and they come in two kinds: the **operator matrices** of a datafile, which
+carry the whole ab initio result and are handed to
+`GeneralOperatorMatrix` and `GeneralVectorOperatorMatrix`, and the
+**parameters** already extracted by SINGLE_ANISO, which are returned
+directly as tensors of `ouluspin.tensors`.
 
+Everything a reader returns is expressed in the input axis frame, i.e. in
+the coordinate frame of the ab initio calculation, which is what the
+`frame` labels of the library refer to.
+
+- **`orca.OrcaAnisoFile`** — reads operator matrices from a `.anisofile`
+  produced by an ORCA calculation: `hamiltonian()` returns the matrix of
+  the spin–orbit-coupled Hamiltonian, `magnetic_moment()` the three
+  Cartesian components of the magnetic moment (with
+  `include_bohr_magneton=False` when the moment is wanted in units of the
+  Bohr magneton, which is what the pseudospin analysis takes), and
+  `spin()` the three components of the spin. This is the reader the
+  examples use.
 - **`molcas.OpenMolcasCalculation`** — reads SINGLE_ANISO data from an
   OpenMolcas output file.
 - **`orca.OrcaCalculation`** — reads data from an ORCA output file.
 - **`orca.OrcaAnisoOutput`** — reads a standalone SINGLE_ANISO output file
   produced via ORCA.
-- **`orca.OrcaAnisoFile`** — reads operator matrices from a `.anisofile`
-  produced by an ORCA calculation.
-- **`molcas.AnisoCalculation`** — common base class of the above; not
-  instantiated directly.
+- **`molcas.AnisoCalculation`** — the common base class of the three
+  readers of SINGLE_ANISO output above, not instantiated directly. It
+  defines what can be read from such an output: `read_pseudospin()`, the
+  magnitude of the pseudospin of a multiplet; `read_magnetic_moment()`,
+  the ITO expansion of the magnetic moment as a mixed
+  Cartesian–spherical tensor; `read_zfs_tensor()`, the ITO expansion of
+  the zero-field-splitting operator; `read_crystal_field()`, the ab initio
+  crystal-field parameters of a lanthanide, available only when the
+  crystal-field calculation was requested of SINGLE_ANISO; and
+  `read_rotation()`, the rotation from the input frame to the principal
+  magnetic axis frame, as a `Rotation`. A `multiplet_index` argument
+  selects the multiplet, and `output_instance` selects which run to read
+  from a file holding several SINGLE_ANISO outputs.
 
 ### `ouluspin.systems`
 
@@ -656,7 +925,12 @@ fu.cg_utils.cg(1, 1, 1, -1, 2, 0)   # angular momenta as doubled integers
 
 - **Pseudospins and angular momenta are given as doubled integers**
   throughout the library and the Fortran routines: `15` means
-  S = 15/2, `[15, 1]` means two sites with S = 15/2 and S = 1/2.
+  S = 15/2, `[15, 1]` means two sites with S = 15/2 and S = 1/2. The
+  **ranks and components of the tensor operators are doubled as well**, so
+  a rank-one (vector) operator is stored with `k = 2` and a rank-two
+  operator with `k = 4`, and `q` runs from `−k` to `k` in steps of two.
+  Doubled values are what the attributes hold; the tables print the true
+  values, i.e. J = 15/2 and k = 2.
 - **Basis ordering** is ascending in the pseudospin projection,
   |S,−S⟩, …, |S,S⟩ (for multi-site systems, the product basis ordered
   site by site).
@@ -725,7 +999,7 @@ The version of the library is read from the package:
 
 ```python
 import ouluspin
-ouluspin.__version__        # '1.0.0'
+ouluspin.__version__        # '1.0.1'
 ```
 
 The numbering is [semantic versioning](https://semver.org), i.e.
@@ -809,13 +1083,12 @@ the reference.
    DOI:
    [10.1002/9781118571767.ch6](https://doi.org/10.1002/9781118571767.ch6)
    [`Chibotaru2013`]
-3. N. Iwahara and L. F. Chibotaru, *Exchange interaction between $J$
+3. N. Iwahara and L. F. Chibotaru, *Exchange interaction between J
    multiplets*, Phys. Rev. B **91**, 174438 (2015). DOI:
    [10.1103/PhysRevB.91.174438](https://doi.org/10.1103/PhysRevB.91.174438)
    [`Iwahara2015`]
-4. N. Iwahara, L. Ungur and L. F. Chibotaru, *$\tilde{J}$-pseudospin states
-   and the crystal field of cubic systems*, Phys. Rev. B **98**, 054436
-   (2018). DOI:
+4. N. Iwahara, L. Ungur and L. F. Chibotaru, *J̃-pseudospin states and the
+   crystal field of cubic systems*, Phys. Rev. B **98**, 054436 (2018). DOI:
    [10.1103/PhysRevB.98.054436](https://doi.org/10.1103/PhysRevB.98.054436)
    [`Iwahara2018`]
 5. N. Iwahara, Z. Huang, I. Neefjes and L. F. Chibotaru, *Multipolar
@@ -825,8 +1098,8 @@ the reference.
    [`Iwahara2022`]
 6. A. Mansikkamäki, A. A. Popov, Q. Deng, N. Iwahara and L. F. Chibotaru,
    *Interplay of spin-dependent delocalization and magnetic anisotropy in
-   the ground and excited states of $\mathrm{[Gd_2@C_{78}]^{-}}$ and
-   $\mathrm{[Gd_2@C_{80}]^{-}}$*, J. Chem. Phys. **147**, 124305 (2017).
+   the ground and excited states of [Gd₂@C₇₈]⁻ and [Gd₂@C₈₀]⁻*,
+   J. Chem. Phys. **147**, 124305 (2017).
    DOI: [10.1063/1.5004183](https://doi.org/10.1063/1.5004183)
    [`Mansikkamaki2017`]
 
@@ -863,14 +1136,14 @@ the reference.
     [10.1103/PhysRev.76.1352](https://doi.org/10.1103/PhysRev.76.1352)
     [`Racah1949`]
 13. C. W. Nielson and G. F. Koster, *Spectroscopic Coefficients for the
-    $p^n$, $d^n$, and $f^n$ Configurations*, The M.I.T. Press, Cambridge MA
+    pⁿ, dⁿ, and fⁿ Configurations*, The M.I.T. Press, Cambridge MA
     (1963). [`Nielson1963`]
 14. B. F. Bayman and A. Landé, *Tables of identical-particle fractional
     parentage coefficients*, Nucl. Phys. **77**, 1–80 (1966). DOI:
     [10.1016/0029-5582(66)90677-8](https://doi.org/10.1016/0029-5582(66)90677-8)
     [`Bayman1966`]
 15. J. H. Luscombe and M. Luban, *Simplified recursive algorithm for Wigner
-    $3j$ and $6j$ symbols*, Phys. Rev. E **57**, 7274–7277 (1998). DOI:
+    3j and 6j symbols*, Phys. Rev. E **57**, 7274–7277 (1998). DOI:
     [10.1103/PhysRevE.57.7274](https://doi.org/10.1103/PhysRevE.57.7274)
     [`Luscombe1998`]
 
