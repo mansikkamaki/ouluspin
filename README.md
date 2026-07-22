@@ -14,6 +14,8 @@ public class carries a detailed docstring documenting its constructor
 arguments, attributes and methods; the docstrings are the authoritative
 reference for the individual classes.
 
+The current version is **1.0.0**; see [Versioning](#versioning).
+
 ## Contents
 
 - [Physical background](#physical-background)
@@ -24,6 +26,7 @@ reference for the individual classes.
 - [Conventions](#conventions)
 - [Examples](#examples)
 - [Tests](#tests)
+- [Versioning](#versioning)
 - [Repository layout](#repository-layout)
 - [Citing](#citing)
 - [References](#references)
@@ -715,6 +718,34 @@ Python class implements (the tests check the class against analytic
 reference results); `fortran_tests.py` exercises every Fortran module
 against analytic values. `make test` in `src/fortran` builds the
 extension and runs the Fortran suite in one step.
+
+## Versioning
+
+The version of the library is read from the package:
+
+```python
+import ouluspin
+ouluspin.__version__        # '1.0.0'
+```
+
+The numbering is [semantic versioning](https://semver.org), i.e.
+MAJOR.MINOR.PATCH, and the number is raised according to the scope of the
+change:
+
+- **MAJOR** — a change that breaks the scripts written against the previous
+  version: a class or a method removed or renamed, an argument removed or
+  its meaning changed, or a change in the physics or in the conventions
+  that changes the numbers a previous version produced.
+- **MINOR** — new functionality that leaves the existing scripts working: a
+  new class, a new method, a new optional argument, a new output format.
+- **PATCH** — a fix to a wrong result or to a broken code path, a
+  correction to the text of a message or of a table, added tests and
+  documentation, and internal reorganization that leaves the behaviour
+  alone.
+
+Version 1.0.0 is the first numbered version of the library. The number in
+use before it, 0.1.0, was a placeholder and does not describe any
+particular state of the code.
 
 ## Repository layout
 

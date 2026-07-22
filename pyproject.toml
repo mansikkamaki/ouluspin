@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ouluspin"
-version = "0.1.0"
+version = "1.0.0"
 description = "A Python library for theoretical molecular magnetism: pseudospin Hamiltonians and magnetic properties from ab initio data"
 readme = "README.md"
 requires-python = ">=3.8"
