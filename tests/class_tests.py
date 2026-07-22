@@ -71,6 +71,7 @@ def main():
         electron_exchange_system.ElectronExchangeSystem,
         electron_exchange_system.AbInitioElectronExchangeSystem,
         data_tables.IonData,
+        data_tables.MultipleIonData,
         molcas.OpenMolcasCalculation,
         orca.OrcaCalculation,
         orca.OrcaAnisoOutput,

@@ -458,6 +458,41 @@ Spherical grids for powder averaging:
   physics, i.e. the chemical symbols, the blocks of the periodic table and
   the common and ordinary oxidation states of each element.
 
+- **`MultipleIonData`** — the data of a whole set of ions gathered into
+  tables of one ion per row, e.g. `MultipleIonData('lanthanides', 3)` for
+  the trivalent lanthanides. Unlike `IonData`, which provides the
+  quantitative values as well, this class is meant for the production of
+  human-readable tables alone; every value it prints is taken from the
+  `IonData` instance of the ion, which the `ion(name)` method returns.
+
+  The scope is given by a set of elements and a set of oxidation states,
+  both read case-insensitively. The elements are chemical symbols or one of
+  the shorthands `'lanthanides'`/`'4f'`, `'actinides'`/`'5f'`, `'3d'`,
+  `'4d'`, `'5d'` (Hf–Hg), `'d-block'`, `'f-block'` and `'all'`; the
+  oxidation states are Arabic numbers or Roman numerals (`3`, `'III'`), or
+  one of the shorthands `'common'` (the chemically common states of each
+  element, the default), `'ordinary'` (the single state the element is
+  ordinarily met in) and `'all'` (every state that leaves a single open
+  shell). The rows are ordered first by atomic number and then by
+  decreasing oxidation state.
+
+  A combination of an element and an oxidation state that `IonData` refuses,
+  i.e. one that leaves no single open shell, is kept as a row whose values
+  are printed as dashes and named in a note of the table; a scope leaving no
+  data at all, or an unrecognized element or oxidation state, is an error.
+
+  The tables, all of them `ResultTable` instances, are
+  `ground_multiplet_table()` (the valence configuration and S, L, J),
+  `ground_magnetism_table()` (S, L, J, the Landé g-factor and the Curie χT
+  product, the last two in both conventions for the free-electron
+  g-factor), `number_of_spin_states_table()` (the number of spin states of
+  each spin multiplicity, one column per multiplicity, the largest first,
+  the multiplicities a configuration does not carry being dashes),
+  `state_count_table()` (the number of terms, of spin states and of states)
+  and `configuration_table()` (the atomic number, the electron count, the
+  block, the core and the valence). `repr` of the instance is the
+  plain-text rendering of `ground_multiplet_table()`.
+
 ### `ouluspin.qc`
 
 Readers for quantum-chemistry outputs. All readers take an
@@ -639,7 +674,8 @@ extension and runs the Fortran suite in one step.
     │   │   ├── pseudospin_operators.py  Pseudospin bases and operators
     │   │   ├── properties.py            Magnetic property calculations
     │   │   ├── integration.py           Spherical integration grids
-    │   │   ├── data_tables.py           Data of the ions (IonData)
+    │   │   ├── data_tables.py           Data of the ions (IonData,
+    │   │   │                            MultipleIonData)
     │   │   ├── _documents.py            .odt and .docx writers (internal)
     │   │   ├── _images.py               Plot image writers (internal)
     │   │   ├── qc/                      Quantum-chemistry interfaces

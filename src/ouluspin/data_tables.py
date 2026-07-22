@@ -14,6 +14,15 @@ IonData class, which is constructed from the name of the ion:
     dy.lande_g_factor               # 4/3
     print(dy.data_table().string_table())
 
+The MultipleIonData class gathers the data of a whole set of ions into one
+table, e.g. the trivalent lanthanides:
+
+    series = ouluspin.MultipleIonData('lanthanides',3)
+    print(series.ground_magnetism_table().string_table())
+
+It is meant for the production of human-readable tables only; the values
+themselves are always taken from the IonData instances it holds.
+
 What can be calculated is calculated rather than tabulated: the terms of
 the open shell come from the cfp_utils module of the Fortran extension, and
 the ground term is picked out of them by Hund's rules. What cannot be
@@ -2097,3 +2106,1210 @@ class IonData:
               not '12g(G2)' in cls('Fe(III)').term_table().string_table())
 
         return debug_output.test_summary('IonData',result_list,print_output)
+
+
+class MultipleIonData:
+    """The data of a set of chemical ions gathered into tables.
+
+    The class collects the data of several ions, e.g. of the trivalent
+    lanthanides or of the whole 3d block, and returns them as tables of one
+    ion per row. Unlike IonData, which provides both the quantitative values
+    used in a calculation and the tabulated data of a single ion, this class
+    is meant for the production of human-readable tables alone: every value
+    it prints is taken from the IonData instance of the ion, which is the
+    place to go for the values themselves.
+
+    The scope of the tables is given by a set of elements and a set of
+    oxidation states, both of which are read case-insensitively:
+
+        MultipleIonData('lanthanides',3)        # La(III) ... Lu(III)
+        MultipleIonData('3d',['II','III'])      # Sc(III) ... Zn(II)
+        MultipleIonData(['Dy','Er'],[2,3])      # Dy(III), Dy(II), Er(III) ...
+        MultipleIonData('4f')                   # the common states of each
+
+    The elements are given as chemical symbols or by one of the shorthands
+    listed by the element_shorthands class method, i.e. 'lanthanides' or
+    '4f', 'actinides' or '5f', '3d', '4d', '5d', 'd-block', 'f-block' and
+    'all'. The oxidation states are given as Arabic numbers or as Roman
+    numerals, or by one of the shorthands 'common' (the chemically common
+    states of each element, which is the default), 'ordinary' (the single
+    state the element is ordinarily met in) and 'all' (every state that
+    leaves a single open shell).
+
+    A combination of an element and an oxidation state for which there are
+    no data, i.e. one that does not leave a single open shell and that
+    IonData therefore refuses, is kept as a row of the table and its values
+    are printed as dashes. It is an error if the scope leaves no data at
+    all, and an error if an element or an oxidation state cannot be
+    recognized.
+
+    The rows are ordered first by the atomic number of the element and then
+    by decreasing oxidation state, so that the several states of one element
+    stand together, the highest first.
+
+    Arguments
+    ---------
+    elements : str or list of str
+        The elements of the table, each given as a chemical symbol or as one
+        of the shorthands of the element_shorthands class method. A single
+        string is read as a list of one entry.
+
+    Optional arguments
+    ------------------
+    oxidation_states : int or str or list or None
+        The oxidation states of the table, each given as an Arabic number or
+        as a Roman numeral, or one of the shorthands 'common', 'ordinary'
+        and 'all' (see above). Default is None, which is 'common'.
+    print_output : boolean
+        Whether to print the table of the ground multiplets upon
+        construction. Default is False.
+
+    Attributes
+    ----------
+    elements : list of str
+        The chemical symbols of the elements of the table, in the order of
+        the atomic number.
+    oxidation_states : list of int or str
+        The oxidation states as they were requested, i.e. the list of the
+        states or the name of the shorthand that was used.
+    rows : list of dict
+        One entry per row of the tables, ordered as the rows are, each a
+        dictionary with the items 'element', 'oxidation_state', 'ion' (the
+        canonical name of the ion, e.g. 'Dy(III)') and 'data' (the IonData
+        instance of the ion, or None when there are no data for it).
+    ion_list : list of IonData
+        The IonData instances of the ions that have data, in the order of
+        the rows.
+    missing_list : list of str
+        The names of the ions of the scope that have no data, i.e. those
+        whose rows are printed as dashes.
+    uncommon_list : list of str
+        The names of the ions whose oxidation state is not one of the
+        chemically common states of the element. Their data are those of a
+        single open shell, which for such a state need not be the correct
+        configuration; the tables carry a note naming them.
+    n_ions : int
+        The number of ions that have data.
+    n_rows : int
+        The number of rows of the tables, i.e. the ions with data and the
+        ones without.
+    print_output : boolean
+        Whether the table is printed upon construction.
+
+    Public methods
+    --------------
+    ion(name) : IonData or None
+        Return the IonData instance of the named ion of the set, or None
+        when the ion has no data. An ion outside the set is an error.
+    multiplicities() : list of int
+        Return the spin multiplicities met among the ions of the set, in
+        decreasing order.
+    ground_multiplet_table() : ResultTable
+        Return the valence configuration and the quantum numbers S, L and J
+        of the ground multiplet of each ion as a table.
+    ground_magnetism_table() : ResultTable
+        Return S, L and J, the Lande g-factor and the Curie chiT product of
+        the ground multiplet of each ion as a table, the last two with both
+        conventions for the g-factor of the free electron.
+    number_of_spin_states_table() : ResultTable
+        Return the number of spin states of each spin multiplicity of the
+        open shell of each ion as a table, the columns being the
+        multiplicities from the largest downwards.
+    state_count_table() : ResultTable
+        Return the number of terms, of spin states and of states of the open
+        shell of each ion as a table.
+    configuration_table() : ResultTable
+        Return the electron configuration of each ion as a table, i.e. the
+        atomic number, the number of electrons, the block, the core and the
+        valence configuration.
+
+    Private methods
+    ---------------
+    __error(message)
+        Report an error and stop.
+    __resolve_elements(elements)
+        Read the argument naming the elements and store the symbols as an
+        attribute.
+    __resolve_oxidation_states(oxidation_states)
+        Read the argument naming the oxidation states and store it as an
+        attribute.
+    __states_of_element(element) : list of int
+        Return the oxidation states of one element for the requested scope.
+    __build_rows()
+        Construct the IonData instance of every ion of the scope and store
+        the rows as attributes.
+    __build_ion(element,oxidation_state) : IonData or None
+        Return the IonData instance of one ion, or None when the ion has no
+        data.
+    __canonical_symbol(symbol) : str
+        Return a chemical symbol in its canonical form and check that the
+        class treats the element.
+    __parse_oxidation_state(state) : int
+        Return an oxidation state given as a number or as a Roman numeral as
+        an int.
+    __momentum_string(doubled_value) : str
+        Return a doubled angular momentum as the true one, e.g. '15/2'.
+    __ion_name(element,oxidation_state) : str
+        Return the canonical name of an ion, e.g. 'Dy(III)', which the ions
+        without an IonData instance need.
+    __wrap(text,width=64) : str
+        Return the text broken into the lines of the manual wrapping of the
+        plain-text table.
+    __scope_note() : str
+        Return the explanatory text stating the scope of the table.
+    __missing_note() : list of str
+        Return the explanatory texts naming the ions without data and the
+        ions of an uncommon oxidation state.
+
+    Class methods
+    -------------
+    element_shorthands() : list of str
+        Return the shorthands recognized in place of a list of elements.
+    oxidation_state_shorthands() : list of str
+        Return the shorthands recognized in place of a list of oxidation
+        states.
+    run_tests(print_output=True) : boolean
+        Initiate the class and run a set of internal tests. Return True if
+        all tests passed.
+    """
+
+    # The text printed in place of a value that does not exist, i.e. in the
+    # row of an element and an oxidation state that leave no single open
+    # shell and in the column of a spin multiplicity an ion does not carry.
+    MISSING_TEXT = "-"
+
+    # The shorthands recognized in place of a list of elements. Each is
+    # given as the pair of the first and the last element of a range of
+    # atomic numbers, or as a tuple of such ranges. The ranges are those of
+    # the blocks of the periodic table treated by IonData.
+    __ELEMENT_GROUPS = {
+        '3d':                (('Sc','Zn'),),
+        '4d':                (('Y', 'Cd'),),
+        '5d':                (('Hf','Hg'),),
+        '4f':                (('La','Lu'),),
+        '5f':                (('Ac','Lr'),),
+        'lanthanides':       (('La','Lu'),),
+        'actinides':         (('Ac','Lr'),),
+        'd-block':           (('Sc','Zn'),('Y','Cd'),('Hf','Hg')),
+        'f-block':           (('La','Lu'),('Ac','Lr')),
+        'transition metals': (('Sc','Zn'),('Y','Cd'),('Hf','Hg')),
+        'all':               (('Sc','Zn'),('Y','Cd'),('Hf','Hg'),
+                              ('La','Lu'),('Ac','Lr')),
+    }
+
+    # The spellings accepted for the shorthands above, i.e. the ones that
+    # differ from the name of the group only in the punctuation.
+    __ELEMENT_GROUP_ALIASES = {
+        'd block':          'd-block',
+        'dblock':           'd-block',
+        'd':                'd-block',
+        'f block':          'f-block',
+        'fblock':           'f-block',
+        'f':                'f-block',
+        'transition metal': 'transition metals',
+        'lanthanide':       'lanthanides',
+        'lanthanoids':      'lanthanides',
+        'actinide':         'actinides',
+        'actinoids':        'actinides',
+        'everything':       'all',
+    }
+
+    # The shorthands recognized in place of a list of oxidation states.
+    __STATE_GROUPS = ('common','ordinary','all')
+
+    # The Roman numerals recognized as oxidation states, as in IonData.
+    __ROMAN_NUMERALS = {
+        'i': 1, 'ii': 2, 'iii': 3, 'iv': 4,
+        'v': 5, 'vi': 6, 'vii': 7, 'viii': 8,
+    }
+
+    # The oxidation states tried when the states are asked for by the
+    # shorthand 'all'. No element of the d or f block reaches beyond +8.
+    __HIGHEST_OXIDATION_STATE = 8
+
+
+    def __error(self, message):
+        """Report an error and stop. The scope of a table is settled at the
+        beginning of a calculation, so an error is reported the way the
+        other errors of the library are.
+        """
+        print("ERROR in MultipleIonData.")
+        for line in message.split("\n"):
+            print("Error: " + line)
+        print("Error termination.")
+        sys.exit(1)
+
+
+    @classmethod
+    def element_shorthands(cls):
+        """Return the shorthands that are recognized in place of a chemical
+        symbol in the list of the elements, i.e. the names of the blocks of
+        the periodic table and of the series of the f block.
+        """
+        return sorted(cls.__ELEMENT_GROUPS)
+
+
+    @classmethod
+    def oxidation_state_shorthands(cls):
+        """Return the shorthands that are recognized in place of a list of
+        oxidation states, i.e. 'common', 'ordinary' and 'all'.
+        """
+        return list(cls.__STATE_GROUPS)
+
+
+    def __canonical_symbol(self, symbol):
+        """Return the chemical symbol in its canonical form, i.e. with the
+        first letter in upper case, and check that the class treats the
+        element.
+        """
+        canonical = symbol[0].upper() + symbol[1:].lower()
+
+        if not canonical in IonData.supported_elements():
+            self.__error("The element or the shorthand '" + symbol + "' is not "
+                         "recognized.\n"
+                         "The elements are given as the chemical symbols of the d "
+                         "block\n(Sc-Zn, Y-Cd, Hf-Hg) or of the f block (La-Lu, "
+                         "Ac-Lr), or by one\nof the shorthands "
+                         + ", ".join(self.element_shorthands()) + ".")
+
+        return canonical
+
+
+    def __resolve_elements(self, elements):
+        """Read the argument naming the elements and store the chemical
+        symbols in the order of the atomic number as the elements attribute.
+
+        Each entry of the argument is either a shorthand naming a whole
+        block or series of the periodic table or the symbol of a single
+        element. An element named twice is kept once.
+        """
+        if isinstance(elements,str):
+            elements = [elements]
+
+        if not isinstance(elements,(list,tuple)):
+            self.__error("The elements must be given as a string or as a list of "
+                         "strings,\nbut an instance of " + type(elements).__name__
+                         + " was given.")
+
+        if len(elements) == 0:
+            self.__error("No elements were given.")
+
+        supported = IonData.supported_elements()
+        symbol_list = []
+
+        for entry in elements:
+            if not isinstance(entry,str):
+                self.__error("Every element must be given as a string, but an "
+                             "instance of\n" + type(entry).__name__ + " was given.")
+
+            text = entry.strip().lower()
+
+            if text == "":
+                self.__error("An empty string was given in place of an element.")
+
+            group = self.__ELEMENT_GROUP_ALIASES.get(text,text)
+
+            if group in self.__ELEMENT_GROUPS:
+                for first, last in self.__ELEMENT_GROUPS[group]:
+                    symbol_list += supported[supported.index(first):
+                                             supported.index(last) + 1]
+            else:
+                symbol_list.append(self.__canonical_symbol(text))
+
+        # The elements are ordered by the atomic number, which is the order
+        # of the list of the supported elements, and the duplicates are
+        # dropped.
+        self.elements = [symbol for symbol in supported if symbol in symbol_list]
+
+
+    def __parse_oxidation_state(self, state):
+        """Return the oxidation state as an int. The state is given either
+        as an integer or as a string holding an Arabic number or a Roman
+        numeral, with the punctuation and the plus sign that usually
+        surround it.
+        """
+        if isinstance(state,bool):
+            self.__error("An oxidation state cannot be given as a boolean.")
+
+        if isinstance(state,(int,np.integer)):
+            value = int(state)
+        elif isinstance(state,str):
+            text = state.strip().lower().strip("()[]{}+ ")
+
+            if text in self.__ROMAN_NUMERALS:
+                value = self.__ROMAN_NUMERALS[text]
+            else:
+                try:
+                    value = int(text)
+                except ValueError:
+                    self.__error("The oxidation state '" + state + "' is not "
+                                 "recognized.\n"
+                                 "An oxidation state is given as an Arabic number "
+                                 "or as a Roman\nnumeral between I and VIII, e.g. 3 "
+                                 "or 'III', or by one of the\nshorthands "
+                                 + ", ".join(self.oxidation_state_shorthands()) + ".")
+        else:
+            self.__error("An oxidation state must be given as an integer or as a "
+                         "string,\nbut an instance of " + type(state).__name__
+                         + " was given.")
+
+        if value <= 0:
+            self.__error("The oxidation state of an ion must be positive, but "
+                         + str(value) + " was given.\n"
+                         "A neutral atom of the d or f block carries electrons in "
+                         "its outer\ns shell as well, so it has more than one open "
+                         "shell and is not\ntreated by the library.")
+
+        return value
+
+
+    def __resolve_oxidation_states(self, oxidation_states):
+        """Read the argument naming the oxidation states and store it as the
+        oxidation_states attribute, i.e. as the list of the states that were
+        asked for or as the name of the shorthand that was used.
+        """
+        if oxidation_states is None:
+            self.oxidation_states = 'common'
+            return
+
+        if isinstance(oxidation_states,str):
+            text = oxidation_states.strip().lower()
+
+            if text in self.__STATE_GROUPS:
+                self.oxidation_states = text
+                return
+
+            oxidation_states = [oxidation_states]
+
+        if isinstance(oxidation_states,(int,np.integer)) \
+           and not isinstance(oxidation_states,bool):
+            oxidation_states = [oxidation_states]
+
+        if not isinstance(oxidation_states,(list,tuple)):
+            self.__error("The oxidation states must be given as a number, as a "
+                         "string or as\na list of them, but an instance of "
+                         + type(oxidation_states).__name__ + " was given.")
+
+        if len(oxidation_states) == 0:
+            self.__error("No oxidation states were given.")
+
+        state_list = []
+        for entry in oxidation_states:
+            value = self.__parse_oxidation_state(entry)
+
+            if not value in state_list:
+                state_list.append(value)
+
+        self.oxidation_states = sorted(state_list,reverse=True)
+
+
+    def __states_of_element(self, element):
+        """Return the oxidation states of one element for the requested
+        scope, in decreasing order. For the shorthand 'all' every state that
+        leaves a single open shell is returned, so that the element carries
+        no missing rows.
+        """
+        if self.oxidation_states == 'common':
+            return sorted(IonData.common_oxidation_states(element),reverse=True)
+
+        if self.oxidation_states == 'ordinary':
+            return [IonData.default_oxidation_state(element)]
+
+        if self.oxidation_states == 'all':
+            return [state for state
+                    in range(self.__HIGHEST_OXIDATION_STATE,0,-1)
+                    if self.__build_ion(element,state) is not None]
+
+        return list(self.oxidation_states)
+
+
+    def __build_ion(self, element, oxidation_state):
+        """Return the IonData instance of the ion of the given element and
+        oxidation state, or None when there are no data for it.
+
+        IonData reports an oxidation state that leaves no single open shell
+        as a fatal error, and warns of a state that is not chemically
+        common. Both are caught here: the combinations without data are the
+        rows the tables print as dashes, and the warnings are not printed,
+        since the ions they concern are named by a note of the table.
+        """
+        import io
+        import contextlib
+
+        buffer = io.StringIO()
+
+        try:
+            with contextlib.redirect_stdout(buffer):
+                return IonData("{0:s}({1:d})".format(element,oxidation_state))
+        except SystemExit:
+            return None
+
+
+    @staticmethod
+    def __ion_name(element, oxidation_state):
+        """Return the canonical name of an ion, e.g. 'Dy(III)', which is
+        needed for the ions that have no IonData instance to give it.
+        """
+        numeral_list = ((10,"X"),(9,"IX"),(5,"V"),(4,"IV"),(1,"I"))
+        text         = ""
+        value        = oxidation_state
+
+        for number, numeral in numeral_list:
+            while value >= number:
+                text  += numeral
+                value -= number
+
+        return "{0:s}({1:s})".format(element,text)
+
+
+    def __build_rows(self):
+        """Construct the IonData instance of every ion of the scope and
+        store the rows of the tables as attributes.
+
+        The rows are ordered first by the atomic number of the element and
+        then by decreasing oxidation state; the elements attribute is
+        already in the order of the atomic number.
+        """
+        self.rows          = []
+        self.ion_list      = []
+        self.missing_list  = []
+        self.uncommon_list = []
+
+        for element in self.elements:
+            for state in self.__states_of_element(element):
+                data = self.__build_ion(element,state)
+                name = self.__ion_name(element,state)
+
+                self.rows.append({'element':         element,
+                                  'oxidation_state': state,
+                                  'ion':             name,
+                                  'data':            data})
+
+                if data is None:
+                    self.missing_list.append(name)
+                else:
+                    self.ion_list.append(data)
+
+                    if not state in IonData.common_oxidation_states(element):
+                        self.uncommon_list.append(name)
+
+        self.n_ions = len(self.ion_list)
+        self.n_rows = len(self.rows)
+
+        if self.n_ions == 0:
+            self.__error("There are no data for any of the ions of the given scope:\n"
+                         + ", ".join(self.missing_list) + ".\n"
+                         "None of these combinations of an element and an oxidation "
+                         "state\nleaves a single open shell, which is the only kind "
+                         "of ion the\nlibrary treats.")
+
+
+    def __init__(self, elements,
+                 oxidation_states=None,
+                 print_output=False):
+        """Upon class initiation read the scope of the table and construct
+        the IonData instance of every ion of that scope.
+        """
+        self.print_output = print_output
+
+        self.__resolve_elements(elements)
+        self.__resolve_oxidation_states(oxidation_states)
+        self.__build_rows()
+
+        if self.print_output:
+            print(self.ground_multiplet_table().string_table())
+
+
+    def ion(self, name):
+        """Return the IonData instance of the named ion of the set, or None
+        when the ion belongs to the set but has no data. An ion that is not
+        part of the set is a fatal error.
+
+        Arguments
+        ---------
+        name : str
+            The name of the ion, e.g. 'Dy(III)', read the way IonData reads
+            it. The oxidation state may be left out, in which case the
+            ordinary state of the element is used.
+        """
+        element, state = IonData.parse_ion_name(name)
+
+        if state is None:
+            state = IonData.default_oxidation_state(element)
+
+        for row in self.rows:
+            if row['element'] == element and row['oxidation_state'] == state:
+                return row['data']
+
+        self.__error("The ion " + self.__ion_name(element,state) + " is not part of "
+                     "the set, which holds\n" + str(self.n_rows) + " ions: "
+                     + ", ".join(row['ion'] for row in self.rows) + ".")
+
+
+    def multiplicities(self):
+        """Return the spin multiplicities met among the terms of the open
+        shells of the ions of the set, in decreasing order. They are the
+        columns of the table of the numbers of the spin states.
+        """
+        multiplicity_set = set()
+
+        for data in self.ion_list:
+            multiplicity_set.update(group['multiplicity'] for group
+                                    in data.states_by_multiplicity())
+
+        return sorted(multiplicity_set,reverse=True)
+
+
+    @staticmethod
+    def __momentum_string(doubled_value):
+        """Return the true angular momentum of a doubled value as a string,
+        i.e. '15/2' for 15 and '4' for 8.
+        """
+        if doubled_value % 2 == 0:
+            return str(doubled_value//2)
+
+        return "{0:d}/2".format(doubled_value)
+
+
+    @staticmethod
+    def __wrap(text, width=64):
+        """Return the text with the newlines of the manual wrapping of the
+        plain-text table, i.e. broken into lines of at most the given width
+        at the spaces. The notes stating the scope of a table hold the names
+        of the ions, so their length is not known when they are written.
+        """
+        line_list = []
+        line      = ""
+
+        for word in text.split():
+            if line == "":
+                line = word
+            elif len(line) + 1 + len(word) <= width:
+                line += " " + word
+            else:
+                line_list.append(line)
+                line = word
+
+        if not line == "":
+            line_list.append(line)
+
+        return "\n".join(line_list)
+
+
+    def __scope_note(self):
+        """Return the explanatory text stating the scope of the table, i.e.
+        the elements and the oxidation states the rows were asked for.
+        """
+        if isinstance(self.oxidation_states,str):
+            if self.oxidation_states == 'all':
+                state_text = "every oxidation state that leaves a single open shell"
+            else:
+                state_text = "their " + self.oxidation_states + " oxidation states"
+        elif len(self.oxidation_states) == 1:
+            state_text = "the oxidation state +" + str(self.oxidation_states[0])
+        else:
+            state_text = "the oxidation states " \
+                         + ", ".join("+" + str(state) for state
+                                     in sorted(self.oxidation_states))
+
+        # The elements are named one by one for a short list and by the
+        # first and the last symbol for a long one, so that the note stays
+        # readable for a table of the whole d and f blocks.
+        if len(self.elements) <= 8:
+            element_text = ", ".join(self.elements)
+        else:
+            element_text = "{0:d} elements from {1:s} to {2:s}".format(
+                len(self.elements),self.elements[0],self.elements[-1])
+
+        return self.__wrap(
+            "The table covers " + element_text + " in " + state_text + ", i.e. "
+            + ("one ion" if self.n_rows == 1 else str(self.n_rows) + " ions")
+            + ". The rows are ordered by the atomic number and, within one "
+            "element, by decreasing oxidation state.")
+
+
+    def __missing_note(self):
+        """Return the explanatory texts naming the ions that have no data
+        and the ions whose oxidation state is not a chemically common one.
+        Both are left out when there are no such ions.
+        """
+        note_list = []
+
+        if len(self.missing_list) > 0:
+            note_list.append(self.__wrap(
+                "A dash marks a value that does not exist. The "
+                + ("ion " if len(self.missing_list) == 1 else "ions ")
+                + ", ".join(self.missing_list)
+                + (" carries" if len(self.missing_list) == 1 else " carry")
+                + " no data, as they leave no single open shell: the oxidation "
+                "state is either too low, the outer s shell of the atom being "
+                "still occupied, or too high, breaking into the noble-gas core."))
+
+        if len(self.uncommon_list) > 0:
+            note_list.append(self.__wrap(
+                "The oxidation state of the "
+                + ("ion " if len(self.uncommon_list) == 1 else "ions ")
+                + ", ".join(self.uncommon_list)
+                + " is not a chemically common one. The whole valence is taken "
+                "here as the single open shell, which for such a state need not "
+                "be the correct configuration; La(II), for instance, is 5d1 and "
+                "not 4f1."))
+
+        return note_list
+
+
+    def ground_multiplet_table(self):
+        """Return the ground multiplet of every ion of the set as an
+        instance of ResultTable, i.e. the valence configuration of the ion,
+        the term symbol of its ground term and the quantum numbers S, L and
+        J of its Hund's-rule ground multiplet.
+
+        The angular momenta are printed as the true angular momenta, i.e. as
+        J = 15/2 for the Dy(III) whose J attribute is 15.
+        """
+        from ouluspin import result_table
+
+        row_list = []
+        for row in self.rows:
+            data = row['data']
+
+            if data is None:
+                row_list.append([row['ion']] + 6*[self.MISSING_TEXT])
+                continue
+
+            row_list.append([row['ion'],
+                             data.valence_configuration,
+                             data.ground_multiplet_symbol,
+                             self.__momentum_string(data.S),
+                             self.__momentum_string(data.L),
+                             self.__momentum_string(data.J),
+                             str(data.degeneracy)])
+
+        return result_table.ResultTable(
+            row_list,
+            column_headers=["Ion","Configuration","Ground multiplet",
+                            "S","L","J","2J + 1"],
+            title="GROUND MULTIPLETS OF THE IONS",
+            notes=[self.__scope_note(),
+                   "The ground multiplet follows Hund's rules and the terms are "
+                   "those\nof the valence configuration, evaluated from the "
+                   "coefficients of\nfractional parentage of the shell."]
+                  + self.__missing_note(),
+            alignments=['l','l','l','r','r','r','r'],
+            table_type='ion_data')
+
+
+    def ground_magnetism_table(self):
+        """Return the magnetism of the ground multiplet of every ion of the
+        set as an instance of ResultTable, i.e. the quantum numbers S, L and
+        J, the Lande g-factor of the multiplet and the chiT product the
+        Curie law gives for it.
+
+        The g-factor and the chiT product are given with both conventions
+        for the g-factor of the free electron: the accurate one, evaluated
+        with the CODATA value, which is the one meant for quantitative work,
+        and the one of the approximation g_e = 2 of the textbooks, which is
+        the convention the tabulated values of the literature are evaluated
+        in. The g-factor of that approximation is a rational number and is
+        given as the exact fraction it is as well.
+        """
+        from ouluspin import result_table
+
+        row_list = []
+        for row in self.rows:
+            data = row['data']
+
+            if data is None:
+                row_list.append([row['ion']] + 8*[self.MISSING_TEXT])
+                continue
+
+            row_list.append([row['ion'],
+                             self.__momentum_string(data.S),
+                             self.__momentum_string(data.L),
+                             self.__momentum_string(data.J),
+                             data.lande_g_factor,
+                             data.lande_g_factor_simple,
+                             data.lande_g_factor_str,
+                             data.curie_susceptibility(),
+                             data.curie_susceptibility(simple_g_factor=True)])
+
+        return result_table.ResultTable(
+            row_list,
+            column_headers=["Ion","S","L","J",
+                            "g_J","g_J (g_e = 2)","Fraction",
+                            "chiT / cm^3 K mol^-1","chiT, g_e = 2"],
+            title="MAGNETISM OF THE GROUND MULTIPLETS OF THE IONS",
+            notes=[self.__scope_note(),
+                   "g_J is the Lande g-factor of the ground multiplet and chiT the\n"
+                   "product the Curie law gives for that multiplet, i.e.\n"
+                   "chi*T = N_A mu_B^2 g_J^2 J(J+1) / (3 k_B), in cm^3 K mol^-1.",
+                   "Both are given with the g-factor of the free electron\n"
+                   "({0:.9f}) and in the approximation g_e = 2 of the\n"
+                   "textbooks, which is the one the tabulated values of the\n"
+                   "literature are evaluated in. The g-factor of that\n"
+                   "approximation is a rational number and is given as the exact\n"
+                   "fraction it is in the column Fraction."
+                   .format(IonData.electron_g_factor()),
+                   "The g-factor is not defined for a multiplet of J = 0, where it\n"
+                   "is given as zero; the chiT product vanishes there in any case."]
+                  + self.__missing_note(),
+            formats=[None,None,None,None,'.6f','.6f',None,'.4f','.4f'],
+            alignments=['l','r','r','r','r','r','r','r','r'],
+            table_type='ion_data')
+
+
+    def number_of_spin_states_table(self):
+        """Return the number of spin states of the open shell of every ion
+        of the set as an instance of ResultTable, one column per spin
+        multiplicity, the largest multiplicity met among the ions of the set
+        first.
+
+        The SPIN STATES of a multiplicity are the states of one spin
+        component alone, i.e. the states of the multiplicity divided by it,
+        which is the sum of (2L+1) over the terms carrying it: a 6H term
+        holds 6*11 = 66 states and 11 spin states. They are the states a
+        spin-free calculation of that multiplicity carries, i.e. the number
+        of roots that has to be asked for.
+
+        The multiplicities an ion does not carry, and the ions that have no
+        data at all, are printed as dashes, since the allowed multiplicities
+        vary from one ion to the next.
+        """
+        from ouluspin import result_table
+
+        multiplicity_list = self.multiplicities()
+
+        row_list = []
+        for row in self.rows:
+            data = row['data']
+
+            if data is None:
+                row_list.append([row['ion'],self.MISSING_TEXT]
+                                + (len(multiplicity_list) + 1)*[self.MISSING_TEXT])
+                continue
+
+            count = {group['multiplicity']: group['n_spin_states']
+                     for group in data.states_by_multiplicity()}
+
+            cell_list = [row['ion'],data.valence_configuration]
+            for multiplicity in multiplicity_list:
+                if multiplicity in count:
+                    cell_list.append(count[multiplicity])
+                else:
+                    cell_list.append(self.MISSING_TEXT)
+
+            cell_list.append(data.n_spin_states)
+
+            row_list.append(cell_list)
+
+        return result_table.ResultTable(
+            row_list,
+            column_headers=["Ion","Configuration"]
+                           + [str(multiplicity) for multiplicity
+                              in multiplicity_list]
+                           + ["Total"],
+            title="NUMBER OF SPIN STATES OF THE IONS",
+            notes=[self.__scope_note(),
+                   "The columns are the spin multiplicities 2S + 1 of the terms of\n"
+                   "the open shell, the largest first, and the last column their\n"
+                   "sum. A dash marks a multiplicity the configuration does not\n"
+                   "carry.",
+                   "The spin states of a multiplicity are the states of one spin\n"
+                   "component alone, i.e. the states divided by the multiplicity:\n"
+                   "a 6H term holds 6*11 = 66 states and 11 spin states. They are\n"
+                   "the states a spin-free calculation of that multiplicity\n"
+                   "carries, i.e. the number of roots that is asked for."]
+                  + self.__missing_note(),
+            alignments=['l','l'] + (len(multiplicity_list) + 1)*['r'],
+            table_type='ion_data')
+
+
+    def state_count_table(self):
+        """Return the size of the open shell of every ion of the set as an
+        instance of ResultTable, i.e. the number of its terms, of its spin
+        states and of its states.
+
+        The number of states of the configuration is the number of ways its
+        electrons are placed in the spin orbitals of the shell, and the spin
+        states are the states of one spin component of each term (see
+        number_of_spin_states_table).
+        """
+        from ouluspin import result_table
+
+        row_list = []
+        for row in self.rows:
+            data = row['data']
+
+            if data is None:
+                row_list.append([row['ion']] + 5*[self.MISSING_TEXT])
+                continue
+
+            row_list.append([row['ion'],
+                             data.valence_configuration,
+                             data.n_terms,
+                             len(set(data.terms)),
+                             data.n_spin_states,
+                             data.n_states])
+
+        return result_table.ResultTable(
+            row_list,
+            column_headers=["Ion","Configuration","Terms","Term symbols",
+                            "Spin states","States"],
+            title="TERMS AND STATES OF THE OPEN SHELLS OF THE IONS",
+            notes=[self.__scope_note(),
+                   "Terms is the number of terms of the configuration and Term\n"
+                   "symbols the number of distinct term symbols among them, the\n"
+                   "terms carrying the same symbol being told apart by their\n"
+                   "seniority. The states are all the states of the configuration\n"
+                   "and the spin states those of one spin component of each term."]
+                  + self.__missing_note(),
+            alignments=['l','l','r','r','r','r'],
+            table_type='ion_data')
+
+
+    def configuration_table(self):
+        """Return the electron configuration of every ion of the set as an
+        instance of ResultTable, i.e. the atomic number of the element, the
+        number of electrons of the ion, the block of the periodic table, the
+        noble-gas core and the configuration of the open shell.
+        """
+        from ouluspin import result_table
+
+        row_list = []
+        for row in self.rows:
+            data = row['data']
+
+            if data is None:
+                row_list.append([row['ion'],
+                                 self.MISSING_TEXT,
+                                 "+{0:d}".format(row['oxidation_state'])]
+                                + 4*[self.MISSING_TEXT])
+                continue
+
+            row_list.append([row['ion'],
+                             data.atomic_number,
+                             "+{0:d}".format(data.oxidation_state),
+                             data.n_total_electrons,
+                             data.block,
+                             data.core_configuration,
+                             data.valence_configuration])
+
+        return result_table.ResultTable(
+            row_list,
+            column_headers=["Ion","Z","Oxidation state","Electrons","Block",
+                            "Core","Valence"],
+            title="ELECTRON CONFIGURATIONS OF THE IONS",
+            notes=[self.__scope_note(),
+                   "Z is the atomic number of the element and Electrons the number\n"
+                   "of electrons of the ion. Only the ions whose electrons outside\n"
+                   "the noble-gas core all belong to a single open shell are\n"
+                   "treated, so the valence is that one shell."]
+                  + self.__missing_note(),
+            alignments=['l','r','r','r','l','l','l'],
+            table_type='ion_data')
+
+
+    def __repr__(self):
+        """Return the set of ions as the plain-text rendering of the table
+        given by the ground_multiplet_table method.
+        """
+        return self.ground_multiplet_table().string_table()
+
+
+    @classmethod
+    def run_tests(cls, print_output=True):
+        """Initiate the class and run a set of tests on the class
+        constructor and the class methods. Return True if all tests passed
+        and False otherwise.
+
+        Optional arguments
+        ------------------
+        print_output : boolean
+            Whether to print the outcome of each test. Default is True.
+        """
+        from ouluspin import _debug as debug_output
+        from ouluspin import result_table
+
+        result_list = []
+        def check(test_name,condition):
+            result_list.append(debug_output.test_check('MultipleIonData',test_name,
+                                                       condition,print_output))
+
+        # ------------------------------------------------------------------
+        # The scope of the table.
+        # ------------------------------------------------------------------
+        lanthanides = cls('lanthanides',3)
+
+        check('the shorthand of the lanthanides covers La to Lu',
+              (lanthanides.elements[0] == 'La')
+              and (lanthanides.elements[-1] == 'Lu')
+              and (len(lanthanides.elements) == 15))
+        check('one row per element is built',
+              lanthanides.n_rows == 15)
+        check('every trivalent lanthanide has data',
+              (lanthanides.n_ions == 15) and (len(lanthanides.missing_list) == 0))
+        check('the shorthand 4f is the shorthand of the lanthanides',
+              cls('4f',3).elements == lanthanides.elements)
+        check('the shorthand of the actinides covers Ac to Lr',
+              (cls('actinides',3).elements[0] == 'Ac')
+              and (cls('actinides',3).elements[-1] == 'Lr')
+              and (len(cls('actinides',3).elements) == 15))
+        check('the shorthand 3d covers Sc to Zn',
+              (cls('3d',2).elements[0] == 'Sc')
+              and (cls('3d',2).elements[-1] == 'Zn')
+              and (len(cls('3d',2).elements) == 10))
+        check('the shorthand 4d covers Y to Cd',
+              (cls('4d',2).elements[0] == 'Y')
+              and (cls('4d',2).elements[-1] == 'Cd'))
+        check('the shorthand 5d covers Hf to Hg',
+              (cls('5d',4).elements[0] == 'Hf')
+              and (cls('5d',4).elements[-1] == 'Hg'))
+        # The 5d series begins at Hf, since the lanthanides stand between
+        # the 5d and the 6s shells, so it holds nine elements and not ten.
+        check('the shorthand of the d block covers the three d series',
+              len(cls('d-block',2).elements) == 29)
+        check('the shorthand of the f block covers the two f series',
+              len(cls('f-block',3).elements) == 30)
+        check('the shorthand of everything covers all treated elements',
+              cls('all',3).elements == IonData.supported_elements())
+        check('the shorthands are listed',
+              ('lanthanides' in cls.element_shorthands())
+              and ('3d' in cls.element_shorthands()))
+
+        # The parsing of the arguments is case-insensitive and accepts both
+        # a single entry and a list.
+        check('the elements are read case-insensitively',
+              cls('LANTHANIDES',3).elements == lanthanides.elements)
+        check('a single chemical symbol is accepted',
+              cls('Dy',3).elements == ['Dy'])
+        check('a list of chemical symbols is accepted',
+              cls(['dy','er'],3).elements == ['Dy','Er'])
+        check('the elements are ordered by the atomic number',
+              cls(['Er','Dy','Ce'],3).elements == ['Ce','Dy','Er'])
+        check('an element given twice is kept once',
+              cls(['Dy','dy'],3).elements == ['Dy'])
+        check('a shorthand and a symbol may be mixed',
+              cls(['3d','Dy'],3).elements
+              == IonData.supported_elements()[:10] + ['Dy'])
+
+        # The oxidation states, as Arabic numbers and as Roman numerals.
+        check('an oxidation state given as a Roman numeral is read',
+              cls('Dy','III').rows[0]['oxidation_state'] == 3)
+        check('a Roman numeral in parentheses is read',
+              cls('Dy','(III)').rows[0]['oxidation_state'] == 3)
+        check('an oxidation state given as a string of digits is read',
+              cls('Dy','3').rows[0]['oxidation_state'] == 3)
+        check('the Roman numerals are read case-insensitively',
+              cls('Dy','iii').rows[0]['oxidation_state'] == 3)
+        check('a list of oxidation states is accepted',
+              [row['oxidation_state'] for row in cls('Dy',[2,3]).rows] == [3,2])
+        check('the Arabic and the Roman numerals may be mixed',
+              [row['oxidation_state'] for row in cls('Dy',['II',3]).rows] == [3,2])
+
+        # The shorthands of the oxidation states.
+        common = cls('Eu','common')
+        check('the common oxidation states are the default',
+              [row['oxidation_state'] for row in cls('Eu').rows]
+              == [row['oxidation_state'] for row in common.rows])
+        check('the common oxidation states of Eu are +3 and +2',
+              [row['oxidation_state'] for row in common.rows] == [3,2])
+        check('the ordinary oxidation state is a single state',
+              [row['oxidation_state'] for row in cls('Fe','ordinary').rows] == [3])
+        check('every possible oxidation state is covered by the shorthand all',
+              [row['oxidation_state'] for row in cls('Dy','all').rows]
+              == [8,7,6,5,4,3,2])
+        check('the shorthand all leaves no missing rows',
+              len(cls('Dy','all').missing_list) == 0)
+        check('the shorthands of the oxidation states are listed',
+              cls.oxidation_state_shorthands() == ['common','ordinary','all'])
+
+        # ------------------------------------------------------------------
+        # The ordering of the rows: first the atomic number, then the
+        # oxidation state, the highest first.
+        # ------------------------------------------------------------------
+        mixed = cls(['Dy','Ce'],[2,3])
+
+        check('the rows are ordered by the atomic number and the oxidation state',
+              [row['ion'] for row in mixed.rows]
+              == ['Ce(III)','Ce(II)','Dy(III)','Dy(II)'])
+        check('the canonical names of the ions are built',
+              cls('Mn',7).rows[0]['ion'] == 'Mn(VII)')
+
+        # ------------------------------------------------------------------
+        # The ions without data.
+        # ------------------------------------------------------------------
+        # La(I) is a mono-positive f-block ion, which still carries an outer
+        # s electron, and Ce(V) would break into the xenon core, whereas
+        # Ce(IV) is the empty 4f shell.
+        edge = cls('Ce',[1,4,5])
+
+        check('an ion without data is kept as a row',
+              edge.n_rows == 3)
+        check('the ions without data are named',
+              sorted(edge.missing_list) == ['Ce(I)','Ce(V)'])
+        check('the ions with data are collected',
+              (edge.n_ions == 1) and (edge.ion_list[0].ion == 'Ce(IV)'))
+        check('the row of an ion without data carries no data',
+              [row['data'] for row in edge.rows if row['ion'] == 'Ce(V)'] == [None])
+        check('a missing ion is printed as a dash',
+              edge.ground_multiplet_table().string_table().count(
+                  cls.MISSING_TEXT) > 0)
+
+        # An uncommon oxidation state gives data, with a note naming the ion.
+        uncommon = cls('La',2)
+        check('an uncommon oxidation state is accepted',
+              (uncommon.n_ions == 1)
+              and (uncommon.ion_list[0].valence_configuration == '4f1'))
+        check('the ions of an uncommon oxidation state are named',
+              uncommon.uncommon_list == ['La(II)'])
+        check('a common oxidation state is not named as uncommon',
+              len(lanthanides.uncommon_list) == 0)
+
+        # ------------------------------------------------------------------
+        # The values, which must be those of the IonData instances.
+        # ------------------------------------------------------------------
+        dy = lanthanides.ion('Dy(III)')
+
+        check('the ion of the set is reached by its name',
+              (dy is not None) and (dy.ion == 'Dy(III)'))
+        check('the ion is the IonData instance of the row',
+              isinstance(dy,IonData) and (dy.J == 15))
+        check('the ordinary oxidation state is used when none is given',
+              lanthanides.ion('Dy') is dy)
+        check('the ion of a missing row is None',
+              edge.ion('Ce(V)') is None)
+        check('the multiplicities of the set are collected',
+              cls(['Gd','Dy'],3).multiplicities() == [8,6,4,2])
+
+        # ------------------------------------------------------------------
+        # The tables.
+        # ------------------------------------------------------------------
+        ground_table = lanthanides.ground_multiplet_table()
+        check('the ground multiplet table is a ResultTable',
+              isinstance(ground_table,result_table.ResultTable))
+
+        ground_string = ground_table.string_table()
+        check('the ground multiplet table lists one ion per row',
+              all(name in ground_string for name
+                  in ('La(III)','Dy(III)','Lu(III)')))
+        check('the ground multiplet table states the ground multiplets',
+              ('6H15/2' in ground_string) and ('7F6' in ground_string))
+        check('the ground multiplet table states the configurations',
+              ('4f9' in ground_string) and ('4f14' in ground_string))
+        check('the ground multiplet table prints the true angular momenta',
+              '15/2' in ground_string)
+
+        magnetism_string = lanthanides.ground_magnetism_table().string_table()
+        check('the magnetism table states the Lande g-factors',
+              ('1.334106' in magnetism_string)
+              and ('1.333333' in magnetism_string)
+              and ('4/3' in magnetism_string))
+        check('the magnetism table states the chiT products',
+              ('14.1887' in magnetism_string) and ('14.1723' in magnetism_string))
+        check('the magnetism table covers every ion of the set',
+              all(row['ion'] in magnetism_string for row in lanthanides.rows))
+
+        # The table of the numbers of the spin states: one column per spin
+        # multiplicity, the largest first, and a column of their sum.
+        spin_table   = cls(['Gd','Dy'],3).number_of_spin_states_table()
+        spin_string  = spin_table.string_table()
+        spin_headers = spin_table.column_headers[0]
+
+        check('the spin state table is labelled by the multiplicities',
+              spin_headers[2:] == ['8','6','4','2','Total'])
+        check('the spin states of the sextets of f9 are tabulated',
+              ('21' in spin_string) and ('735' in spin_string))
+        check('a multiplicity an ion does not carry is a dash',
+              cls.MISSING_TEXT in spin_string)
+
+        # The columns of the table must be the spin states of the ion, and
+        # they must sum to the total the last column states.
+        spin_ok = True
+        for row in spin_table.rows:
+            if not sum(cell for cell in row[2:-1]
+                       if not isinstance(cell,str)) == row[-1]:
+                spin_ok = False
+        check('the spin states of the multiplicities sum to the total',spin_ok)
+
+        count_string = lanthanides.state_count_table().string_table()
+        check('the state count table counts the terms and the states',
+              ('2002' in count_string) and ('735' in count_string)
+              and ('119' in count_string))
+
+        configuration_string = lanthanides.configuration_table().string_table()
+        check('the configuration table states the atomic numbers',
+              ('66' in configuration_string) and ('[Xe]' in configuration_string))
+
+        check('the representation is the ground multiplet table',
+              repr(lanthanides) == ground_string)
+
+        # Every table must carry a row for every ion of the scope, including
+        # the ions without data.
+        row_count_ok = True
+        for table in (edge.ground_multiplet_table(),
+                      edge.ground_magnetism_table(),
+                      edge.number_of_spin_states_table(),
+                      edge.state_count_table(),
+                      edge.configuration_table()):
+            if not len(table.rows) == edge.n_rows:
+                row_count_ok = False
+
+            # The rows of a table are all of the same length, which is what
+            # the renderers rest on.
+            if not len({len(row) for row in table.rows}) == 1:
+                row_count_ok = False
+        check('every table carries a row for every ion of the scope',row_count_ok)
+
+        # The values of the tables are those of the IonData instances, which
+        # is checked here against the instance of one ion built on its own.
+        reference = IonData('Er(III)')
+        check('the values are those of the IonData instance',
+              (lanthanides.ion('Er(III)').J == reference.J)
+              and (abs(lanthanides.ion('Er(III)').curie_susceptibility()
+                       - reference.curie_susceptibility()) < 1.0e-12))
+
+        # ------------------------------------------------------------------
+        # The errors, which are reported the way the other errors of the
+        # library are, i.e. by stopping.
+        # ------------------------------------------------------------------
+        import io
+        import contextlib
+
+        def fails(function):
+            """Return True when the call stops the program, i.e. when the
+            class reports a fatal error.
+            """
+            buffer = io.StringIO()
+
+            try:
+                with contextlib.redirect_stdout(buffer):
+                    function()
+            except SystemExit:
+                return True
+
+            return False
+
+        check('an unknown element is an error',
+              fails(lambda: cls('Xx',3)))
+        check('an element outside the d and f blocks is an error',
+              fails(lambda: cls('Si',3)))
+        check('an unknown shorthand is an error',
+              fails(lambda: cls('6d',3)))
+        check('an unparsable oxidation state is an error',
+              fails(lambda: cls('Dy','third')))
+        check('a Roman numeral beyond VIII is an error',
+              fails(lambda: cls('Dy','ix')))
+        check('a non-positive oxidation state is an error',
+              fails(lambda: cls('Dy',0)))
+        check('an empty list of elements is an error',
+              fails(lambda: cls([],3)))
+        check('an empty list of oxidation states is an error',
+              fails(lambda: cls('Dy',[])))
+        # A mono-positive f-block ion still carries its outer s electron, so
+        # a scope of nothing but those states holds no data at all.
+        check('a scope without any data is an error',
+              fails(lambda: cls('lanthanides',1)))
+        check('an ion outside the set is an error',
+              fails(lambda: lanthanides.ion('Fe(III)')))
+
+        return debug_output.test_summary('MultipleIonData',result_list,print_output)
