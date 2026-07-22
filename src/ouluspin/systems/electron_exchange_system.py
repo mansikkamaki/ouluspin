@@ -99,7 +99,9 @@ class PseudoSpinSystem:
     Private methods
     ---------------
     __error(message)
-        Report an error and stop, naming the class of the instance.
+        Report an error and stop.
+    __warning(message)
+        Report a warning and continue.
     """
 
     @staticmethod
@@ -133,15 +135,26 @@ class PseudoSpinSystem:
 
 
     def __error(self, message):
-        """Report an error and stop. The message names the class of the
-        instance rather than this base class, so that the error points at
-        the system the user actually built.
+        """Report an error and stop. The message is printed one line at a
+        time, so that every line of a message of several lines is marked as
+        an error, and the header names the class of the instance, so that an
+        error raised in a base class points at the class that was built.
         """
         print("ERROR in " + type(self).__name__ + ".")
         for line in message.split("\n"):
-            print("Error: " + line)
+            print("ERROR: " + line)
         print("Error termination.")
         sys.exit(1)
+
+
+    def __warning(self, message):
+        """Report a warning and continue. The message is printed the way the
+        one of __error is, and the calculation goes on.
+        """
+        print("WARNING in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("Warning: " + line)
+        print()
 
 
     def static_transition_magnetic_moments(self, n_states=None):
@@ -731,6 +744,10 @@ class ElectronExchangeSystem(PseudoSpinSystem):
 
     Private methods
     ---------------
+    __error(message)
+        Report an error and stop.
+    __warning(message)
+        Report a warning and continue.
     __construct_hamiltonian()
         Construct the field-independent terms of the Hamiltonian, i.e. the ZFS
         and exchange terms, and store the operator as an attribute. The
@@ -742,8 +759,6 @@ class ElectronExchangeSystem(PseudoSpinSystem):
     __inflation_list(tensor_tuple) : list of int
         Return the inflation list of a tensor tuple and check its site
         indices.
-    __system_error(message)
-        Report an error in the construction of the system and stop.
 
     Public methods
     --------------
@@ -778,6 +793,29 @@ class ElectronExchangeSystem(PseudoSpinSystem):
         tests passed.
     """
 
+    def __error(self, message):
+        """Report an error and stop. The message is printed one line at a
+        time, so that every line of a message of several lines is marked as
+        an error, and the header names the class of the instance, so that an
+        error raised in a base class points at the class that was built.
+        """
+        print("ERROR in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("ERROR: " + line)
+        print("Error termination.")
+        sys.exit(1)
+
+
+    def __warning(self, message):
+        """Report a warning and continue. The message is printed the way the
+        one of __error is, and the calculation goes on.
+        """
+        print("WARNING in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("Warning: " + line)
+        print()
+
+
     def __inflation_list(self, tensor_tuple):
         """Return the inflation list of the given tensor tuple, i.e. the
         list of ones and zeros that inflate_dimension takes: a one at the
@@ -794,32 +832,23 @@ class ElectronExchangeSystem(PseudoSpinSystem):
 
         for site in site_list:
             if not isinstance(site,(int,np.integer)):
-                self.__system_error("The site indices of a tensor tuple must be integers,\n"
+                self.__error("The site indices of a tensor tuple must be integers,\n"
                                     "but one of them is " + repr(site) + ".")
 
             if site < 0 or site >= self.n_sites:
-                self.__system_error("A tensor tuple names the site " + str(site)
-                                    + ", but the system holds\n"
-                                    "the sites 0 to " + str(self.n_sites - 1) + ".")
+                self.__error("A tensor tuple names the site " + str(site)
+                             + ", but the system holds\n"
+                             "the sites 0 to " + str(self.n_sites - 1) + ".")
 
         if not len(set(site_list)) == len(site_list):
-            self.__system_error("A tensor tuple names the same site more than once: "
+            self.__error("A tensor tuple names the same site more than once: "
                                 + str(site_list) + ".")
 
         if len(site_list) == 0:
-            self.__system_error("A tensor tuple names no site at all. Each tuple must\n"
+            self.__error("A tensor tuple names no site at all. Each tuple must\n"
                                 "hold the tensor followed by the sites it acts on.")
 
         return [1 if i in site_list else 0 for i in range(0,self.n_sites)]
-
-
-    def __system_error(self, message):
-        """Report an error in the construction of the system and stop."""
-        print("ERROR in " + type(self).__name__ + ".")
-        for line in message.split("\n"):
-            print("Error: " + line)
-        print("Error termination.")
-        sys.exit(1)
 
 
     def __construct_hamiltonian(self):
@@ -1059,7 +1088,7 @@ class ElectronExchangeSystem(PseudoSpinSystem):
         self.n_sites = len(self.pseudospin_list)
 
         if self.n_sites == 0:
-            self.__system_error("The pseudospin list is empty, so the system holds no\n"
+            self.__error("The pseudospin list is empty, so the system holds no\n"
                                 "spin sites at all.")
 
         # All tensors of this class are given in one common coordinate
@@ -1522,6 +1551,10 @@ class AbInitioElectronExchangeSystem(PseudoSpinSystem):
 
     Private methods
     ---------------
+    __error(message)
+        Report an error and stop.
+    __warning(message)
+        Report a warning and continue.
     __calculate_rotation() : void
         Calculate g-tensor of the ground Kramers/Ising/pseudo doublet
         and store the transformation into its principal axis system
@@ -1560,6 +1593,29 @@ class AbInitioElectronExchangeSystem(PseudoSpinSystem):
         summary of the results.
     """
     
+    def __error(self, message):
+        """Report an error and stop. The message is printed one line at a
+        time, so that every line of a message of several lines is marked as
+        an error, and the header names the class of the instance, so that an
+        error raised in a base class points at the class that was built.
+        """
+        print("ERROR in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("ERROR: " + line)
+        print("Error termination.")
+        sys.exit(1)
+
+
+    def __warning(self, message):
+        """Report a warning and continue. The message is printed the way the
+        one of __error is, and the calculation goes on.
+        """
+        print("WARNING in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("Warning: " + line)
+        print()
+
+
     def __calculate_rotation(self):
         """Calculate g-tensor of the ground Kramers/Ising/pseudo doublet
         and store the transformation into its principal axis system
@@ -1619,10 +1675,7 @@ class AbInitioElectronExchangeSystem(PseudoSpinSystem):
             P[j][i] = 1.0
 
         if not np.allclose(np.dot(P,P.T),np.identity(self.n_basis, dtype=np.float64)):
-            print("ERROR in AbInitioElectronicPseudoSpinSystem.")
-            print("Error: Reorder matrix is not orthogonal.")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("Reorder matrix is not orthogonal.")
 
         return P
 
@@ -1952,10 +2005,7 @@ class AbInitioElectronExchangeSystem(PseudoSpinSystem):
         self.kramers_system = self.kramers_system_from_basis(self.basis)
 
         if not self.magnetic_moment.n_basis == self.n_full_basis:
-            print("ERROR in AbInitioElectronicPseudoSpinSystem.")
-            print("Error: Inconsistent dimensions in input matrices.")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("Inconsistent dimensions in input matrices.")
 
         if R is None:
             self.__calculate_rotation()
@@ -1967,13 +2017,10 @@ class AbInitioElectronExchangeSystem(PseudoSpinSystem):
             R = np.array(R, dtype=np.float64)
             if not np.allclose(np.dot(R,R.T),np.identity(3),atol=1.0e-6) \
                or la.det(R) < 0.0:
-                print("ERROR in AbInitioElectronExchangeSystem.")
-                print("Error: The rotation matrix R must be a proper rotation")
-                print("       (orthogonal with determinant +1). The magnetic moment")
-                print("       is an axial vector, and rotating it with an improper")
-                print("       matrix would silently mirror the physics.")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("The rotation matrix R must be a proper rotation\n"
+                             "(orthogonal with determinant +1). The magnetic moment\n"
+                             "is an axial vector, and rotating it with an improper\n"
+                             "matrix would silently mirror the physics.")
             self.R = R
             self.tensor_frame = 'user-defined axis frame'
 
@@ -2001,13 +2048,12 @@ class AbInitioElectronExchangeSystem(PseudoSpinSystem):
         result, result_str = self.__check_time_reversal()
 
         if not result:
-            print("WARNING in AbInitioElectronExchangeSystem.")
-            print("Warning: Pseudospin operators have incorrect behavior under time reversal.")
-            print(result_str)
+            self.__warning("Pseudospin operators have incorrect behavior under "
+                           "time reversal.\n" + result_str)
 
 
-    @staticmethod
-    def __construct_basis(pseudospin):
+    @classmethod
+    def __construct_basis(cls, pseudospin):
         """Turn the pseudospin argument of the from_*_aniso_data class
         methods into a PseudoSpinBasis instance. The argument can be a
         ready PseudoSpinBasis (returned as is), a single integer pseudospin
@@ -2022,12 +2068,11 @@ class AbInitioElectronExchangeSystem(PseudoSpinSystem):
         elif isinstance(pseudospin,(list,tuple)):
             return pseudospin_operators.PseudoSpinBasis(list(pseudospin))
         else:
-            print("ERROR in AbInitioElectronExchangeSystem.")
-            print("Error: The pseudospin argument must be a PseudoSpinBasis, a single")
-            print("       integer pseudospin or a list of integer pseudospins (all")
-            print("       pseudospins given as multiples of two).")
-            print("Error termination.")
-            sys.exit(1)
+            instance = cls.__new__(cls)
+            instance.__error("The pseudospin argument must be a PseudoSpinBasis, a "
+                             "single\ninteger pseudospin or a list of integer "
+                             "pseudospins (all\npseudospins given as multiples of "
+                             "two).")
 
 
     @classmethod
@@ -2151,12 +2196,10 @@ class AbInitioElectronExchangeSystem(PseudoSpinSystem):
         basis = cls.__construct_basis(pseudospin)
 
         if not basis.n_sites == 1:
-            print("ERROR in AbInitioElectronExchangeSystem.")
-            print("Error: from_average_aniso_data only supports single-site systems,")
-            print("       as a single Lande g-factor defines the magnetic moment of")
-            print("       one spin site only.")
-            print("Error termination.")
-            sys.exit(1)
+            instance = cls.__new__(cls)
+            instance.__error("from_average_aniso_data only supports single-site systems,\n"
+                             "as a single Lande g-factor defines the magnetic moment of\n"
+                             "one spin site only.")
 
         # Project each datafile onto its own pseudospin system (each in the
         # principal magnetic frame of its own ground doublet).

@@ -69,6 +69,10 @@ class OrcaCalculation(molcas.AnisoCalculation):
 
     Private methods
     ---------------
+    __error(message)
+        Report an error and stop.
+    __warning(message)
+        Report a warning and continue.
 
     Public methods
     --------------
@@ -82,6 +86,29 @@ class OrcaCalculation(molcas.AnisoCalculation):
         Initiate the class using a synthetic output file and run a set of
         internal tests. Return True if all tests passed.
     """
+
+    def __error(self, message):
+        """Report an error and stop. The message is printed one line at a
+        time, so that every line of a message of several lines is marked as
+        an error, and the header names the class of the instance, so that an
+        error raised in a base class points at the class that was built.
+        """
+        print("ERROR in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("ERROR: " + line)
+        print("Error termination.")
+        sys.exit(1)
+
+
+    def __warning(self, message):
+        """Report a warning and continue. The message is printed the way the
+        one of __error is, and the calculation goes on.
+        """
+        print("WARNING in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("Warning: " + line)
+        print()
+
 
     def read_version(self):
         """Read the version of Orca used to produce the output and store it as an attribute.
@@ -104,10 +131,7 @@ class OrcaCalculation(molcas.AnisoCalculation):
                 self.single_aniso_start_str = '  Calling the SINGLE_ANISO program'
                 break
             elif line == '':
-                print("ERROR in OrcaCalculation.:")
-                print("Error: Unsupported Orca version or could not read version.")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("Unsupported Orca version or could not read version.")
 
         f.close()
         
@@ -134,18 +158,12 @@ class OrcaCalculation(molcas.AnisoCalculation):
 
         allowed_correlations = ['CASSCF','NEVPT2','QD-NEVPT2']
         if not self.correlation in allowed_correlations:
-            print("ERROR in OrcaCalculation.")
-            print("ERROR: Uknown multireference correlation method: " + self.correlation + ".")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("Uknown multireference correlation method: " + self.correlation + ".")
 
         try:
             f = open(self.filename)
         except FileNotFoundError:
-            print("ERROR in OrcaCalculation.")
-            print("ERROR: file " + self.filename + " not found.")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("file " + self.filename + " not found.")
         else:
             f.close()
 
@@ -165,10 +183,7 @@ class OrcaCalculation(molcas.AnisoCalculation):
             elif self.correlation == 'NEVPT2':
                 self.output_instance = 1
             elif self.correlation == 'QD-NEVPT2':
-                print("ERROR in OrcaCalculation.")
-                print("ERROR: SINGLE_ANISO output in conjunction with QD-NEVPT2 is not yet implemented.")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("SINGLE_ANISO output in conjunction with QD-NEVPT2 is not yet implemented.")
 
             self.pseudospin = self.read_pseudospin()
 
@@ -305,6 +320,10 @@ class OrcaAnisoOutput(molcas.AnisoCalculation):
 
     Private methods
     ---------------
+    __error(message)
+        Report an error and stop.
+    __warning(message)
+        Report a warning and continue.
 
     Public methods
     --------------
@@ -325,6 +344,29 @@ class OrcaAnisoOutput(molcas.AnisoCalculation):
         internal tests. Return True if all tests passed.
     """
 
+    def __error(self, message):
+        """Report an error and stop. The message is printed one line at a
+        time, so that every line of a message of several lines is marked as
+        an error, and the header names the class of the instance, so that an
+        error raised in a base class points at the class that was built.
+        """
+        print("ERROR in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("ERROR: " + line)
+        print("Error termination.")
+        sys.exit(1)
+
+
+    def __warning(self, message):
+        """Report a warning and continue. The message is printed the way the
+        one of __error is, and the calculation goes on.
+        """
+        print("WARNING in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("Warning: " + line)
+        print()
+
+
     def read_version(self):
         """Read the version of the SINGLE_ANISO program used to produce the
         output and store it as an attribute. Also define the
@@ -338,21 +380,15 @@ class OrcaAnisoOutput(molcas.AnisoCalculation):
                 self.version = line.split(':')[1].split()[0]
                 break
             elif line == '':
-                print("ERROR in OrcaAnisoOutput.")
-                print("Error: Could not read the SINGLE_ANISO program version. The file")
-                print("       does not look like a standalone SINGLE_ANISO output.")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("Could not read the SINGLE_ANISO program version. The file\n"
+                             "does not look like a standalone SINGLE_ANISO output.")
 
         f.close()
 
         if self.version == 'v1.0.0':
             self.single_aniso_start_str = '!   Program version :'
         else:
-            print("ERROR in OrcaAnisoOutput.")
-            print("Error: Unsupported SINGLE_ANISO version: " + self.version + ".")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("Unsupported SINGLE_ANISO version: " + self.version + ".")
 
 
     def read_crystal_field(self):
@@ -404,10 +440,7 @@ class OrcaAnisoOutput(molcas.AnisoCalculation):
                 else:
                     instance_counter += 1
             elif line == '':
-                print("ERROR in OrcaAnisoOutput.")
-                print("Error: The file " + self.filename + " does not contain SINGLE_ANISO output.")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("The file " + self.filename + " does not contain SINGLE_ANISO output.")
 
         # Find the crystal-field section of the ground atomic multiplet and
         # read the value of J. The SINGLE_ANISO program reports early in the
@@ -423,20 +456,14 @@ class OrcaAnisoOutput(molcas.AnisoCalculation):
                     J = int(J_str.split('/')[0])
                 break
             elif line.startswith('Crystal field will not be computed'):
-                print("ERROR in OrcaAnisoOutput.")
-                print("Error: The SINGLE_ANISO run in the file " + self.filename)
-                print("       did not compute the ab initio crystal field (the output")
-                print("       states: 'Crystal field will not be computed'; usually the")
-                print("       metal ion label was not recognized in the SINGLE_ANISO")
-                print("       input data). No crystal-field parameters can be read.")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("The SINGLE_ANISO run in the file " + self.filename + "\n"
+                             "did not compute the ab initio crystal field (the output\n"
+                             "states: 'Crystal field will not be computed'; usually the\n"
+                             "metal ion label was not recognized in the SINGLE_ANISO\n"
+                             "input data). No crystal-field parameters can be read.")
             elif line == '':
-                print("ERROR in OrcaAnisoOutput.")
-                print("Error: The ab initio crystal-field section was not found in the")
-                print("       SINGLE_ANISO output.")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("The ab initio crystal-field section was not found in the\n"
+                             "SINGLE_ANISO output.")
 
         # Find the full parametrization block (without the Stevens alpha(k)
         # prefactors; the leading block with the alpha(k) prefactors only
@@ -452,22 +479,16 @@ class OrcaAnisoOutput(molcas.AnisoCalculation):
             if len(parts) == 4 and parts[0] in ('Xm','Ym','Zm'):
                 axes_rows[parts[0]] = [float(x) for x in parts[1:4]]
             if line == '':
-                print("ERROR in OrcaAnisoOutput.")
-                print("Error: End of file reached while searching for the full crystal-field")
-                print("       parametrization block.")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("End of file reached while searching for the full crystal-field\n"
+                             "parametrization block.")
 
         while True:
             line = f.readline()
             if line.startswith('  k  |  q  |         B(k,q)        |         C(k,q)'):
                 break
             elif line == '':
-                print("ERROR in OrcaAnisoOutput.")
-                print("Error: End of file reached while searching for the crystal-field")
-                print("       parameter listing.")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("End of file reached while searching for the crystal-field\n"
+                             "parameter listing.")
 
         while True:
             line = f.readline()
@@ -485,19 +506,13 @@ class OrcaAnisoOutput(molcas.AnisoCalculation):
             if line.startswith('*****'):
                 break
             if line == '':
-                print("ERROR in OrcaAnisoOutput.")
-                print("Error: End of file reached while reading the crystal-field")
-                print("       parameter listing.")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("End of file reached while reading the crystal-field\n"
+                             "parameter listing.")
 
         f.close()
 
         if len(rank_list) == 0:
-            print("ERROR in OrcaAnisoOutput.")
-            print("Error: No crystal-field parameters read.")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("No crystal-field parameters read.")
 
         # Convert from Chibotaru--Ungur definition to Iwahara--Chibotaru definition.
         CU_decomposition = tensors.ChibotaruUngurSphericalTensor(rank_list,
@@ -557,10 +572,7 @@ class OrcaAnisoOutput(molcas.AnisoCalculation):
         try:
             f = open(self.filename)
         except FileNotFoundError:
-            print("ERROR in OrcaAnisoOutput.")
-            print("ERROR: file " + self.filename + " not found.")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("file " + self.filename + " not found.")
         else:
             f.close()
 
@@ -708,6 +720,10 @@ class OrcaAnisoFile:
 
     Private methods
     ---------------
+    __error(message)
+        Report an error and stop.
+    __warning(message)
+        Report a warning and continue.
     __read_version()
         Read version of the anisofile and store it as an attribute.
     __read_n_basis()
@@ -740,6 +756,29 @@ class OrcaAnisoFile:
         internal tests. Return True if all tests passed.
     """
 
+    def __error(self, message):
+        """Report an error and stop. The message is printed one line at a
+        time, so that every line of a message of several lines is marked as
+        an error, and the header names the class of the instance, so that an
+        error raised in a base class points at the class that was built.
+        """
+        print("ERROR in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("ERROR: " + line)
+        print("Error termination.")
+        sys.exit(1)
+
+
+    def __warning(self, message):
+        """Report a warning and continue. The message is printed the way the
+        one of __error is, and the calculation goes on.
+        """
+        print("WARNING in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("Warning: " + line)
+        print()
+
+
     def __read_version(self):
         """Read version of the anisofile and store it as an attribute."""
         f = open(self.filename)
@@ -751,10 +790,7 @@ class OrcaAnisoFile:
                 self.version = line.rstrip()
                 break
             elif line == '':
-                print("ERROR in OrcaAnisoFile:")
-                print("Error: File format version not found.")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("File format version not found.")
 
         f.close()
 
@@ -770,10 +806,7 @@ class OrcaAnisoFile:
                 self.n_basis = int(line)
                 break
             elif line == '':
-                print("ERROR in OrcaAnisoFile:")
-                print("Error: Number of basis states not found.")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("Number of basis states not found.")
 
         f.close()
 
@@ -793,16 +826,10 @@ class OrcaAnisoFile:
                 tmp_n_basis = int(line.split()[0])
                 break
             elif line == '':
-                print("ERROR in OrcaAnisoFile:")
-                print("Error: Matrix with tag " + tag + " not found.")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("Matrix with tag " + tag + " not found.")
 
         if not self.n_basis == tmp_n_basis:
-            print("ERROR in OrcaAnisoFile:")
-            print("Error: The dimension of matrix does not match the number of basis states.")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("The dimension of matrix does not match the number of basis states.")
 
         if self.n_basis % 5 == 0:
             n_block_lines = self.n_basis // 5
@@ -851,16 +878,10 @@ class OrcaAnisoFile:
                 tmp_n_basis = int(line.split()[0])
                 break
             elif line == '':
-                print("ERROR in OrcaAnisoFile:")
-                print("Error: Vector with tag " + tag + " not found.")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("Vector with tag " + tag + " not found.")
 
         if not self.n_basis == tmp_n_basis:
-            print("ERROR in OrcaAnisoFile:")
-            print("Error: The dimension of vector does not match the number of basis states.")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("The dimension of vector does not match the number of basis states.")
 
         if self.n_basis % 5 == 0:
             n_block_lines = self.n_basis // 5
@@ -898,10 +919,7 @@ class OrcaAnisoFile:
             return matrix
         
         else:
-            print("ERROR in OrcaAnisoFile:")
-            print("Error: Unrecognized option for output: " + output)
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("Unrecognized option for output: " + output)
     
         
     def hamiltonian(self):
@@ -975,10 +993,7 @@ class OrcaAnisoFile:
         try:
             f = open(self.filename)
         except FileNotFoundError:
-            print("ERROR in OrcaAnisoFile.")
-            print("ERROR: file " + self.filename + " not found.")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("file " + self.filename + " not found.")
         else:
             f.close()
 
@@ -986,10 +1001,7 @@ class OrcaAnisoFile:
         allowed_versions = ['2020']
 
         if not self.version in allowed_versions:
-            print("ERROR in OrcaAnisoFile.:")
-            print("Error: Unsupported format version.")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("Unsupported format version.")
 
         self.__read_n_basis()
 

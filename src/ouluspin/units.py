@@ -92,6 +92,10 @@ class EnergyUnitSystem:
 
     Private methods
     ---------------
+    __error(message)
+        Report an error and stop.
+    __warning(message)
+        Report a warning and continue.
 
     Public methods
     --------------
@@ -105,6 +109,29 @@ class EnergyUnitSystem:
         Initiate the class and run a set of internal tests. Return True if all
         tests passed.
     """
+
+    def __error(self, message):
+        """Report an error and stop. The message is printed one line at a
+        time, so that every line of a message of several lines is marked as
+        an error, and the header names the class of the instance, so that an
+        error raised in a base class points at the class that was built.
+        """
+        print("ERROR in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("ERROR: " + line)
+        print("Error termination.")
+        sys.exit(1)
+
+
+    def __warning(self, message):
+        """Report a warning and continue. The message is printed the way the
+        one of __error is, and the calculation goes on.
+        """
+        print("WARNING in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("Warning: " + line)
+        print()
+
 
     def convert_energy_unit(self, value, unit):
         """Takes an energy value and its unit as arguments and converts the value to the
@@ -132,10 +159,7 @@ class EnergyUnitSystem:
         elif unit == 'hartree':
             unit_to_si = self.E_h_si
         else:
-            print("ERROR in EnergyUnitSystem.")
-            print("Error: Unknown energy unit in conversion: " + unit + ".")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("Unknown energy unit in conversion: " + unit + ".")
 
         return value * unit_to_si * self.si_to_energy
 
@@ -226,10 +250,7 @@ class EnergyUnitSystem:
             self.mu_N_str        = 'K T^-1'
 
         else:
-            print("ERROR in EnergyUnitSystem.")
-            print("Error: Unknown energy unit: " + energy_unit + ".")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("Unknown energy unit: " + energy_unit + ".")
 
         self.k_B  = self.k_B_si  * self.si_to_energy
         self.h    = self.h_si    * self.si_to_energy

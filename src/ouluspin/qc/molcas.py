@@ -53,6 +53,10 @@ class AnisoCalculation:
 
     Private methods
     ---------------
+    __error(message)
+        Report an error and stop.
+    __warning(message)
+        Report a warning and continue.
 
     Public methods
     --------------
@@ -84,6 +88,29 @@ class AnisoCalculation:
         output file produced using Orca version of SINGLE_ANISO.
     """
 
+    def __error(self, message):
+        """Report an error and stop. The message is printed one line at a
+        time, so that every line of a message of several lines is marked as
+        an error, and the header names the class of the instance, so that an
+        error raised in a base class points at the class that was built.
+        """
+        print("ERROR in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("ERROR: " + line)
+        print("Error termination.")
+        sys.exit(1)
+
+
+    def __warning(self, message):
+        """Report a warning and continue. The message is printed the way the
+        one of __error is, and the calculation goes on.
+        """
+        print("WARNING in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("Warning: " + line)
+        print()
+
+
     def read_pseudospin(self, multiplet_index=1):
         """Read and return the magnitude of the pseudospin.
 
@@ -101,10 +128,7 @@ class AnisoCalculation:
                 else:
                     instance_counter += 1
             elif line == '':
-                print("ERROR in OpenMolcasCalculation.:")
-                print("Error: The file " + self.filename + " does not contain SINGLE_ANISO output.")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("The file " + self.filename + " does not contain SINGLE_ANISO output.")
         
         while True:
             line = f.readline()
@@ -118,10 +142,7 @@ class AnisoCalculation:
                         pseudospin = 2*int(pseudospin_string)
                     break
             if line == "":
-                print("ERROR in OpenMolcasCalculation.")
-                print("Error: End of file reached when looking for pseudospin.")
-                print("Error termination.")
-                sys.exit()
+                self.__error("End of file reached when looking for pseudospin.")
         f.close()
         return pseudospin
 
@@ -168,10 +189,7 @@ class AnisoCalculation:
                 else:
                     instance_counter += 1
             elif line == '':
-                print("ERROR in OpenMolcasCalculation.:")
-                print("Error: The file " + self.filename + " does not contain SINGLE_ANISO output.")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("The file " + self.filename + " does not contain SINGLE_ANISO output.")
 
         # Find the correct multiplet.
         while True:
@@ -180,10 +198,7 @@ class AnisoCalculation:
                 if int(line.split()[8]) == multiplet_index:
                     break
             if line == "":
-                print("ERROR in OpenMolcasCalculation.")
-                print("Error: End of file reached when looking for pseudospin multiplet " + str(multiplet_index) + ".")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("End of file reached when looking for pseudospin multiplet " + str(multiplet_index) + ".")
 
         # Find the ITO listing.
         while True:
@@ -192,10 +207,7 @@ class AnisoCalculation:
                 break
 
             if line == "":
-                print("ERROR in OpenMolcasCalculation.")
-                print("Error: End of file reached when looking for ITO decomposition of magnetic moment.")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("End of file reached when looking for ITO decomposition of magnetic moment.")
 
         # Find start of the parameter listing.
         while True:
@@ -203,10 +215,7 @@ class AnisoCalculation:
             if line.startswith("  n  |  m  | i |        B(i,n,m)       |        C(i,n,m)"):
                 break
             if line == "":
-                print("ERROR in OpenMolcasCalculation.")
-                print("Error: End of file reached when looking for the start of magnetic moment ITO listing.")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("End of file reached when looking for the start of magnetic moment ITO listing.")
 
         # Read the parameters.
         g_zz = None
@@ -232,10 +241,7 @@ class AnisoCalculation:
             if line == "\n":
                 break
             if line == "":
-                print("ERROR in OpenMolcasCalculation.")
-                print("Error: End of file reached while reading magnetic moment ITO listing.")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("End of file reached while reading magnetic moment ITO listing.")
 
         f.close()
 
@@ -305,10 +311,7 @@ class AnisoCalculation:
                 else:
                     instance_counter += 1
             elif line == '':
-                print("ERROR in OpenMolcasCalculation.:")
-                print("Error: The file " + self.filename + " does not contain SINGLE_ANISO output.")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("The file " + self.filename + " does not contain SINGLE_ANISO output.")
 
         # Find the correct multiplet
         while True:
@@ -317,10 +320,7 @@ class AnisoCalculation:
                 if int(line.split()[8]) == multiplet_index:
                     break
             if line == "":
-                print("ERROR in OpenMolcasCalculation.")
-                print("Error: End of file reached when looking for pseudospin multiplet " + str(multiplet_index) + ".")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("End of file reached when looking for pseudospin multiplet " + str(multiplet_index) + ".")
 
         # Find the ZFS ITO listing.
         while True:
@@ -329,20 +329,14 @@ class AnisoCalculation:
                 break
 
             if line == "":
-                print("ERROR in OpenMolcasCalculation.")
-                print("Error: End of file reached when looking for ITO decomposition of ZFS.")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("End of file reached when looking for ITO decomposition of ZFS.")
 
         while True:
             line = f.readline()
             if line.startswith("  n  |  m  |         E(n,m)        |         F(n,m)"):
                 break
             if line == "":
-                print("ERROR in OpenMolcasCalculation.")
-                print("Error: End of file reached when looking for the start of ZFS ITO listing.")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("End of file reached when looking for the start of ZFS ITO listing.")
 
         while True:
             line = f.readline()
@@ -360,10 +354,7 @@ class AnisoCalculation:
             if line.startswith("**************************"):
                 break
             if line == "":
-                print("ERROR in OpenMolcasCalculation.")
-                print("Error: End of file reached while reading ZFS ITO listing.")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("End of file reached while reading ZFS ITO listing.")
 
         f.close()
 
@@ -431,10 +422,7 @@ class AnisoCalculation:
                 else:
                     instance_counter += 1
             elif line == '':
-                print("ERROR in OpenMolcasCalculation.:")
-                print("Error: The file " + self.filename + " does not contain SINGLE_ANISO output.")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("The file " + self.filename + " does not contain SINGLE_ANISO output.")
 
         while True:
             line = f.readline()
@@ -446,10 +434,7 @@ class AnisoCalculation:
                     J = int(J_str.split('/')[0])
                 break
             elif line == '':
-                print("ERROR in OpenMolcasCalculation.")
-                print("Error: Value of J not found in the SINGLE_ANISO output.")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("Value of J not found in the SINGLE_ANISO output.")
                 
         while True:
             line = f.readline()
@@ -462,10 +447,7 @@ class AnisoCalculation:
             if len(parts) == 4 and parts[0] in ('Xm','Ym','Zm'):
                 axes_rows[parts[0]] = [float(x) for x in parts[1:4]]
             if line == '':
-                print("ERROR in OpenMolcasCalculation.:")
-                print("Error: End of file reached while searching ab intio crystal-field parameters.")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("End of file reached while searching ab intio crystal-field parameters.")
 
         while True:
             line = f.readline()
@@ -484,16 +466,10 @@ class AnisoCalculation:
                 parameter_list.append(complex(tmp_real,tmp_imag))
 
         if len(rank_list) == 0:
-            print("ERROR in OpenMolcasCalculation.")
-            print("Error: No crystal-field parameters read.")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("No crystal-field parameters read.")
 
         if not len(rank_list) == len(parameter_list):
-            print("ERROR in OpenMolcasCalculation.")
-            print("Error: Inconsistent number of crystal-field parameters and ranks.")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("Inconsistent number of crystal-field parameters and ranks.")
 
         f.close()
 
@@ -542,10 +518,7 @@ class AnisoCalculation:
                 else:
                     instance_counter += 1
             elif line == '':
-                print("ERROR in OpenMolcasCalculation.:")
-                print("Error: The file " + self.filename + " does not contain SINGLE_ANISO output.")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("The file " + self.filename + " does not contain SINGLE_ANISO output.")
 
         # Find the correct multiplet
         while True:
@@ -554,20 +527,14 @@ class AnisoCalculation:
                 if int(line.split()[8]) == multiplet_index:
                     break
             if line == "":
-                print("ERROR in OpenMolcasCalculation.")
-                print("Error: End of file reached when looking for pseudospin multiplet " + str(multiplet_index) + ".")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("End of file reached when looking for pseudospin multiplet " + str(multiplet_index) + ".")
 
         while True:
             line = f.readline()
             if line.startswith('    MAIN VALUES    |             MAIN MAGNETIC AXES     |'):
                 break
             if line == "":
-                print("ERROR in OpenMolcasCalculation.")
-                print("Error: End of file reached when looking for transformation matrix.")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("End of file reached when looking for transformation matrix.")
 
         f.readline()
         for i in range(0,3):
@@ -606,10 +573,7 @@ class AnisoCalculation:
                 else:
                     instance_counter += 1
             elif line == '':
-                print("ERROR in OpenMolcasCalculation.:")
-                print("Error: The file " + self.filename + " does not contain SINGLE_ANISO output.")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("The file " + self.filename + " does not contain SINGLE_ANISO output.")
 
         # Find the correct multiplet
         while True:
@@ -618,10 +582,7 @@ class AnisoCalculation:
                 if int(line.split()[8]) == multiplet_index:
                     break
             if line == "":
-                print("ERROR in OpenMolcasCalculation.")
-                print("Error: End of file reached when looking for pseudospin multiplet " + str(multiplet_index) + ".")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("End of file reached when looking for pseudospin multiplet " + str(multiplet_index) + ".")
 
         # Find the matrix listing
         while True:
@@ -629,10 +590,7 @@ class AnisoCalculation:
             if line.startswith("Ab Initio Calculated Zero-Field Splitting Matrix written in the basis of Pseudospin Eigenfunctions"):
                 break
             if line == "":
-                print("ERROR in OpenMolcasCalculation.")
-                print("Error: End of file reached when looking for ZFS operator matrix.")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("End of file reached when looking for ZFS operator matrix.")
 
         f.readline()
         f.readline()
@@ -673,10 +631,7 @@ class AnisoCalculation:
                 else:
                     instance_counter += 1
             elif line == '':
-                print("ERROR in OpenMolcasCalculation.:")
-                print("Error: The file " + self.filename + " does not contain SINGLE_ANISO output.")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("The file " + self.filename + " does not contain SINGLE_ANISO output.")
 
         # Find the correct multiplet
         while True:
@@ -685,10 +640,7 @@ class AnisoCalculation:
                 if int(line.split()[8]) == multiplet_index:
                     break
             if line == "":
-                print("ERROR in OpenMolcasCalculation.")
-                print("Error: End of file reached when looking for pseudospin multiplet " + str(multiplet_index) + ".")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("End of file reached when looking for pseudospin multiplet " + str(multiplet_index) + ".")
 
         # Find the matrix listing
         while True:
@@ -696,10 +648,7 @@ class AnisoCalculation:
             if line.startswith("      Ab Initio Calculated ZFS Matrix written in the basis of Pseudospin Eigenfunctions"):
                 break
             if line == "":
-                print("ERROR in OpenMolcasCalculation.")
-                print("Error: End of file reached when looking for ZFS operator matrix.")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("End of file reached when looking for ZFS operator matrix.")
 
         n_basis = self.pseudospin + 1
         if n_basis % 2 == 0:
@@ -809,6 +758,10 @@ class OpenMolcasCalculation(AnisoCalculation):
 
     Private methods
     ---------------
+    __error(message)
+        Report an error and stop.
+    __warning(message)
+        Report a warning and continue.
 
     Class methods
     -------------
@@ -816,6 +769,29 @@ class OpenMolcasCalculation(AnisoCalculation):
         Initiate the class using a synthetic output file and run a set of
         internal tests. Return True if all tests passed.
     """
+
+    def __error(self, message):
+        """Report an error and stop. The message is printed one line at a
+        time, so that every line of a message of several lines is marked as
+        an error, and the header names the class of the instance, so that an
+        error raised in a base class points at the class that was built.
+        """
+        print("ERROR in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("ERROR: " + line)
+        print("Error termination.")
+        sys.exit(1)
+
+
+    def __warning(self, message):
+        """Report a warning and continue. The message is printed the way the
+        one of __error is, and the calculation goes on.
+        """
+        print("WARNING in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("Warning: " + line)
+        print()
+
 
     def read_version(self):
         """Read the version of OpenMolcas used to produce the output and store it as an attribute.
@@ -835,10 +811,7 @@ class OpenMolcasCalculation(AnisoCalculation):
                 self.single_aniso_start_str = "                                           &SINGLE_ANISO"
                 break
             elif line == '':
-                print("ERROR in OpenMolcasCalculation.:")
-                print("Error: Unsupported OpenMolcas version or could not read version.")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("Unsupported OpenMolcas version or could not read version.")
                 
 
         f.close()
@@ -860,10 +833,7 @@ class OpenMolcasCalculation(AnisoCalculation):
             if line.startswith(self.single_aniso_start_str):
                 break
             elif line == '':
-                print("ERROR in OpenMolcasCalculation.:")
-                print("Error: The file " + self.filename + " does not contain SINGLE_ANISO output.")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("The file " + self.filename + " does not contain SINGLE_ANISO output.")
 
         while True:
             line = f.readline()
@@ -900,10 +870,7 @@ class OpenMolcasCalculation(AnisoCalculation):
         try:
             f = open(self.filename)
         except FileNotFoundError:
-            print("ERROR in OpenMolcasCalculation.")
-            print("ERROR: file " + self.filename + " not found.")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("file " + self.filename + " not found.")
         else:
             f.close()
 

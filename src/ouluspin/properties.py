@@ -106,6 +106,10 @@ class IsothermalStaticMagnetization:
 
     Private methods
     ---------------
+    __error(message)
+        Report an error and stop.
+    __warning(message)
+        Report a warning and continue.
     __checked_temperature_list(T_list) : list of float
         Return the temperature list with the temperatures at or below
         MINIMUM_TEMPERATURE raised to it.
@@ -147,6 +151,29 @@ class IsothermalStaticMagnetization:
     # The module constant is published as an attribute of the class, so
     # that the limit can be read, and lowered, through the class itself.
     MINIMUM_TEMPERATURE = MINIMUM_TEMPERATURE
+
+    def __error(self, message):
+        """Report an error and stop. The message is printed one line at a
+        time, so that every line of a message of several lines is marked as
+        an error, and the header names the class of the instance, so that an
+        error raised in a base class points at the class that was built.
+        """
+        print("ERROR in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("ERROR: " + line)
+        print("Error termination.")
+        sys.exit(1)
+
+
+    def __warning(self, message):
+        """Report a warning and continue. The message is printed the way the
+        one of __error is, and the calculation goes on.
+        """
+        print("WARNING in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("Warning: " + line)
+        print()
+
 
     def __single_field_range_table(self):
         """Return the table of the magnetization, as an instance of
@@ -244,22 +271,13 @@ class IsothermalStaticMagnetization:
             the compared instance. Default is ('M','M').
         """
         if not isinstance(comparison, IsothermalStaticMagnetization):
-            print("ERROR in IsothermalStaticMagnetization.")
-            print("ERROR: Arguments to comparison_table must be an instance of IsothermalStaticMagnetization.")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("Arguments to comparison_table must be an instance of IsothermalStaticMagnetization.")
 
         if not np.allclose(self.T_list,comparison.T_list):
-            print("ERROR in IsothermalStaticMagnetization.")
-            print("ERROR: Cannot compare magnetization between two instances with different temperature points.")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("Cannot compare magnetization between two instances with different temperature points.")
             
         if not np.allclose(self.B_list,comparison.B_list):
-            print("ERROR in IsothermalStaticMagnetization.")
-            print("ERROR: Cannot compare magnetization between two instances with different field points.")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("Cannot compare magnetization between two instances with different field points.")
 
         rows = []
 
@@ -295,16 +313,10 @@ class IsothermalStaticMagnetization:
         between them.
         """
         if not isinstance(comparison, IsothermalStaticMagnetization):
-            print("ERROR in IsothermalStaticMagnetization.")
-            print("ERROR: Arguments to rms_error must be an instance of IsothermalStaticMagnetization.")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("Arguments to rms_error must be an instance of IsothermalStaticMagnetization.")
 
         if not self.magnetization.shape == comparison.magnetization.shape:
-            print("ERROR in IsothermalStaticMagnetization.")
-            print("ERROR: Cannot compare magnetizations between two instances with different numbers of data points..")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("Cannot compare magnetizations between two instances with different numbers of data points..")
 
         square_sum = 0.0
 
@@ -328,10 +340,7 @@ class IsothermalStaticMagnetization:
         """
         for T in T_list:
             if float(T) < 0.0:
-                print("ERROR in IsothermalStaticMagnetization.")
-                print("ERROR: Negative temperature: " + str(float(T)) + ".")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("Negative temperature: " + str(float(T)) + ".")
 
         checked_list = [max(float(T),self.MINIMUM_TEMPERATURE) for T in T_list]
 
@@ -358,10 +367,7 @@ class IsothermalStaticMagnetization:
             self.n_B_points = len(self.B_list[0])
             for B_set in self.B_list:
                 if not len(B_set) == self.n_B_points:
-                    print("ERROR in IsothermalStaticMagnetization.")
-                    print("ERROR: Inconsistent number of field values for different temperatures.")
-                    print("Error termination.")
-                    sys.exit(1)
+                    self.__error("Inconsistent number of field values for different temperatures.")
         else:
             self.single_field_range = True
             self.n_B_points = len(self.B_list)
@@ -378,10 +384,8 @@ class IsothermalStaticMagnetization:
         try:
             f = open(filename)
         except FileNotFoundError:
-            print("ERROR in IsothermalStaticMagnetization.")
-            print("ERROR: file " + filename + " not found.")
-            print("Error termination.")
-            sys.exit(1)
+            instance = cls.__new__(cls)
+            instance.__error("file " + filename + " not found.")
 
         # Read the temperature points from the header.
         line = f.readline()
@@ -579,6 +583,10 @@ class StaticMagneticSusceptibility:
 
     Private methods
     ---------------
+    __error(message)
+        Report an error and stop.
+    __warning(message)
+        Report a warning and continue.
     __checked_temperature_list(T_list) : list of float
         Return the temperature list with the temperatures at or below
         MINIMUM_TEMPERATURE raised to it.
@@ -613,6 +621,29 @@ class StaticMagneticSusceptibility:
     # The module constant is published as an attribute of the class, so
     # that the limit can be read, and lowered, through the class itself.
     MINIMUM_TEMPERATURE = MINIMUM_TEMPERATURE
+
+    def __error(self, message):
+        """Report an error and stop. The message is printed one line at a
+        time, so that every line of a message of several lines is marked as
+        an error, and the header names the class of the instance, so that an
+        error raised in a base class points at the class that was built.
+        """
+        print("ERROR in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("ERROR: " + line)
+        print("Error termination.")
+        sys.exit(1)
+
+
+    def __warning(self, message):
+        """Report a warning and continue. The message is printed the way the
+        one of __error is, and the calculation goes on.
+        """
+        print("WARNING in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("Warning: " + line)
+        print()
+
 
     def data_table(self):
         """Return a table of the susceptibility as an instance of
@@ -658,16 +689,10 @@ class StaticMagneticSusceptibility:
             of the compared instance. Default is ('chiT','chiT').
         """
         if not isinstance(comparison, StaticMagneticSusceptibility):
-            print("ERROR in StaticMagneticSusceptibility.")
-            print("ERROR: Arguments to comparison_table must be an instance of StaticMagneticSusceptibility.")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("Arguments to comparison_table must be an instance of StaticMagneticSusceptibility.")
 
         if not np.allclose(self.T_list,comparison.T_list):
-            print("ERROR in StaticMagneticSusceptibility.")
-            print("ERROR: Cannot compare susceptibilities between two instances with different temperature points.")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("Cannot compare susceptibilities between two instances with different temperature points.")
         
         rows = []
         for i in range(0,self.n_T_points):
@@ -694,16 +719,10 @@ class StaticMagneticSusceptibility:
         between them.
         """
         if not isinstance(comparison, StaticMagneticSusceptibility):
-            print("ERROR in IsothermalStaticMagnetization.")
-            print("ERROR: Arguments to rms_error must be an instance of StaticMagneticSusceptibility.")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("Arguments to rms_error must be an instance of StaticMagneticSusceptibility.")
 
         if not len(self.susceptibility) == len(comparison.susceptibility):
-            print("ERROR in IsothermalStaticMagnetization.")
-            print("ERROR: Cannot compare susceptibilities between two instances with different numbers of data points.")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("Cannot compare susceptibilities between two instances with different numbers of data points.")
 
         square_sum = 0.0
         for i in range(0,self.n_T_points):
@@ -725,10 +744,7 @@ class StaticMagneticSusceptibility:
         """
         for T in T_list:
             if float(T) < 0.0:
-                print("ERROR in StaticMagneticSusceptibility.")
-                print("ERROR: Negative temperature: " + str(float(T)) + ".")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("Negative temperature: " + str(float(T)) + ".")
 
         checked_list = [max(float(T),self.MINIMUM_TEMPERATURE) for T in T_list]
 
@@ -765,10 +781,8 @@ class StaticMagneticSusceptibility:
         try:
             f = open(filename)
         except FileNotFoundError:
-            print("ERROR in StaticMagneticSusceptibility.")
-            print("ERROR: file " + filename + " not found.")
-            print("Error termination.")
-            sys.exit(1)
+            instance = cls.__new__(cls)
+            instance.__error("file " + filename + " not found.")
 
         T_list         = []
         susceptibility = []
@@ -950,6 +964,10 @@ class StaticMagneticProperties:
 
     Private methods
     ---------------
+    __error(message)
+        Report an error and stop.
+    __warning(message)
+        Report a warning and continue.
     __calculate_magnetization_at_fixed_field(T_list,B) : list of float
         Calculate the integrated powder magnetization at a fixed field strength B
         at temperatures listed in T_list and return the list of scalar magnetization
@@ -1025,6 +1043,29 @@ class StaticMagneticProperties:
     Lebedev--Laikov grid, LebedevLaikovGrid(7) or so.
     """
 
+    def __error(self, message):
+        """Report an error and stop. The message is printed one line at a
+        time, so that every line of a message of several lines is marked as
+        an error, and the header names the class of the instance, so that an
+        error raised in a base class points at the class that was built.
+        """
+        print("ERROR in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("ERROR: " + line)
+        print("Error termination.")
+        sys.exit(1)
+
+
+    def __warning(self, message):
+        """Report a warning and continue. The message is printed the way the
+        one of __error is, and the calculation goes on.
+        """
+        print("WARNING in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("Warning: " + line)
+        print()
+
+
     def __calculate_magnetization_at_fixed_field(self,T_list,B):
         """Calculate the integrated powder magnetization at a fixed field strength B
         at temperatures listed in T_list and return the list of scalar magnetization
@@ -1064,10 +1105,7 @@ class StaticMagneticProperties:
     def calculate_susceptibility(self):
         """Calculate the magnetic susceptibility and store it as an attribute."""
         if self.susceptibility is None:
-            print("ERROR in MicroscopicElectronSystem.")
-            print("ERROR: Susceptibility calculation requested, but no StaticMagneticSusceptibility instance given.")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("Susceptibility calculation requested, but no StaticMagneticSusceptibility instance given.")
 
         # Conversion factor from units of Bohr magneton times Avogadro constant to cgsemu
         # (note that the field unit is in teslas):
@@ -1088,10 +1126,7 @@ class StaticMagneticProperties:
     def calculate_magnetization(self):
         """Calculate the magnetization and store it as an attribute."""
         if self.magnetization is None:
-            print("ERROR in MicroscopicElectronSystem.")
-            print("ERROR: Magnetization calculation requested, but no IsothermalStaticMagnetization instance given.")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("Magnetization calculation requested, but no IsothermalStaticMagnetization instance given.")
 
         if self.print_output:
             print("    Calculation of magnetization ...")
@@ -1131,27 +1166,18 @@ class StaticMagneticProperties:
         allowed_sample_orientations = ['powder','free','maximal']
 
         if not self.sample_orientation in allowed_sample_orientations:
-            print("ERROR in StaticMagneticProperties.")
-            print("ERROR: Unrecognized sample orientation:" + self.sample_orientation)
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("Unrecognized sample orientation:" + self.sample_orientation)
 
         moment_matrix_list = self.magnetic_moment.matrix_list()
 
         if not len(moment_matrix_list) == 3:
-            print("ERROR in StaticMagneticProperties.")
-            print("ERROR: Inconsistent number of magnetic moment operators.")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("Inconsistent number of magnetic moment operators.")
 
         self.n_basis = self.hamiltonian.matrix.shape[0]
 
         for i in range(0,3):
             if not moment_matrix_list[i].shape[0] == self.n_basis:
-                print("ERROR in StaticMagneticProperties.")
-                print("ERROR: Inconsistent operator dimensions.")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("Inconsistent operator dimensions.")
 
         # The matrices are taken into the layout the Fortran routines expect
         # once here rather than on every call into Fortran. The Cartesian
@@ -1465,6 +1491,10 @@ class StaticTransitionMagneticMoments:
 
     Private methods
     ---------------
+    __error(message)
+        Report an error and stop.
+    __warning(message)
+        Report a warning and continue.
     __quantization_transformation(mu_z)
         Return the block-diagonal unitary transformation that diagonalizes
         the projection of the magnetic moment within each group of
@@ -1482,6 +1512,29 @@ class StaticTransitionMagneticMoments:
         Initiate the class and run a set of internal tests. Return True if all
         tests passed.
     """
+
+    def __error(self, message):
+        """Report an error and stop. The message is printed one line at a
+        time, so that every line of a message of several lines is marked as
+        an error, and the header names the class of the instance, so that an
+        error raised in a base class points at the class that was built.
+        """
+        print("ERROR in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("ERROR: " + line)
+        print("Error termination.")
+        sys.exit(1)
+
+
+    def __warning(self, message):
+        """Report a warning and continue. The message is printed the way the
+        one of __error is, and the calculation goes on.
+        """
+        print("WARNING in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("Warning: " + line)
+        print()
+
 
     def transition_magnetic_moment_table(self):
         """Construct and return a table of the transition magnetic moments
@@ -1646,10 +1699,7 @@ class StaticTransitionMagneticMoments:
 
         for i in range(0,self.n_states):
             if abs(mu_list[2][i][i].imag) > 1.0e-9:
-                print("ERROR in StaticTransitionMagneticMoments.")
-                print("ERROR: Complex-valued expectation value of magnetic moment projection.")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("Complex-valued expectation value of magnetic moment projection.")
 
             self.expectation_values.append(mu_list[2][i][i].real
                                            / self.units.mu_B)
@@ -1985,6 +2035,10 @@ class PseudoSpinDoublet:
 
     Private methods
     ---------------
+    __error(message)
+        Report an error and stop.
+    __warning(message)
+        Report a warning and continue.
     __remove_identity_component()
         Project the identity component out of the reduced magnetic moment
         and store it as an attribute; warn if it is significant.
@@ -2012,6 +2066,29 @@ class PseudoSpinDoublet:
         Initiate the class and run a set of internal tests. Return True if all
         tests passed.
     """
+
+    def __error(self, message):
+        """Report an error and stop. The message is printed one line at a
+        time, so that every line of a message of several lines is marked as
+        an error, and the header names the class of the instance, so that an
+        error raised in a base class points at the class that was built.
+        """
+        print("ERROR in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("ERROR: " + line)
+        print("Error termination.")
+        sys.exit(1)
+
+
+    def __warning(self, message):
+        """Report a warning and continue. The message is printed the way the
+        one of __error is, and the calculation goes on.
+        """
+        print("WARNING in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("Warning: " + line)
+        print()
+
 
     def __remove_identity_component(self):
         """Split the reduced magnetic moment into its identity and traceless
@@ -2045,15 +2122,13 @@ class PseudoSpinDoublet:
 
         if moment_scale > 0.0 and \
            np.max(np.abs(identity_component)) > 1.0e-6*moment_scale:
-            print("WARNING in PseudoSpinDoublet.")
-            print("Warning: The magnetic moment has a significant component")
-            print("         proportional to the identity within the doublet,")
-            print("         which is forbidden by time-reversal symmetry. The")
-            print("         input may break time reversal (e.g. a magnetic")
-            print("         field folded into the Hamiltonian). The component")
-            print("         has been projected out of the g-tensor.")
-            print("         Identity component:", identity_component)
-            print()
+            self.__warning("The magnetic moment has a significant component\n"
+                           "proportional to the identity within the doublet,\n"
+                           "which is forbidden by time-reversal symmetry. The\n"
+                           "input may break time reversal (e.g. a magnetic\n"
+                           "field folded into the Hamiltonian). The component\n"
+                           "has been projected out of the g-tensor.\n"
+                           "Identity component: " + str(identity_component))
 
         return traceless_moment
 
@@ -2086,11 +2161,7 @@ class PseudoSpinDoublet:
 
         # Check that A is Hermitian and diagonalize it.
         if not np.allclose(A,A.conj().T):
-            print("ERROR in PseudoSpinDoublet.")
-            print("Error: A matrix is not Hermitian.")
-            print(A)
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("A matrix is not Hermitian.\n" + str(A))
 
         A_eig, R = la.eigh(A)
 
@@ -2104,11 +2175,8 @@ class PseudoSpinDoublet:
             if abs(A_eig[i]) < 1.0e-12*A_scale:
                 A_eig[i] = 0.0
             elif A_eig[i] < 0.0:
-                print("ERROR in PseudoSpinDoublet.")
-                print("Error: The A matrix has a negative eigenvalue.")
-                print(A_eig)
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("The A matrix has a negative eigenvalue.\n"
+                             + str(A_eig))
 
         R_inv    = la.inv(R)
         g_diag   = np.zeros((3,3), dtype=np.float64)
@@ -2120,11 +2188,7 @@ class PseudoSpinDoublet:
 
         # Check that the g tensor is real at this point.
         if not np.allclose(g.imag,np.zeros((3,3), dtype=np.float64)):
-            print("ERROR in PseudoSpinDoublet.")
-            print("Error: Complex g tensor.")
-            print(g)
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("Complex g tensor.\n" + str(g))
 
         # Disregard the imaginary part of g that should be close to zero.
         self.g_tensor = tensors.CartesianTensor(g.real)
@@ -2143,10 +2207,7 @@ class PseudoSpinDoublet:
             self.tunneling_gap  = None
         else:
             if len(energies) <= max(self.states):
-                print("ERROR in PseudoSpinDoublet.")
-                print("Error: The energies list is shorter than the largest state index.")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("The energies list is shorter than the largest state index.")
             self.state_energies = (energies[self.states[0]],
                                    energies[self.states[1]])
             self.tunneling_gap  = abs(energies[self.states[1]]
@@ -2172,14 +2233,13 @@ class PseudoSpinDoublet:
             # tolerance violates Kramers' theorem and is flagged.
             self.kramers = kramers
             if kramers and degenerate is not None and not degenerate:
-                print("WARNING in PseudoSpinDoublet.")
-                print("Warning: The doublet was declared a Kramers doublet but the")
-                print("         two states are split by more than the degeneracy")
-                print("         tolerance. Kramers doublets are exactly degenerate")
-                print("         in zero field; check the input or the tolerance.")
-                print("         Splitting: {0} {1}".format(self.tunneling_gap,
-                                                           self.units.energy_unit_str))
-                print()
+                self.__warning(
+                    "The doublet was declared a Kramers doublet but the\n"
+                    "two states are split by more than the degeneracy\n"
+                    "tolerance. Kramers doublets are exactly degenerate\n"
+                    "in zero field; check the input or the tolerance.\n"
+                    "Splitting: {0} {1}".format(self.tunneling_gap,
+                                                self.units.energy_unit_str))
         elif degenerate is not None and not degenerate:
             # A split doublet cannot be a Kramers doublet.
             self.kramers = False
@@ -2209,14 +2269,12 @@ class PseudoSpinDoublet:
                                0.5*abs(moment[0][0] - moment[1][1]))
 
         if moment_scale > 0.0 and largest_diag > 1.0e-6*moment_scale:
-            print("WARNING in PseudoSpinDoublet.")
-            print("Warning: The doublet is a non-degenerate quasi-doublet, but the")
-            print("         magnetic moment has significant diagonal matrix elements")
-            print("         within it. Time-reversal symmetry requires the diagonal")
-            print("         moments of non-degenerate states to vanish; the input")
-            print("         may break time reversal, or the two states may not form")
-            print("         a physically meaningful quasi-doublet.")
-            print()
+            self.__warning("The doublet is a non-degenerate quasi-doublet, but the\n"
+                           "magnetic moment has significant diagonal matrix elements\n"
+                           "within it. Time-reversal symmetry requires the diagonal\n"
+                           "moments of non-degenerate states to vanish; the input\n"
+                           "may break time reversal, or the two states may not form\n"
+                           "a physically meaningful quasi-doublet.")
 
 
     def __repr__(self):
@@ -2250,10 +2308,7 @@ class PseudoSpinDoublet:
         self.print_output = print_output
 
         if not len(self.states) == 2:
-            print("ERROR in PseudoSpinDoublet.")
-            print("Error: The states tuple must contain the indices of two states.")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("The states tuple must contain the indices of two states.")
 
         # The rotation from the input coordinate frame to the frame of the
         # given magnetic moment operators; the identity if none was given.
@@ -2262,11 +2317,8 @@ class PseudoSpinDoublet:
         elif isinstance(rotation,tensors.Rotation):
             self.rotation = rotation
         else:
-            print("ERROR in PseudoSpinDoublet.")
-            print("Error: The rotation argument must be an instance of Rotation")
-            print("       (or None for the identity).")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("The rotation argument must be an instance of Rotation\n"
+                         "(or None for the identity).")
 
         # The default degeneracy tolerance is the Zeeman energy in a field
         # of about one microtesla, expressed in the current energy unit

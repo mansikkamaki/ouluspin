@@ -301,6 +301,33 @@ exchange operator.
   well. The mathematical fonts follow the face, so the symbols match the
   text around them.
 
+  `horizontal_line` draws a constant value across the plot field as a
+  reference the data are compared with — the Curie χ*T* product of the free
+  ion in a plot of the susceptibility, or the value the magnetization
+  saturates at, both of which `IonData` gives:
+
+  ```python
+  ion = ouluspin.IonData('Dy(III)')
+
+  chi_plot.pdf_plot('chiT.pdf',
+                    horizontal_line=ion.curie_susceptibility(),
+                    horizontal_line_label='Curie chiT')
+  m_plot.pdf_plot('magnetization.pdf',
+                  horizontal_line=ion.ising_saturation_magnetization(),
+                  horizontal_line_label='Ising M(sat)')
+  ```
+
+  Any constant value is drawn the same way, and a list of values draws
+  several lines. `horizontal_line_label` names the line in the legend and
+  is typeset like the other labels; without it the line is drawn but does
+  not enter the legend, and with it the legend appears even when the data
+  sets alone would not bring one. `horizontal_line_style` chooses the style
+  — `'dashed'` (the default, which separates the reference from the data at
+  a glance), `'solid'`, `'dash-dot'` or `'dotted'` — and the labels and the
+  styles are given either one per line or once for all of them. The
+  vertical axis is widened to hold the line, so a value above the data is
+  drawn as well.
+
   Two compatible plots are combined with `+`, e.g. two χ*T* curves into
   one plot field or two level structures side by side. The criteria are
   strict: the kinds and both axis labels must agree, and effective
@@ -425,14 +452,31 @@ Spherical grids for powder averaging:
   the Curie law for its ground multiplet, in cm³ K mol⁻¹ — 14.19 for
   Dy(III) with the accurate g-factor, which is the default, and the 14.17
   of the textbook tables with `simple_g_factor=True`, those tables being
-  computed in the same g_e = 2 approximation. `coefficients_of_fractional_parentage()` returns the CFPs of the
+  computed in the same g_e = 2 approximation.
+
+  `saturation_magnetization()` and `ising_saturation_magnetization()` return
+  the magnetization the ground multiplet saturates at as B/T → ∞, in units
+  of the Bohr magneton, and take the same `simple_g_factor` argument. The
+  first is the isotropic value g_J·J of the free ion, whose whole ground
+  multiplet is available to the field — 10 μ_B for Dy(III). The second is
+  the **powder** value of an ion whose ground state is a maximally axial
+  Ising-type doublet of M_J = ±J alone in the low-energy region: such a
+  doublet has g_z = 2 g_J J and g_x = g_y = 0, so only the field along the
+  easy axis acts on it, and averaging |cos θ| over the sphere gives one
+  half. The Ising value is therefore half the isotropic one — 5 μ_B for
+  Dy(III), the saturation ordinarily met in a Dy(III) single-molecule
+  magnet — while along the easy axis of a single crystal the doublet
+  saturates at the isotropic g_J·J.
+
+  `coefficients_of_fractional_parentage()` returns the CFPs of the
   open shell; they are evaluated on the first call rather than upon
   construction. `states_by_multiplicity()` groups the terms and the states
   of the open shell by spin multiplicity. `data_table()`,
   `ground_multiplet_table()`, `term_table()` and `cfp_table()` return
   `ResultTable` instances, and `repr` of the instance is the plain-text
-  rendering of `data_table()`. Both tables give the Landé g-factor and the
-  χT product in both conventions, side by side. The data table further
+  rendering of `data_table()`. Both tables give the Landé g-factor, the χT
+  product and the two saturation magnetizations in both conventions, side
+  by side. The data table further
   lists the terms of the open
   shell and, beneath them, the number of terms, of spin states and of
   states of each spin multiplicity together with their totals — for the 4f9
@@ -483,9 +527,9 @@ Spherical grids for powder averaging:
 
   The tables, all of them `ResultTable` instances, are
   `ground_multiplet_table()` (the valence configuration and S, L, J),
-  `ground_magnetism_table()` (S, L, J, the Landé g-factor and the Curie χT
-  product, the last two in both conventions for the free-electron
-  g-factor), `number_of_spin_states_table()` (the number of spin states of
+  `ground_magnetism_table()` (S, L, J, the Landé g-factor, the Curie χT
+  product and the isotropic and Ising saturation magnetizations, all of
+  them in both conventions for the free-electron g-factor), `number_of_spin_states_table()` (the number of spin states of
   each spin multiplicity, one column per multiplicity, the largest first,
   the multiplicities a configuration does not carry being dashes),
   `state_count_table()` (the number of terms, of spin states and of states)
@@ -621,6 +665,20 @@ fu.cg_utils.cg(1, 1, 1, -1, 2, 0)   # angular momenta as doubled integers
   the situation (documented per method).
 - **Magnetization** is reported as molar magnetization in units of the
   Bohr magneton.
+- **Errors are fatal and are reported, not raised.** A mistake in the
+  input of a class is printed as
+
+      ERROR in IonData.
+      ERROR: There is no element of the chemical symbol 'Xx'.
+      Error termination.
+
+  and stops the interpreter with exit status 1; a message of several lines
+  is marked on every line. A condition that is suspicious but not fatal is
+  printed the same way under `WARNING in <class>.` with `Warning:` on each
+  line, and the calculation goes on. Every class reports through its own
+  private `__error` and `__warning` methods, and the header names the class
+  of the instance, so an error raised inside a base class points at the
+  class that was actually built.
 - **Result tables** are returned as `ResultTable` instances, not as
   strings. Print them directly (`print(tensor.ITO_table())`) or convert
   them with `str()` when a string is needed. The same instance also

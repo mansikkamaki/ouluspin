@@ -48,6 +48,10 @@ class SimpleGrid:
 
     Private methods
     ---------------
+    __error(message)
+        Report an error and stop.
+    __warning(message)
+        Report a warning and continue.
 
     Public methods
     --------------
@@ -60,6 +64,29 @@ class SimpleGrid:
         Initiate the class and run a set of internal tests. Return True if all
         tests passed.
     """
+
+    def __error(self, message):
+        """Report an error and stop. The message is printed one line at a
+        time, so that every line of a message of several lines is marked as
+        an error, and the header names the class of the instance, so that an
+        error raised in a base class points at the class that was built.
+        """
+        print("ERROR in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("ERROR: " + line)
+        print("Error termination.")
+        sys.exit(1)
+
+
+    def __warning(self, message):
+        """Report a warning and continue. The message is printed the way the
+        one of __error is, and the calculation goes on.
+        """
+        print("WARNING in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("Warning: " + line)
+        print()
+
 
     def data_table(self):
         """Return a table of the grid points as an instance of ResultTable.
@@ -106,10 +133,7 @@ class SimpleGrid:
             
         elif self.grid_type == 1:
             if not len(grid_vector) == 3:
-                print("ERROR in SimpleGrid.")
-                print("ERROR: Inconsistent grid vector dimension.")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("Inconsistent grid vector dimension.")
 
             self.n_grid_points = 1
             
@@ -129,10 +153,7 @@ class SimpleGrid:
             self.weights = np.array([1.0])
 
         else:
-            print("ERROR in SimpleGrid.")
-            print("ERROR: Uknown grid type: " + str(self.grid_type))
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("Uknown grid type: " + str(self.grid_type))
 
 
     @classmethod
@@ -244,6 +265,10 @@ class LebedevLaikovGrid:
 
     Private methods
     ---------------
+    __error(message)
+        Report an error and stop.
+    __warning(message)
+        Report a warning and continue.
 
     Public methods
     --------------
@@ -256,6 +281,29 @@ class LebedevLaikovGrid:
         Initiate the class and run a set of internal tests. Return True if all
         tests passed.
     """
+    def __error(self, message):
+        """Report an error and stop. The message is printed one line at a
+        time, so that every line of a message of several lines is marked as
+        an error, and the header names the class of the instance, so that an
+        error raised in a base class points at the class that was built.
+        """
+        print("ERROR in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("ERROR: " + line)
+        print("Error termination.")
+        sys.exit(1)
+
+
+    def __warning(self, message):
+        """Report a warning and continue. The message is printed the way the
+        one of __error is, and the calculation goes on.
+        """
+        print("WARNING in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("Warning: " + line)
+        print()
+
+
     def data_table(self):
         """Return a table of the grid points as an instance of ResultTable.
         Each row contains the weight of one grid point, the Cartesian
@@ -325,11 +373,8 @@ class LebedevLaikovGrid:
         }
 
         if self.grid_quality not in grid_quality_dict.keys():
-            print("ERROR in LebedevLaikovGrid.")
-            print("ERROR: Uknown grid quality. The grid quality should be an integer")
-            print("       between 1 and 32.")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("Uknown grid quality. The grid quality should be an integer\n"
+                         "between 1 and 32.")
 
         self.n_grid_points = grid_quality_dict[self.grid_quality]
 
@@ -454,6 +499,10 @@ class ZCWGrid:
 
     Private methods
     ---------------
+    __error(message)
+        Report an error and stop.
+    __warning(message)
+        Report a warning and continue.
     __calculate_grid_points()
         Evaluate the grid points and store them as an attribute.
     __g(N) : int
@@ -470,6 +519,29 @@ class ZCWGrid:
         Initiate the class and run a set of internal tests. Return True if all
         tests passed.
     """
+    def __error(self, message):
+        """Report an error and stop. The message is printed one line at a
+        time, so that every line of a message of several lines is marked as
+        an error, and the header names the class of the instance, so that an
+        error raised in a base class points at the class that was built.
+        """
+        print("ERROR in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("ERROR: " + line)
+        print("Error termination.")
+        sys.exit(1)
+
+
+    def __warning(self, message):
+        """Report a warning and continue. The message is printed the way the
+        one of __error is, and the calculation goes on.
+        """
+        print("WARNING in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("Warning: " + line)
+        print()
+
+
     def __calculate_grid_points(self):
         """Evaluate the grid points and store them as an attribute."""
         self.angle_list  = []
@@ -552,10 +624,7 @@ class ZCWGrid:
         elif self.integration_range == 'octant':
             self.c = (-1,1,4)
         else:
-            print("ERROR in ZCWGrid.")
-            print("ERROR: Unkown integration range.")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("Unkown integration range.")
 
         self.g_M           = self.__g(M)
         self.n_grid_points = self.__g(M+2)

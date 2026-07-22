@@ -68,8 +68,18 @@ class ResultPlot:
     All the options are stored as attributes and can be changed afterwards,
     so that the same instance can be written several times with a different
     appearance. The options that belong to the image rather than to its
-    content, i.e. the size of the image, the font size and the typeface,
-    are given to the writing methods themselves.
+    content, i.e. the size of the image, the font size, the typeface and the
+    horizontal reference lines, are given to the writing methods themselves.
+
+    A HORIZONTAL REFERENCE LINE is a constant value drawn across the plot
+    field, which the data are compared with: the Curie chiT product of the
+    free ion in a plot of the susceptibility, or the value the magnetization
+    saturates at in a plot of the magnetization, both of which the IonData
+    class gives. Any constant value is drawn the same way, e.g.
+
+        chi_plot.png_plot('chiT.png',
+                          horizontal_line=ion.curie_susceptibility(),
+                          horizontal_line_label='Curie chiT')
 
     Arguments
     ---------
@@ -163,6 +173,10 @@ class ResultPlot:
 
     Private methods
     ---------------
+    __error(message)
+        Report an error and stop.
+    __warning(message)
+        Report a warning and continue.
     __from_magnetization(source,...)
         Build the data sets of a magnetization plot.
     __from_susceptibility(source,...)
@@ -183,6 +197,12 @@ class ResultPlot:
         pathway, used to point the arrows of the barrier plot.
     __plot_content()
         Return the content of the plot in the form used by the writers.
+    __horizontal_lines(values,labels,styles)
+        Return the horizontal reference lines asked for from a writing
+        method in the form used by the writers.
+    __horizontal_line_option(option,n_lines,name)
+        Return one option of the horizontal reference lines as a list of
+        one entry per line.
     __write(filename,file_format,...)
         Write the plot in the given format.
 
@@ -211,6 +231,11 @@ class ResultPlot:
     DEFAULT_WIDTH      = 6.0
     DEFAULT_SIZE_RATIO = 4.0/3.0
 
+    # The style a horizontal reference line is drawn in when none is
+    # asked for. A dashed line separates the reference value from the data
+    # of the plot at a glance.
+    DEFAULT_HORIZONTAL_LINE_STYLE = 'dashed'
+
     # The default compression of the raster formats.
     DEFAULT_PNG_COMPRESSION  = 9
     DEFAULT_TIFF_COMPRESSION = 'lzw'
@@ -223,14 +248,26 @@ class ResultPlot:
                       'in': 1.0}
 
     def __error(self, message):
-        """Report an error and stop. The plots are written at the end of a
-        calculation, so an error is reported the way the other errors of
-        the library are.
+        """Report an error and stop. The message is printed one line at a
+        time, so that every line of a message of several lines is marked as
+        an error, and the header names the class of the instance, so that an
+        error raised in a base class points at the class that was built.
         """
-        print("ERROR in ResultPlot.")
-        print("ERROR: " + message)
+        print("ERROR in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("ERROR: " + line)
         print("Error termination.")
         sys.exit(1)
+
+
+    def __warning(self, message):
+        """Report a warning and continue. The message is printed the way the
+        one of __error is, and the calculation goes on.
+        """
+        print("WARNING in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("Warning: " + line)
+        print()
 
 
     def __length_in_inches(self, value, name, resolution):
@@ -267,8 +304,7 @@ class ResultPlot:
             if unit == "":
                 self.__error("The unit of the " + name + " is not recognized: '"
                              + str(value) + "'.\n"
-                             "ERROR: The recognized units are cm, mm, in and "
-                             "px.")
+                             "The recognized units are cm, mm, in and px.")
 
             try:
                 number = float(text)
@@ -542,7 +578,7 @@ class ResultPlot:
 
         if not style in self.__STYLES:
             self.__error("Unknown plotting style: " + str(style) + ".\n"
-                         "ERROR: The recognized styles are: "
+                         "The recognized styles are: "
                          + ", ".join(self.styles()) + ".")
 
         self.data_sets            = []
@@ -569,12 +605,11 @@ class ResultPlot:
         else:
             self.__error("Cannot build a plot of an instance of "
                          + type(source).__name__ + ".\n"
-                         "ERROR: The recognized sources are the magnetization, "
-                         "the susceptibility, the\n"
-                         "ERROR: transition magnetic moments and an operator "
-                         "carrying eigenvalues.\n"
-                         "ERROR: An operator must be diagonalized before it is "
-                         "plotted.")
+                         "The recognized sources are the magnetization, the "
+                         "susceptibility, the\n"
+                         "transition magnetic moments and an operator carrying "
+                         "eigenvalues.\n"
+                         "An operator must be diagonalized before it is plotted.")
 
         self.legend = len([data_set for data_set in self.data_sets
                            if not data_set['label'] == ""]) > 1
@@ -666,6 +701,87 @@ class ResultPlot:
                 'degeneracy_tolerance': self.degeneracy_tolerance}
 
 
+    def __horizontal_line_option(self, option, n_lines, name):
+        """Return the given option of the horizontal reference lines as a
+        list of one entry per line: a list is taken as it is and must hold
+        one entry per line, and a single value is used for every line.
+        """
+        if isinstance(option,(list,tuple,np.ndarray)):
+            if not len(option) == n_lines:
+                self.__error("There are " + str(n_lines) + " horizontal lines but "
+                             + str(len(option)) + " values of " + name + ".\n"
+                             "Give either one value per line or a single value used "
+                             "for all\nof them.")
+
+            return list(option)
+
+        return n_lines*[option]
+
+
+    def __horizontal_lines(self, values, labels, styles):
+        """Return the horizontal reference lines of the plot in the form the
+        writers of the _images module use, i.e. as a list of dictionaries
+        with the items 'value', 'label' and 'style'.
+
+        The arguments are the ones of the writing methods, which document
+        them: the value of a single line or a list of the values of several,
+        and the labels and the line styles either one per line or a single
+        one used for all of them.
+        """
+        from ouluspin import _images
+
+        if values is None:
+            return []
+
+        if isinstance(values,(list,tuple,np.ndarray)):
+            value_list = list(values)
+        else:
+            value_list = [values]
+
+        if len(value_list) == 0:
+            return []
+
+        label_list = self.__horizontal_line_option(labels,len(value_list),
+                                                   "the labels")
+        style_list = self.__horizontal_line_option(styles,len(value_list),
+                                                   "the line styles")
+
+        line_list = []
+        for i in range(0,len(value_list)):
+            try:
+                value = float(value_list[i])
+            except (TypeError,ValueError):
+                self.__error("The value of a horizontal line is not a number: "
+                             + str(value_list[i]) + ".")
+
+            if not np.isfinite(value):
+                self.__error("The value of a horizontal line is not finite: "
+                             + str(value_list[i]) + ".")
+
+            label = label_list[i]
+
+            if label is not None and not isinstance(label,str):
+                self.__error("The label of a horizontal line must be given as a "
+                             "string,\nbut an instance of " + type(label).__name__
+                             + " was given.")
+
+            style = style_list[i]
+
+            if style is None:
+                style = self.DEFAULT_HORIZONTAL_LINE_STYLE
+
+            if not _images.line_style_known(style):
+                self.__error("Unknown line style: " + str(style) + ".\n"
+                             "The recognized line styles are "
+                             + ", ".join(_images.line_style_names()) + ".")
+
+            line_list.append({'value': value,
+                              'label': label,
+                              'style': style})
+
+        return line_list
+
+
     def __write(self, filename, file_format,
                 width=None,
                 height=None,
@@ -675,7 +791,10 @@ class ResultPlot:
                 overwrite=False,
                 compression=None,
                 font_size=None,
-                typeface=None):
+                typeface=None,
+                horizontal_line=None,
+                horizontal_line_label=None,
+                horizontal_line_style=None):
         """Write the plot on disk in the given format. The arguments are
         the ones of the public writing methods, which document them.
         """
@@ -708,7 +827,7 @@ class ResultPlot:
 
         if typeface is not None and not _images.typeface_known(typeface):
             self.__error("Unknown typeface: " + str(typeface) + ".\n"
-                         "ERROR: The recognized typefaces are "
+                         "The recognized typefaces are "
                          + ", ".join(_images.typeface_names()) + ".")
 
         # The size of the image is a physical size, so it is the same in
@@ -728,9 +847,15 @@ class ResultPlot:
         for name, name_resolution in name_list:
             if os.path.exists(name) and not overwrite:
                 self.__error("The file " + name + " already exists.\n"
-                             "ERROR: Give overwrite=True to replace it.")
+                             "Give overwrite=True to replace it.")
 
         content = self.__plot_content()
+
+        # The reference lines belong to the image rather than to the content
+        # of the plot, as the size and the typeface do, so they are added to
+        # the content here and not stored in the instance.
+        content['horizontal_lines'] = self.__horizontal_lines(
+            horizontal_line,horizontal_line_label,horizontal_line_style)
 
         for name, name_resolution in name_list:
             _images.write_plot(content,name,file_format,
@@ -751,7 +876,10 @@ class ResultPlot:
                  overwrite=False,
                  compression=None,
                  font_size=None,
-                 typeface=None):
+                 typeface=None,
+                 horizontal_line=None,
+                 horizontal_line_label=None,
+                 horizontal_line_style=None):
         """Write the plot into a PNG file.
 
         Arguments
@@ -806,6 +934,31 @@ class ResultPlot:
             Default is None, in which case the serif face of the library is
             used, which is the usual choice of the figures of a
             publication.
+        horizontal_line : float or list of float or None
+            The constant value of a horizontal reference line drawn across
+            the plot, or the values of several such lines, in the unit of
+            the vertical axis. A reference line marks a value the data are
+            compared with, e.g. the Curie chiT product of the free ion in a
+            plot of the susceptibility or the value the magnetization
+            saturates at in a plot of the magnetization, both of which the
+            IonData class gives. Default is None, i.e. no reference line.
+            The vertical axis is widened to hold the line, so that a value
+            lying above the data is drawn as well.
+        horizontal_line_label : str or list of str or None
+            The legend of the reference line, or one label per line when
+            several are drawn. A single label is used for every line. The
+            labels name the physical quantities the way the labels of the
+            axes do, e.g. 'Curie chiT', and are typeset the same way.
+            Default is None, in which case the lines are drawn without
+            entering the legend. A labelled line brings the legend with it
+            even when the plot would otherwise carry none.
+        horizontal_line_style : str or list of str or None
+            The style the reference line is drawn in, i.e. 'solid',
+            'dashed', 'dash-dot' or 'dotted', or one style per line when
+            several are drawn. The symbols of Matplotlib ('-', '--', '-.'
+            and ':') are accepted as well. Default is None, in which case
+            the lines are dashed, which separates them from the data
+            clearly.
         """
         if compression is None:
             compression = self.DEFAULT_PNG_COMPRESSION
@@ -819,7 +972,10 @@ class ResultPlot:
                      overwrite=overwrite,
                      compression=compression,
                      font_size=font_size,
-                     typeface=typeface)
+                     typeface=typeface,
+                     horizontal_line=horizontal_line,
+                     horizontal_line_label=horizontal_line_label,
+                     horizontal_line_style=horizontal_line_style)
 
 
     def tiff_plot(self, filename,
@@ -831,7 +987,10 @@ class ResultPlot:
                   overwrite=False,
                   compression=None,
                   font_size=None,
-                  typeface=None):
+                  typeface=None,
+                  horizontal_line=None,
+                  horizontal_line_label=None,
+                  horizontal_line_style=None):
         """Write the plot into a TIFF file.
 
         The arguments are the ones of the png_plot method, except that the
@@ -851,7 +1010,10 @@ class ResultPlot:
                      overwrite=overwrite,
                      compression=compression,
                      font_size=font_size,
-                     typeface=typeface)
+                     typeface=typeface,
+                     horizontal_line=horizontal_line,
+                     horizontal_line_label=horizontal_line_label,
+                     horizontal_line_style=horizontal_line_style)
 
 
     def pdf_plot(self, filename,
@@ -862,7 +1024,10 @@ class ResultPlot:
                  draft_copy=False,
                  overwrite=False,
                  font_size=None,
-                 typeface=None):
+                 typeface=None,
+                 horizontal_line=None,
+                 horizontal_line_label=None,
+                 horizontal_line_style=None):
         """Write the plot into a PDF file, i.e. as vector graphics.
 
         The arguments are the ones of the png_plot method. A PDF file
@@ -879,7 +1044,10 @@ class ResultPlot:
                      draft_copy=draft_copy,
                      overwrite=overwrite,
                      font_size=font_size,
-                     typeface=typeface)
+                     typeface=typeface,
+                     horizontal_line=horizontal_line,
+                     horizontal_line_label=horizontal_line_label,
+                     horizontal_line_style=horizontal_line_style)
 
 
     def __add__(self, other):
@@ -903,8 +1071,8 @@ class ResultPlot:
 
         if self.plot_type == 'effective_barrier':
             self.__error("Two effective barrier plots cannot be summed.\n"
-                         "ERROR: The barriers drawn in the same plot field "
-                         "cannot be told apart.")
+                         "The barriers drawn in the same plot field cannot be "
+                         "told apart.")
 
         if not self.x_label == other.x_label:
             self.__error("The horizontal axes of the plots differ: '"
@@ -1242,6 +1410,76 @@ class ResultPlot:
         check('the fixed appearance is kept beside the font settings',
               _images.plot_style(14.0,'sans')['xtick.direction'] == 'in')
 
+        # ------------------------------------------------------------------
+        # The horizontal reference lines, i.e. the constant values drawn
+        # across the plot, such as the Curie chiT product of the free ion.
+        # ------------------------------------------------------------------
+        check('the line styles are listed',
+              ('dashed' in _images.line_style_names())
+              and ('solid' in _images.line_style_names()))
+        check('a line style is recognized regardless of the case',
+              _images.line_style_known('Dashed'))
+        check('the symbols of the drawing library are recognized as well',
+              _images.line_style_known('--') and _images.line_style_known(':'))
+        check('an unknown line style is not recognized',
+              not _images.line_style_known('wavy'))
+        check('the line styles are turned into the ones of the drawing library',
+              (_images.line_style('dashed') == '--')
+              and (_images.line_style('dash-dot') == '-.')
+              and (_images.line_style('--') == '--'))
+
+        # The lines are built by the private method the writing methods
+        # hand their arguments to.
+        def reference_lines(values,labels=None,styles=None):
+            return plot._ResultPlot__horizontal_lines(values,labels,styles)
+
+        check('no reference line is drawn when none is given',
+              reference_lines(None) == [])
+        check('an empty list of reference lines draws none',
+              reference_lines([]) == [])
+
+        single_line = reference_lines(14.19,'Curie chiT')
+        check('a single value gives a single reference line',
+              (len(single_line) == 1)
+              and (abs(single_line[0]['value'] - 14.19) < 1.0e-12))
+        check('the label of a reference line is stored',
+              single_line[0]['label'] == 'Curie chiT')
+        check('a reference line is dashed by default',
+              single_line[0]['style'] == cls.DEFAULT_HORIZONTAL_LINE_STYLE)
+        check('a reference line without a label carries none',
+              reference_lines(14.19)[0]['label'] is None)
+        check('the style of a reference line can be chosen',
+              reference_lines(14.19,None,'dotted')[0]['style'] == 'dotted')
+
+        # Several lines are drawn from a list of values, and the labels and
+        # the styles are given either one per line or once for all of them.
+        several_lines = reference_lines([5.0,10.0],['Ising M','M(sat)'],
+                                        ['dotted','dashed'])
+        check('several reference lines are drawn from a list of values',
+              (len(several_lines) == 2)
+              and (abs(several_lines[1]['value'] - 10.0) < 1.0e-12))
+        check('the labels of several reference lines are stored',
+              [line['label'] for line in several_lines] == ['Ising M','M(sat)'])
+        check('the styles of several reference lines are stored',
+              [line['style'] for line in several_lines] == ['dotted','dashed'])
+        check('a single style is used for every reference line',
+              [line['style'] for line in reference_lines([5.0,10.0],None,'solid')]
+              == ['solid','solid'])
+        check('the values of a numpy array are accepted',
+              len(reference_lines(np.array([5.0,10.0]))) == 2)
+
+        # The legend is drawn when a labelled reference line is added, even
+        # when the data sets alone would not bring it.
+        check('a labelled reference line brings the legend with it',
+              _images.legend_is_drawn({'legend': False,
+                                       'horizontal_lines': single_line}))
+        check('an unlabelled reference line does not bring the legend',
+              not _images.legend_is_drawn(
+                  {'legend': False,
+                   'horizontal_lines': reference_lines(14.19)}))
+        check('the legend of the data sets is drawn as before',
+              _images.legend_is_drawn({'legend': True,'horizontal_lines': []}))
+
         # The writing of the files. The plots are written only when the
         # plotting library is available.
         try:
@@ -1324,6 +1562,34 @@ class ResultPlot:
             check('the typeface reaches the written image',
                   not open(serif_name,'rb').read()
                       == open(sans_name,'rb').read())
+
+            # A horizontal reference line reaches the written image, and a
+            # value lying above the data widens the vertical axis instead
+            # of being left outside it.
+            plain_name = os.path.join(directory,'plain.png')
+            line_name  = os.path.join(directory,'line.png')
+
+            plot.png_plot(plain_name,resolution=cls.DRAFT_RESOLUTION)
+            plot.png_plot(line_name,resolution=cls.DRAFT_RESOLUTION,
+                          horizontal_line=2.0*max(plot.data_sets[0]['y']),
+                          horizontal_line_label='reference')
+
+            check('a horizontal reference line reaches the written image',
+                  not open(plain_name,'rb').read()
+                      == open(line_name,'rb').read())
+
+            # The chiT product is drawn from zero, and a reference line
+            # above the data must widen the axis even then, which is what
+            # the order of the drawing rests on.
+            zero_name = os.path.join(directory,'from_zero.png')
+            susceptibility_plot.png_plot(
+                zero_name,resolution=cls.DRAFT_RESOLUTION,
+                horizontal_line=100.0*max(susceptibility_plot.data_sets[0]['y']),
+                horizontal_line_label='Curie chiT',
+                horizontal_line_style='dotted')
+
+            check('a reference line is drawn on a plot beginning from zero',
+                  os.path.getsize(zero_name) > 0)
 
             # The other kinds of plots are written as well.
             barrier_name = os.path.join(directory,'barrier.pdf')

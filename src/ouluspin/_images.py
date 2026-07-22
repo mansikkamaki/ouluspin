@@ -27,8 +27,12 @@ items:
                   indices referring to the levels
     columns     : the energy level structures of an energy level diagram,
                   each a dictionary with the items 'energies' and 'label'
+    horizontal_lines : the constant values drawn as horizontal reference
+                  lines across the plot, each a dictionary with the items
+                  'value', 'label' (or None) and 'style'
     x_label     : the label of the horizontal axis
     y_label     : the label of the vertical axis
+    y_from_zero : whether the vertical axis is drawn from zero
     title       : the title of the plot, or None
     legend      : whether the legends of the data sets are drawn
 """
@@ -69,6 +73,39 @@ DIAGRAM_LEVEL_GAP        = 0.05
 # of a publication.
 DATA_LINE_WIDTH = 2.0
 MARKER_SIZE     = 4.5
+
+# The horizontal reference lines, i.e. the constant values drawn across the
+# plot, such as the Curie chiT product of the free ion or the saturation
+# value of the magnetization. They mark a value the data are compared with
+# rather than data of their own, so they are drawn in black, thinner than
+# the curves and behind them, and dashed by default.
+HORIZONTAL_LINE_COLOR  = 'black'
+HORIZONTAL_LINE_WIDTH  = 1.5
+HORIZONTAL_LINE_ZORDER = 1.5
+
+# The styles a horizontal reference line can be drawn in, as the line
+# styles of Matplotlib.
+LINE_STYLES = {
+    'solid':    '-',
+    'dashed':   '--',
+    'dash-dot': '-.',
+    'dotted':   ':',
+}
+
+# The names the line styles are also known by, i.e. the spellings of the
+# names and the symbols Matplotlib itself uses.
+LINE_STYLE_ALIASES = {
+    '-':        'solid',
+    '--':       'dashed',
+    '-.':       'dash-dot',
+    ':':        'dotted',
+    'dashdot':  'dash-dot',
+    'dash_dot': 'dash-dot',
+    'dash dot': 'dash-dot',
+    'line':     'solid',
+    'dot':      'dotted',
+    'dash':     'dashed',
+}
 
 # The width of the arrows of an effective barrier, in points, between the
 # weakest and the strongest transition drawn.
@@ -173,6 +210,38 @@ def typeface_style(typeface):
     return {'font.family':      face['family'],
             'font.' + face['family']: list(face['faces']),
             'mathtext.fontset': face['mathtext']}
+
+
+def line_style_names():
+    """Return the names of the styles a horizontal reference line can be
+    drawn in.
+    """
+    return sorted(LINE_STYLES.keys())
+
+
+def line_style_known(style):
+    """Return whether the given name names a line style a horizontal
+    reference line can be drawn in, the names being read regardless of the
+    case and of the aliases.
+    """
+    name = str(style).strip().lower()
+
+    return LINE_STYLE_ALIASES.get(name,name) in LINE_STYLES
+
+
+def line_style(style):
+    """Return the line style of Matplotlib of the given name. A
+    RuntimeError is raised for a style that is not recognized.
+    """
+    name = str(style).strip().lower()
+    name = LINE_STYLE_ALIASES.get(name,name)
+
+    if not name in LINE_STYLES:
+        raise RuntimeError("Unknown line style: " + str(style) + ". "
+                           "The recognized line styles are "
+                           + ", ".join(line_style_names()) + ".")
+
+    return LINE_STYLES[name]
 
 
 def font_size_style(font_size):
@@ -314,14 +383,14 @@ def draw_standard_plot(axes, content):
         style = data_set.get('style','line')
 
         if style == 'points':
-            line_style   = 'none'
-            marker_style = 'o'
+            data_line_style = 'none'
+            marker_style    = 'o'
         elif style == 'line_points':
-            line_style   = '-'
-            marker_style = 'o'
+            data_line_style = '-'
+            marker_style    = 'o'
         else:
-            line_style   = '-'
-            marker_style = None
+            data_line_style = '-'
+            marker_style    = None
 
         label = data_set.get('label',"")
         if label == "":
@@ -330,17 +399,50 @@ def draw_standard_plot(axes, content):
             label = axis_label(label)
 
         axes.plot(data_set['x'],data_set['y'],
-                  linestyle=line_style,
+                  linestyle=data_line_style,
                   marker=marker_style,
                   markersize=MARKER_SIZE,
                   linewidth=DATA_LINE_WIDTH,
                   label=label)
 
-    # The susceptibility is reported as the chi*T product, which is drawn
-    # from zero up by the convention of the field, so that the curves of
-    # different compounds can be compared by eye.
-    if content.get('y_from_zero',False):
-        axes.set_ylim(bottom=0.0)
+
+def draw_horizontal_lines(axes, content):
+    """Draw the horizontal reference lines of the plot into the given axes,
+    i.e. the constant values the data are compared with, such as the Curie
+    chiT product of the free ion or the value the magnetization saturates
+    at.
+
+    The lines are drawn behind the data and the labelled ones enter the
+    legend, where their labels are typeset the way the labels of the data
+    sets are. A line without a label is drawn without entering the legend.
+    """
+    for line in content.get('horizontal_lines',[]):
+        label = line.get('label',None)
+
+        if label is None or label == "":
+            label = None
+        else:
+            label = axis_label(label)
+
+        axes.axhline(line['value'],
+                     linestyle=line_style(line.get('style','dashed')),
+                     color=HORIZONTAL_LINE_COLOR,
+                     linewidth=HORIZONTAL_LINE_WIDTH,
+                     zorder=HORIZONTAL_LINE_ZORDER,
+                     label=label)
+
+
+def legend_is_drawn(content):
+    """Return whether the legend is drawn, i.e. whether the plot carries
+    more than one labelled data set or a labelled horizontal reference
+    line. A reference line names a quantity of its own, so it brings the
+    legend with it even when the data sets alone would not be labelled.
+    """
+    if content.get('legend',False):
+        return True
+
+    return any(not line.get('label',None) in (None,"")
+               for line in content.get('horizontal_lines',[]))
 
 
 def degenerate_groups(energy_list, tolerance):
@@ -546,6 +648,17 @@ def __write_figure(plt, content, filename, file_format,
         else:
             draw_standard_plot(axes,content)
 
+        # The reference lines are drawn before the vertical axis is fixed,
+        # so that a value lying above the data widens the axis instead of
+        # being left outside it.
+        draw_horizontal_lines(axes,content)
+
+        # The susceptibility is reported as the chi*T product, which is
+        # drawn from zero up by the convention of the field, so that the
+        # curves of different compounds can be compared by eye.
+        if content.get('y_from_zero',False):
+            axes.set_ylim(bottom=0.0)
+
         if not content['x_label'] == "":
             axes.set_xlabel(axis_label(content['x_label']))
         if not content['y_label'] == "":
@@ -554,7 +667,7 @@ def __write_figure(plt, content, filename, file_format,
         if content['title'] is not None:
             axes.set_title(content['title'])
 
-        if content['legend']:
+        if legend_is_drawn(content):
             axes.legend(frameon=False)
 
         figure.tight_layout(pad=LAYOUT_PAD)

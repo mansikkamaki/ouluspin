@@ -83,6 +83,10 @@ class ChibotaruUngurSphericalTensor:
 
     Private methods
     ---------------
+    __error(message)
+        Report an error and stop.
+    __warning(message)
+        Report a warning and continue.
     __stevens_operator(k) : float
         Returns the value of the matrix elment <SS|O_{kq}|SS>, where O_{kq} is a Stevens
         operator in its original definition and S is the pseudospin.
@@ -103,6 +107,29 @@ class ChibotaruUngurSphericalTensor:
         Initiate the class and run a set of internal tests. Return True if all
         tests passed.
     """
+
+    def __error(self, message):
+        """Report an error and stop. The message is printed one line at a
+        time, so that every line of a message of several lines is marked as
+        an error, and the header names the class of the instance, so that an
+        error raised in a base class points at the class that was built.
+        """
+        print("ERROR in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("ERROR: " + line)
+        print("Error termination.")
+        sys.exit(1)
+
+
+    def __warning(self, message):
+        """Report a warning and continue. The message is printed the way the
+        one of __error is, and the calculation goes on.
+        """
+        print("WARNING in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("Warning: " + line)
+        print()
+
 
     def __stevens_operator(self, k):
         """Returns the value of the matrix elment <SS|O_{kq}|SS>, where O_{kq} is a Stevens
@@ -138,11 +165,8 @@ class ChibotaruUngurSphericalTensor:
         rank = k//2
 
         if rank < 1 or rank > self.pseudospin:
-            print("ERROR in ChibotaruUngurSphericalTensor.")
-            print("ERROR: Unsupported rank in __stevens_operator(): " + str(rank) + ".")
-            print("ERROR: The rank must be between 1 and 2S = " + str(self.pseudospin) + ".")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("Unsupported rank in __stevens_operator(): " + str(rank) + ".\n"
+                         "The rank must be between 1 and 2S = " + str(self.pseudospin) + ".")
 
         return float(factorial(self.pseudospin) // factorial(self.pseudospin - rank)) \
                / float(2**bin(rank).count('1'))
@@ -244,15 +268,9 @@ class ChibotaruUngurSphericalTensor:
         self.pseudospin          = pseudospin
 
         if not len(self.real_parameter_list) == len(self.imag_parameter_list):
-            print("ERROR in ChibotaruUngurSphericalTensor.")
-            print("Error: Inconsistent number of real and imaginary parameters.")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("Inconsistent number of real and imaginary parameters.")
         if not len(self.real_parameter_list) == len(self.real_rank_list):
-            print("ERROR in ChibotaruUngurSphericalTensor.")
-            print("Error: Inconsistent number of ranks and parameters.")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("Inconsistent number of ranks and parameters.")
 
 
     @classmethod
@@ -443,6 +461,10 @@ class IwaharaChibotaruSphericalTensor:
 
     Private methods
     ---------------
+    __error(message)
+        Report an error and stop.
+    __warning(message)
+        Report a warning and continue.
     __reorder_parameter_list()
         Order the parameter_list and rank_list so that lowest ranks are listed first in
         ascending order.
@@ -525,6 +547,29 @@ class IwaharaChibotaruSphericalTensor:
         tests passed.
     """
     
+    def __error(self, message):
+        """Report an error and stop. The message is printed one line at a
+        time, so that every line of a message of several lines is marked as
+        an error, and the header names the class of the instance, so that an
+        error raised in a base class points at the class that was built.
+        """
+        print("ERROR in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("ERROR: " + line)
+        print("Error termination.")
+        sys.exit(1)
+
+
+    def __warning(self, message):
+        """Report a warning and continue. The message is printed the way the
+        one of __error is, and the calculation goes on.
+        """
+        print("WARNING in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("Warning: " + line)
+        print()
+
+
     def __reorder_parameter_list(self):
         """Order the parameter_list and rank_list so that lowest ranks are listed first in
         ascending order.
@@ -543,10 +588,7 @@ class IwaharaChibotaruSphericalTensor:
         parameters.
         """
         if not self.n_sites == 1:
-            print("ERROR in IwaharaChibotaruSphericalTensor.")
-            print("Error: Cannot construct a Cartesian vector from multiple-site tensor.")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("Cannot construct a Cartesian vector from multiple-site tensor.")
         # Note that the rank lists are stored as lists of lists, so the
         # lookups must be done with lists, not tuples.
         if [2,2] in self.rank_list:
@@ -575,10 +617,7 @@ class IwaharaChibotaruSphericalTensor:
         It is assumed that this tensors corresponds to a single site.
         """
         if not self.n_sites == 1:
-            print("ERROR in IwaharaChibotaruSphericalTensor.")
-            print("Error: Cannot construct a one-site Cartesian tensor from multiple-site tensor.")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("Cannot construct a one-site Cartesian tensor from multiple-site tensor.")
 
         pseudospin = float(pseudospin) / 2.0
 
@@ -632,10 +671,7 @@ class IwaharaChibotaruSphericalTensor:
         It is assumed that this tensor corresponds to two sites.
         """
         if not self.n_sites == 2:
-            print("ERROR in IwaharaChibotaruSphericalTensor.")
-            print("Error: Can only construct a two-site Cartesian tensor from a two-site tensor..")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("Can only construct a two-site Cartesian tensor from a two-site tensor..")
 
         # Note that the rank lists are stored as lists of lists, so the
         # lookups must be done with lists, not tuples.
@@ -900,16 +936,10 @@ class IwaharaChibotaruSphericalTensor:
         """
         for site_index in site_list:
             if not ((site_index == 1) or (site_index == 0)):
-                print("ERROR in IwaharaChibotaruSphericalTensor.")
-                print("ERROR: Unkown site index: " + str(site_index) + ".")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("Unkown site index: " + str(site_index) + ".")
 
         if not sum(site_list) == self.n_sites:
-            print("ERROR in IwaharaChibotaruSphericalTensor.")
-            print("ERROR: Inconsistent number of old sites in site_list.")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("Inconsistent number of old sites in site_list.")
 
         new_rank_list = []
         for i in range(0,len(self.rank_list)):
@@ -940,16 +970,10 @@ class IwaharaChibotaruSphericalTensor:
         new tensor.
         """
         if not len(reorder_list) == self.n_sites:
-            print("ERROR in IwaharaChibotaruSphericalTensor.")
-            print("ERROR: Reorder list must have the same number of elements as the number of spin sites.")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("Reorder list must have the same number of elements as the number of spin sites.")
 
         if not list(range(0,self.n_sites)) == sorted(reorder_list):
-            print("ERROR in IwaharaChibotaruSphericalTensor.")
-            print("ERROR: Reorder list must contain numbers 0,1,2,... up to the number of spin sites.")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("Reorder list must contain numbers 0,1,2,... up to the number of spin sites.")
         
         new_rank_list = []
 
@@ -995,10 +1019,7 @@ class IwaharaChibotaruSphericalTensor:
         coupling the tensor product.
         """
         if not self.n_sites == 2:
-            print("ERROR in IwaharaChibotaruSphericalTensor.")
-            print("Error: Can only construct a coupled tensor from a two-site tensor.")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("Can only construct a coupled tensor from a two-site tensor.")
 
         coupled_rank_list = []
         coupled_parameter_list = []
@@ -1076,10 +1097,7 @@ class IwaharaChibotaruSphericalTensor:
             if phase % 2 == 0:
                 phase = phase // 2
             else:
-                print("ERROR in IwaharaChibotaruSphericalTensor.")
-                print("Error: Non-integer phase in time_reversal_conjugate.")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("Non-integer phase in time_reversal_conjugate.")
 
             if inverse_rank_set in self.rank_list:
                 l = self.rank_list.index(inverse_rank_set)
@@ -1112,10 +1130,7 @@ class IwaharaChibotaruSphericalTensor:
             if phase % 2 == 0:
                 phase = phase // 2
             else:
-                print("ERROR in IwaharaChibotaruSphericalTensor.")
-                print("Error: Non-integer phase in time_inversion_conjugate.")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("Non-integer phase in time_inversion_conjugate.")
 
             if inverse_rank_set in self.rank_list:
                 l = self.rank_list.index(inverse_rank_set)
@@ -1195,10 +1210,7 @@ class IwaharaChibotaruSphericalTensor:
 
         else:
             if not self.n_sites == other.n_sites:
-                print("ERROR in IwaharaChibotaruSphericalTensor.")
-                print("ERROR: Cannot add two tensors with different number of sites.")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("Cannot add two tensors with different number of sites.")
             
             copy_of_self = deepcopy(self)
 
@@ -1236,10 +1248,7 @@ class IwaharaChibotaruSphericalTensor:
         try:
             complex(number)
         except (TypeError, ValueError):
-            print("ERROR in IwaharaChibotaruSphericalTensor.")
-            print("ERROR: Can only multiply the instance with a number.")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("Can only multiply the instance with a number.")
 
         copy_of_self = deepcopy(self)
 
@@ -1318,10 +1327,7 @@ class IwaharaChibotaruSphericalTensor:
         
         for rank_tuple in self.rank_list:
             if not len(rank_tuple) == 2*self.n_sites:
-                print("ERROR in IwaharaChibotaruSphericalTensor.")
-                print("ERROR: Inconsistent number of rank parameters.")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("Inconsistent number of rank parameters.")
 
         self.__reorder_parameter_list()
 
@@ -1358,10 +1364,8 @@ class IwaharaChibotaruSphericalTensor:
             parameter_list = [X0]
             
         else:
-            print("ERROR in IwaharaChibotaruSphericalTensor.")
-            print("ERROR: Unkown Cartesian component: " + str(component) + ".")
-            print("Error termination.")
-            sys.exit(1)
+            instance = cls.__new__(cls)
+            instance.__error("Unkown Cartesian component: " + str(component) + ".")
 
         return cls(rank_list,parameter_list)
 
@@ -1424,11 +1428,9 @@ class IwaharaChibotaruSphericalTensor:
         A_A = 0.5*(matrix - matrix.T)
 
         if not np.allclose(A_A,0.0):
-            print("ERROR in IwaharaChibotaruSphericalTensor.")
-            print("ERROR: Cannot construct a one-site rank-two ITO from a Cartesian tensor with a non-zero")
-            print("       asymmetric part.")
-            print("Error termination.")
-            sys.exit(1)
+            instance = cls.__new__(cls)
+            instance.__error("Cannot construct a one-site rank-two ITO from a Cartesian tensor with a non-zero\n"
+                             "asymmetric part.")
 
         # The rank-two parameters are constructed from the traceless
         # symmetric part of the tensor. The isotropic part enters only the
@@ -1844,6 +1846,10 @@ class MixedCartesianIwaharaChibotaruSphericalTensor:
 
     Private methods
     ---------------
+    __error(message)
+        Report an error and stop.
+    __warning(message)
+        Report a warning and continue.
 
     Public methods
     --------------
@@ -1904,6 +1910,29 @@ class MixedCartesianIwaharaChibotaruSphericalTensor:
         tests passed.
     """
 
+    def __error(self, message):
+        """Report an error and stop. The message is printed one line at a
+        time, so that every line of a message of several lines is marked as
+        an error, and the header names the class of the instance, so that an
+        error raised in a base class points at the class that was built.
+        """
+        print("ERROR in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("ERROR: " + line)
+        print("Error termination.")
+        sys.exit(1)
+
+
+    def __warning(self, message):
+        """Report a warning and continue. The message is printed the way the
+        one of __error is, and the calculation goes on.
+        """
+        print("WARNING in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("Warning: " + line)
+        print()
+
+
     def component(self,component):
         """Return the Cartesian component given as an argument (either 'x', 'y', 'z'
         or 0, 1, 2).
@@ -1912,10 +1941,7 @@ class MixedCartesianIwaharaChibotaruSphericalTensor:
                                       0 : 0, 1 : 1, 2 : 2}
 
         if not component in component_index_dictionary:
-            print("ERROR in MixedCartesianIwaharaChibotaruSphericalTensor.")
-            print("ERROR: Unkown Cartesian component: " + str(component) + ".")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("Unkown Cartesian component: " + str(component) + ".")
 
         return self.component_list[component_index_dictionary[component]]
 
@@ -1930,10 +1956,7 @@ class MixedCartesianIwaharaChibotaruSphericalTensor:
         the inverse of from_one_site_cartesian_tensor.
         """
         if not self.n_sites == 1:
-            print("ERROR in MixedCartesianIwaharaChibotaruSphericalTensor.")
-            print("Error: Cannot construct a one-site Cartesian tensor from multiple-site tensor.")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("Cannot construct a one-site Cartesian tensor from multiple-site tensor.")
 
         matrix = np.zeros((3,3), dtype=np.float64)
         for alpha in range(0,3):
@@ -1952,10 +1975,7 @@ class MixedCartesianIwaharaChibotaruSphericalTensor:
         gives the spherical tensor of the Zeeman Hamiltonian.
         """
         if not len(vector) == 3:
-            print("ERROR in MixedCartesianIwaharaChibotaruSphericalTensor.")
-            print("ERROR: The vector must have exactly three Cartesian components.")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("The vector must have exactly three Cartesian components.")
 
         contracted_tensor = None
         for alpha in range(0,3):
@@ -2228,16 +2248,10 @@ class MixedCartesianIwaharaChibotaruSphericalTensor:
 
         else:
             if not isinstance(other, MixedCartesianIwaharaChibotaruSphericalTensor):
-                print("ERROR in MixedCartesianIwaharaChibotaruSphericalTensor.")
-                print("ERROR: Can only add two mixed Cartesian--spherical tensors.")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("Can only add two mixed Cartesian--spherical tensors.")
 
             if not self.n_sites == other.n_sites:
-                print("ERROR in MixedCartesianIwaharaChibotaruSphericalTensor.")
-                print("ERROR: Cannot add two tensors with different number of sites.")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("Cannot add two tensors with different number of sites.")
 
             new_component_list = []
             for alpha in range(0,3):
@@ -2267,10 +2281,7 @@ class MixedCartesianIwaharaChibotaruSphericalTensor:
         try:
             complex(number)
         except (TypeError, ValueError):
-            print("ERROR in MixedCartesianIwaharaChibotaruSphericalTensor.")
-            print("ERROR: Can only multiply the instance with a number.")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("Can only multiply the instance with a number.")
 
         new_component_list = []
         for component in self.component_list:
@@ -2312,17 +2323,11 @@ class MixedCartesianIwaharaChibotaruSphericalTensor:
         self.frame = None
 
         if not len(component_list) == 3:
-            print("ERROR in MixedCartesianIwaharaChibotaruSphericalTensor.")
-            print("ERROR: Exactly three Cartesian components must be given.")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("Exactly three Cartesian components must be given.")
 
         for component in component_list:
             if not isinstance(component, IwaharaChibotaruSphericalTensor):
-                print("ERROR in MixedCartesianIwaharaChibotaruSphericalTensor.")
-                print("ERROR: The components must be instances of IwaharaChibotaruSphericalTensor.")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("The components must be instances of IwaharaChibotaruSphericalTensor.")
 
         self.component_list = deepcopy(list(component_list))
 
@@ -2330,10 +2335,7 @@ class MixedCartesianIwaharaChibotaruSphericalTensor:
 
         for component in self.component_list:
             if not component.n_sites == self.n_sites:
-                print("ERROR in MixedCartesianIwaharaChibotaruSphericalTensor.")
-                print("ERROR: Inconsistent number of spin sites in the components.")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("Inconsistent number of spin sites in the components.")
 
 
     @classmethod
@@ -2346,10 +2348,8 @@ class MixedCartesianIwaharaChibotaruSphericalTensor:
         PseudoSpinBasis.
         """
         if not vector_operator_matrix.n_operators == 3:
-            print("ERROR in MixedCartesianIwaharaChibotaruSphericalTensor.")
-            print("ERROR: The vector operator must have exactly three components.")
-            print("Error termination.")
-            sys.exit(1)
+            instance = cls.__new__(cls)
+            instance.__error("The vector operator must have exactly three components.")
 
         component_list = []
         for alpha in range(0,3):
@@ -2609,6 +2609,10 @@ class CartesianTensor:
 
     Private methods
     ---------------
+    __error(message)
+        Report an error and stop.
+    __warning(message)
+        Report a warning and continue.
 
     Public methods
     --------------
@@ -2641,6 +2645,29 @@ class CartesianTensor:
         Initiate the class and run a set of internal tests. Return True if all
         tests passed.
     """
+    def __error(self, message):
+        """Report an error and stop. The message is printed one line at a
+        time, so that every line of a message of several lines is marked as
+        an error, and the header names the class of the instance, so that an
+        error raised in a base class points at the class that was built.
+        """
+        print("ERROR in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("ERROR: " + line)
+        print("Error termination.")
+        sys.exit(1)
+
+
+    def __warning(self, message):
+        """Report a warning and continue. The message is printed the way the
+        one of __error is, and the calculation goes on.
+        """
+        print("WARNING in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("Warning: " + line)
+        print()
+
+
     def rank_one_ito(self,axis,pseudospin,
                      transpose=False,
                      part='full'):
@@ -2682,10 +2709,7 @@ class CartesianTensor:
         the inverse of IwaharaChibotaruSphericalTensor.one_site_cartesian_tensor.
         """
         if not np.allclose(self.tensor,self.tensor.T):
-            print("ERROR in CartesianTensor.")
-            print("Error: Rank-two ito decomposition of a asymmetric tensor requested.")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("Rank-two ito decomposition of a asymmetric tensor requested.")
 
         tmp_pseudospin = float(pseudospin) / 2.0
 
@@ -2744,12 +2768,9 @@ class CartesianTensor:
         new_trace = np.trace(self.tensor)
 
         if abs(old_trace - new_trace) > 1.0e-6:
-            print("ERROR in CartesianTensor.")
-            print("Error: Tensor trace changed under rotation.")
-            print("  Old trace: {0:20.8f}".format(old_trace))
-            print("  New trace: {0:20.8f}".format(new_trace))
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("Tensor trace changed under rotation.\n"
+                         + "Old trace: {0:20.8f}\n".format(old_trace)
+                         + "New trace: {0:20.8f}".format(new_trace))
 
         if self.symmetric:
             self.eigenvalues, self.eigenvectors = la.eigh(self.tensor)
@@ -3019,6 +3040,10 @@ class Rotation:
 
     Private methods
     ---------------
+    __error(message)
+        Report an error and stop.
+    __warning(message)
+        Report a warning and continue.
     __evaluate_euler_angles()
         Calculate a set of Euler angles based on the rotation
         matrix and store it as an attribute.
@@ -3040,6 +3065,29 @@ class Rotation:
         tests passed.
     """
     
+    def __error(self, message):
+        """Report an error and stop. The message is printed one line at a
+        time, so that every line of a message of several lines is marked as
+        an error, and the header names the class of the instance, so that an
+        error raised in a base class points at the class that was built.
+        """
+        print("ERROR in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("ERROR: " + line)
+        print("Error termination.")
+        sys.exit(1)
+
+
+    def __warning(self, message):
+        """Report a warning and continue. The message is printed the way the
+        one of __error is, and the calculation goes on.
+        """
+        print("WARNING in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("Warning: " + line)
+        print()
+
+
     def __evaluate_euler_angles(self):
         """Calculate a set of Euler angles based on the rotation
         matrix and store it as an attribute.
@@ -3118,10 +3166,7 @@ class Rotation:
 
             inverse_rotation_matrix = self.__construct_matrix_from_angles(reverse_alpha,reverse_beta,reverse_gamma)
         else:
-            print("ERROR in Rotation.")
-            print("ERROR: Unrecognized argument for inverse: " + str(construction))
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("Unrecognized argument for inverse: " + str(construction))
             
         return Rotation(inverse_rotation_matrix)
     
@@ -3152,22 +3197,13 @@ class Rotation:
 
         # Check that the rotation matrix belongs to SO(3).
         if not abs(la.det(self.rotation_matrix) - 1.0) < 1.0e-6:
-            print("ERROR in Rotation.")
-            print("ERROR: Rotation matrix is not unimodular.")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("Rotation matrix is not unimodular.")
 
         if not np.allclose(self.rotation_matrix.imag, 0.0):
-            print("ERROR in Rotation.")
-            print("ERROR: Rotation matrix is not real.")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("Rotation matrix is not real.")
 
         if not np.allclose(np.dot(np.transpose(self.rotation_matrix),self.rotation_matrix), np.identity(3)):
-            print("ERROR in Rotation.")
-            print("ERROR: Rotation matrix is not orthogonal.")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("Rotation matrix is not orthogonal.")
 
 
         self.__evaluate_euler_angles()
@@ -3177,21 +3213,24 @@ class Rotation:
         matrix_constructed_from_angles = self.__construct_matrix_from_angles(self.alpha,self.beta,self.gamma)
         
         if not np.allclose(self.rotation_matrix,matrix_constructed_from_angles, atol=1.0e-4):
-            print("ERROR in Rotation.")
-            print("ERROR: Matrix constructed from Euler angles does not match the original matrix.")
-            print()
-            print("     {0:>38}     {1:>38}".format("Original rotation matrix:","Matrix constructed from Euler Angles:"))
+            # The two matrices are laid side by side in the message, so
+            # that the element the comparison failed on can be seen.
+            message = ("Matrix constructed from Euler angles does not match the "
+                       "original matrix.\n\n"
+                       + "     {0:>38}     {1:>38}".format(
+                           "Original rotation matrix:",
+                           "Matrix constructed from Euler Angles:"))
+
             for i in range(0,3):
-                print("    ", end="")
+                message += "\n    "
                 for j in range(0,3):
-                    print(" {0:12.6f}".format(self.rotation_matrix[i][j]), end="")
-                print("    ", end="")
+                    message += " {0:12.6f}".format(self.rotation_matrix[i][j])
+                message += "    "
                 for j in range(0,3):
-                    print(" {0:12.6f}".format(matrix_constructed_from_angles[i][j]), end="")
-                print()
-            print()
-            print("Error termination.")
-            sys.exit(1)
+                    message += " {0:12.6f}".format(
+                        matrix_constructed_from_angles[i][j])
+
+            self.__error(message)
 
 
     @classmethod

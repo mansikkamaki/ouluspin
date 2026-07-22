@@ -17,7 +17,7 @@ def real_matrix_str(matrix,number_format="6.3f"):
     """Return a human-readable representation of a real square matrix."""
     if (not len(matrix.shape) == 2) or (not matrix.shape[0] == matrix.shape[1]):
         print("ERROR in ouluspin._debug.")
-        print("Error: Not a square matrix.")
+        print("ERROR: Not a square matrix.")
         print("Error termination.")
         sys.exit(1)
 

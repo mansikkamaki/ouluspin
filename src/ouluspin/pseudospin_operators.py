@@ -61,6 +61,10 @@ class PseudoSpinBasis:
         
     Private methods
     ---------------
+    __error(message)
+        Report an error and stop.
+    __warning(message)
+        Report a warning and continue.
     __construct_basis() : void
         Construct the basis and store it as an attribute.
     __construct_local_state_index_list() : void
@@ -113,6 +117,29 @@ class PseudoSpinBasis:
         tests passed.
     """
     
+    def __error(self, message):
+        """Report an error and stop. The message is printed one line at a
+        time, so that every line of a message of several lines is marked as
+        an error, and the header names the class of the instance, so that an
+        error raised in a base class points at the class that was built.
+        """
+        print("ERROR in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("ERROR: " + line)
+        print("Error termination.")
+        sys.exit(1)
+
+
+    def __warning(self, message):
+        """Report a warning and continue. The message is printed the way the
+        one of __error is, and the calculation goes on.
+        """
+        print("WARNING in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("Warning: " + line)
+        print()
+
+
     def __construct_basis(self):
         """Construct the basis and store it as an attribute."""
         self.basis_state_list = []
@@ -366,10 +393,7 @@ class PseudoSpinBasis:
                     phase_ii += self.basis_state_list[i][k][0]
 
                 if phase_ii % 2 != 0:
-                    print("ERROR in PseudoSpinBasis.")
-                    print("Error: Phase in unitary part of the time-reversal operator is not integer.")
-                    print("Error termination.")
-                    sys.exit(1)
+                    self.__error("Phase in unitary part of the time-reversal operator is not integer.")
 
                 U[i][i] = (-1)**(phase_ii//2)
             else:
@@ -384,10 +408,7 @@ class PseudoSpinBasis:
                     phase_ji += self.basis_state_list[i][k][0] - self.basis_state_list[i][k][1]
 
                 if (phase_ij % 2 != 0) or (phase_ji % 2 != 0):
-                    print("ERROR in PseudoSpinBasis.")
-                    print("Error: Phase in unitary part of the time-reversal operator is not integer.")
-                    print("Error termination.")
-                    sys.exit(1)
+                    self.__error("Phase in unitary part of the time-reversal operator is not integer.")
 
                 U[i][j] = (-1)**(phase_ij//2)
                 U[j][i] = (-1)**(phase_ji//2)
@@ -438,10 +459,7 @@ class PseudoSpinBasis:
     def __eq__(self, other):
         """Check the equality of two bases by comparing their pseudospin lists."""
         if not isinstance(other, PseudoSpinBasis):
-            print("ERROR in PseudoSpinBasis.")
-            print("Error: An instance of PseudoSpinBasis can only be compared to another instance of the same class.")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("An instance of PseudoSpinBasis can only be compared to another instance of the same class.")
 
         return self.basis_state_list == other.basis_state_list
 
@@ -614,6 +632,10 @@ class PseudoSpinOperator:
 
     Private methods
     ---------------
+    __error(message)
+        Report an error and stop.
+    __warning(message)
+        Report a warning and continue.
     __diagonalize() : void
         Construct the matrix, diagonalize it and return the eigenvalues and eigenvectors.
         The construction and diagonalization will be handled by fortran_utils.
@@ -647,6 +669,29 @@ class PseudoSpinOperator:
         Initiate the class and run a set of internal tests. Return True if all
         tests passed.
     """
+
+    def __error(self, message):
+        """Report an error and stop. The message is printed one line at a
+        time, so that every line of a message of several lines is marked as
+        an error, and the header names the class of the instance, so that an
+        error raised in a base class points at the class that was built.
+        """
+        print("ERROR in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("ERROR: " + line)
+        print("Error termination.")
+        sys.exit(1)
+
+
+    def __warning(self, message):
+        """Report a warning and continue. The message is printed the way the
+        one of __error is, and the calculation goes on.
+        """
+        print("WARNING in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("Warning: " + line)
+        print()
+
 
     def __diagonalize(self):
         """Construct the matrix, diagonalize it and return the eigenvalues and eigenvectors.
@@ -840,13 +885,10 @@ class PseudoSpinOperator:
             contribution of a per cent from a vanishing one.
         """
         if not self.basis.n_sites == 1:
-            print("ERROR in PseudoSpinOperator.")
-            print("Error: The compact eigenvector table is available for a basis")
-            print("       of a single spin site only; this basis has "
-                  + str(self.basis.n_sites) + " sites.")
-            print("       Use the eigenvector_table method instead.")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("The compact eigenvector table is available for a basis\n"
+                         "of a single spin site only; this basis has "
+                         + str(self.basis.n_sites) + " sites.\n"
+                         "Use the eigenvector_table method instead.")
 
         if not self.diagonalize_operator_matrix:
             return result_table.ResultTable([],
@@ -921,10 +963,7 @@ class PseudoSpinOperator:
         
         for tensor in tensor_list:
             if not tensor.n_sites == self.n_sites:
-                print("ERROR in PseudoSpinOperator.")
-                print("Error: Inconsistent number of spin sites in the tensors.")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("Inconsistent number of spin sites in the tensors.")
 
         self.tensor = sum(tensor_list)
         self.n_ranks = self.tensor.n_ranks
@@ -985,10 +1024,8 @@ class PseudoSpinOperator:
         for mixed_tensor in iter(mixed_tensor_list):
             if not isinstance(mixed_tensor,
                               tensors.MixedCartesianIwaharaChibotaruSphericalTensor):
-                print("ERROR in PseudoSpinOperator.")
-                print("Error: The tensors must be instances of MixedCartesianIwaharaChibotaruSphericalTensor.")
-                print("Error termination.")
-                sys.exit(1)
+                instance = cls.__new__(cls)
+                instance.__error("The tensors must be instances of MixedCartesianIwaharaChibotaruSphericalTensor.")
 
         summed_tensor     = sum(mixed_tensor_list)
         contracted_tensor = summed_tensor.contract_with_vector(vector)
@@ -1220,6 +1257,10 @@ class PseudoSpinVectorOperator:
 
     Private methods
     ---------------
+    __error(message)
+        Report an error and stop.
+    __warning(message)
+        Report a warning and continue.
 
     Public methods
     --------------
@@ -1240,15 +1281,35 @@ class PseudoSpinVectorOperator:
         tests passed.
     """
 
+    def __error(self, message):
+        """Report an error and stop. The message is printed one line at a
+        time, so that every line of a message of several lines is marked as
+        an error, and the header names the class of the instance, so that an
+        error raised in a base class points at the class that was built.
+        """
+        print("ERROR in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("ERROR: " + line)
+        print("Error termination.")
+        sys.exit(1)
+
+
+    def __warning(self, message):
+        """Report a warning and continue. The message is printed the way the
+        one of __error is, and the calculation goes on.
+        """
+        print("WARNING in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("Warning: " + line)
+        print()
+
+
     def matrix_list(self):
         """Return a list of matrix representations of the different components of the
         vector operator.
         """
         if not self.store_operator_matrix:
-            print("ERROR in PseudoSpinVectorOperator.")
-            print("Error: Matrix list requested but matrices are not stored.")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("Matrix list requested but matrices are not stored.")
         
         tmp_list = []
         for i in range(0,self.n_operators):
@@ -1365,10 +1426,7 @@ class PseudoSpinVectorOperator:
         for mixed_tensor in iter(mixed_tensor_list):
             if not isinstance(mixed_tensor,
                               tensors.MixedCartesianIwaharaChibotaruSphericalTensor):
-                print("ERROR in PseudoSpinVectorOperator.")
-                print("Error: The tensors must be instances of MixedCartesianIwaharaChibotaruSphericalTensor.")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("The tensors must be instances of MixedCartesianIwaharaChibotaruSphericalTensor.")
 
         self.n_operators = 3
 
@@ -1483,6 +1541,10 @@ class GeneralOperatorMatrix:
 
     Private methods
     ---------------
+    __error(message)
+        Report an error and stop.
+    __warning(message)
+        Report a warning and continue.
     __diagonalize()
         Diagonalize the operator matrix, store the eigenvalues and
         eigenvectors as attributes and translate the eigenvalues if
@@ -1499,6 +1561,29 @@ class GeneralOperatorMatrix:
         Initiate the class and run a set of internal tests. Return True if all
         tests passed.
     """
+
+    def __error(self, message):
+        """Report an error and stop. The message is printed one line at a
+        time, so that every line of a message of several lines is marked as
+        an error, and the header names the class of the instance, so that an
+        error raised in a base class points at the class that was built.
+        """
+        print("ERROR in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("ERROR: " + line)
+        print("Error termination.")
+        sys.exit(1)
+
+
+    def __warning(self, message):
+        """Report a warning and continue. The message is printed the way the
+        one of __error is, and the calculation goes on.
+        """
+        print("WARNING in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("Warning: " + line)
+        print()
+
 
     def __diagonalize(self):
         """Diagonalize the matrix and store the eigenvales and eigenvectors as
@@ -1557,17 +1642,11 @@ class GeneralOperatorMatrix:
             return deepcopy(self)
 
         elif not isinstance(other, GeneralOperatorMatrix):
-                print("ERROR in GeneralOperatorMatrix.")
-                print("ERROR: Operator matrices can only be added to other operator matrices.")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("Operator matrices can only be added to other operator matrices.")
 
         else:
             if not self.n_basis == other.n_basis:
-                print("ERROR in GeneralOperatorMatrix.")
-                print("ERROR: Cannot add two operators with different basis dimensions.")
-                print("Error termination.")
-                sys.exit(1)
+                self.__error("Cannot add two operators with different basis dimensions.")
 
             copy_of_self = deepcopy(self)
 
@@ -1588,10 +1667,7 @@ class GeneralOperatorMatrix:
             return copy_of_self
 
         else:
-            print("ERROR in GeneralOperatorMatrix.")
-            print("ERROR: Unrecognized object in multiplication.")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("Unrecognized object in multiplication.")
             
 
     def __init__(self, matrix,
@@ -1605,22 +1681,13 @@ class GeneralOperatorMatrix:
         self.translate_eigenvalues = translate_eigenvalues
 
         if not len(matrix.shape) == 2:
-            print("ERROR in GeneralOperatorMatrix.")
-            print("Error: The matrix is not two-dimensional.")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("The matrix is not two-dimensional.")
             
         if not matrix.shape[0] == matrix.shape[1]:
-            print("ERROR in GeneralOperatorMatrix.")
-            print("Error: The matrix is not square.")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("The matrix is not square.")
             
         if not np.allclose(matrix,matrix.conj().T):
-            print("ERROR in GeneralOperatorMatrix.")
-            print("Error: The matrix is not Hermitean.")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("The matrix is not Hermitean.")
 
         self.n_basis = self.matrix.shape[0]
 
@@ -1721,6 +1788,10 @@ class GeneralVectorOperatorMatrix:
 
     Private methods
     ---------------
+    __error(message)
+        Report an error and stop.
+    __warning(message)
+        Report a warning and continue.
 
     Public methods
     --------------
@@ -1734,6 +1805,29 @@ class GeneralVectorOperatorMatrix:
         Initiate the class and run a set of internal tests. Return True if all
         tests passed.
     """
+
+    def __error(self, message):
+        """Report an error and stop. The message is printed one line at a
+        time, so that every line of a message of several lines is marked as
+        an error, and the header names the class of the instance, so that an
+        error raised in a base class points at the class that was built.
+        """
+        print("ERROR in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("ERROR: " + line)
+        print("Error termination.")
+        sys.exit(1)
+
+
+    def __warning(self, message):
+        """Report a warning and continue. The message is printed the way the
+        one of __error is, and the calculation goes on.
+        """
+        print("WARNING in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("Warning: " + line)
+        print()
+
 
     def matrix_list(self):
         """Return a list of matrix representations of the different components of the
@@ -1807,10 +1901,7 @@ class GeneralVectorOperatorMatrix:
         self.n_basis = self.operator_list[0].n_basis
 
         if (not self.n_basis == self.operator_list[1].n_basis) or (not self.n_basis == self.operator_list[2].n_basis):
-            print("ERROR in GeneralVectorOperatorMatrix.")
-            print("Error: Inconsistent operator dimensions.")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("Inconsistent operator dimensions.")
 
 
     @classmethod

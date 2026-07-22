@@ -191,6 +191,14 @@ class IonData:
         Return the chi*T product of the free ion given by the Curie law for
         the ground multiplet, in cm^3 K mol^-1, with either the accurate or
         the simple Lande g-factor.
+    saturation_magnetization(simple_g_factor=False) : float
+        Return the magnetization of the ground multiplet in the saturation
+        limit B/T -> infinity, in units of the Bohr magneton, for an
+        isotropic ion, i.e. g_J J.
+    ising_saturation_magnetization(simple_g_factor=False) : float
+        Return the same in the Ising case, i.e. the powder value of an ion
+        whose ground state is a maximally axial doublet of M_J = +-J, which
+        is g_J J / 2.
     states_by_multiplicity() : list of dict
         Return the terms and the states of the open shell grouped by spin
         multiplicity.
@@ -472,20 +480,23 @@ class IonData:
 
 
     def __error(self, message):
-        """Report an error and stop. The data of an ion are ordinarily
-        resolved at the beginning of a calculation, so an error is reported
-        the way the other errors of the library are.
+        """Report an error and stop. The message is printed one line at a
+        time, so that every line of a message of several lines is marked as
+        an error, and the header names the class of the instance, so that an
+        error raised in a base class points at the class that was built.
         """
-        print("ERROR in IonData.")
+        print("ERROR in " + type(self).__name__ + ".")
         for line in message.split("\n"):
-            print("Error: " + line)
+            print("ERROR: " + line)
         print("Error termination.")
         sys.exit(1)
 
 
     def __warning(self, message):
-        """Report a warning and continue."""
-        print("WARNING in IonData.")
+        """Report a warning and continue. The message is printed the way the
+        one of __error is, and the calculation goes on.
+        """
+        print("WARNING in " + type(self).__name__ + ".")
         for line in message.split("\n"):
             print("Warning: " + line)
         print()
@@ -1062,6 +1073,94 @@ class IonData:
         return type(self).__CURIE_CONSTANT * g_factor**2 * J*(J + 1.0)
 
 
+    def saturation_magnetization(self, simple_g_factor=False):
+        """Return the molar magnetization of the free ion in the saturation
+        limit, i.e. for B/T -> infinity, in units of the Bohr magneton:
+
+            M_sat = g_J J.
+
+        The value is the limit the Brillouin function of the ground
+        multiplet approaches once the field dominates the thermal energy,
+        i.e. the magnetization of the fully polarized multiplet, in which
+        only the state of the largest projection of the angular momentum
+        along the field is populated. It is the value the measured
+        magnetization of a compound of the ion is compared with when the
+        magnetic moment of the ion is isotropic; for Dy(III) it is 10.01 mu_B
+        with the accurate Lande g-factor and exactly 10 mu_B with the simple
+        one.
+
+        The isotropy is what the value rests on: the whole ground multiplet
+        has to be available to the field, i.e. the crystal field must not
+        split it by more than the Zeeman energy. A crystal field that leaves
+        an axial doublet alone in the low-energy region gives the value of
+        the ising_saturation_magnetization method instead, which is half of
+        this one for a powder.
+
+        The value vanishes for an ion whose ground multiplet has J = 0, i.e.
+        for a closed or an empty shell and for e.g. Eu(III) and Sm(II).
+
+        Optional arguments
+        ------------------
+        simple_g_factor : boolean
+            Whether the simple Lande g-factor of g_e = 2, i.e. the
+            lande_g_factor_simple attribute, is used instead of the accurate
+            one. Default is False, i.e. the accurate factor of the
+            lande_g_factor attribute. The simple factor reproduces the
+            values tabulated in the textbooks of magnetochemistry, which are
+            evaluated in the same approximation.
+        """
+        if simple_g_factor:
+            g_factor = self.lande_g_factor_simple
+        else:
+            g_factor = self.lande_g_factor
+
+        return g_factor * self.J/2.0
+
+
+    def ising_saturation_magnetization(self, simple_g_factor=False):
+        """Return the molar magnetization in the saturation limit, i.e. for
+        B/T -> infinity, of an ion whose ground state is a maximally axial
+        Ising-type doublet well separated from the other states, as the
+        POWDER average, in units of the Bohr magneton:
+
+            M_sat(Ising) = g_z/4 = g_J J / 2.
+
+        The doublet meant is the one of the projections M_J = +-J of the
+        ground multiplet, which is the ground doublet of a strongly axial
+        crystal field. Its principal g-values are
+
+            g_z = 2 g_J J,      g_x = g_y = 0,
+
+        so only the component of the field along the easy axis acts on it:
+        the magnetization of a crystallite whose axis stands at the angle
+        theta from the field saturates at (g_z/2)|cos(theta)|, and the
+        average of |cos(theta)| over the sphere is one half. The powder
+        value is therefore HALF the isotropic one; along the easy axis of a
+        single crystal the doublet saturates at g_z/2 = g_J J, i.e. at the
+        isotropic value of the saturation_magnetization method.
+
+        For Dy(III) the value is 5.00 mu_B, which is the saturation
+        ordinarily met in the magnetization of a Dy(III) single-molecule
+        magnet, against the 10 mu_B of the isotropic ion.
+
+        The value rests on the doublet being alone in the low-energy region,
+        i.e. on the states above it staying unpopulated and unmixed by the
+        field; the magnetization of a real compound climbs above it once the
+        field begins to mix in the excited states.
+
+        The value vanishes for an ion whose ground multiplet has J = 0,
+        which carries no doublet at all.
+
+        Optional arguments
+        ------------------
+        simple_g_factor : boolean
+            Whether the simple Lande g-factor of g_e = 2 is used instead of
+            the accurate one. Default is False, as in the
+            saturation_magnetization method.
+        """
+        return 0.5*self.saturation_magnetization(simple_g_factor=simple_g_factor)
+
+
     def coefficients_of_fractional_parentage(self):
         """Return the coefficients of fractional parentage of the open
         shell of the ion, i.e. the coefficients
@@ -1216,6 +1315,14 @@ class IonData:
             ["Curie chiT / cm^3 K mol^-1",  "{0:.4f}".format(self.curie_susceptibility())],
             ["Curie chiT, g_e = 2",         "{0:.4f}".format(
                 self.curie_susceptibility(simple_g_factor=True))],
+            ["Saturation M, isotropic / mu_B", "{0:.4f}".format(
+                self.saturation_magnetization())],
+            ["Saturation M, isotropic, g_e = 2", "{0:.4f}".format(
+                self.saturation_magnetization(simple_g_factor=True))],
+            ["Saturation M, Ising / mu_B",   "{0:.4f}".format(
+                self.ising_saturation_magnetization())],
+            ["Saturation M, Ising, g_e = 2", "{0:.4f}".format(
+                self.ising_saturation_magnetization(simple_g_factor=True))],
         ]
 
 
@@ -1249,13 +1356,23 @@ class IonData:
                      "those of the configuration " + self.valence_configuration
                      + ", evaluated from the coefficients of\n"
                      "fractional parentage of the shell.",
-                     "The Lande g-factor and the chiT product are given both with the\n"
-                     "g-factor of the free electron ({0:.9f}) and in the\n"
-                     "approximation g_e = 2 of the textbooks, which is the one the\n"
-                     "tabulated values of the literature are evaluated in. The\n"
-                     "g-factor of that approximation is a rational number and is\n"
-                     "given as the exact fraction it is."
-                     .format(self.electron_g_factor())]
+                     "The Lande g-factor, the chiT product and the saturation\n"
+                     "magnetization are given both with the g-factor of the free\n"
+                     "electron ({0:.9f}) and in the approximation g_e = 2\n"
+                     "of the textbooks, which is the one the tabulated values of the\n"
+                     "literature are evaluated in. The g-factor of that\n"
+                     "approximation is a rational number and is given as the exact\n"
+                     "fraction it is."
+                     .format(self.electron_g_factor()),
+                     "The saturation magnetization is the value the magnetization\n"
+                     "reaches for B/T -> infinity, in units of the Bohr magneton.\n"
+                     "The isotropic value g_J J is that of the free ion, whose whole\n"
+                     "ground multiplet is available to the field. The Ising value is\n"
+                     "the powder value of an ion whose ground state is a maximally\n"
+                     "axial doublet of M_J = +-J alone in the low-energy region: only\n"
+                     "the field along the easy axis acts on such a doublet, and the\n"
+                     "average of |cos(theta)| over the sphere is one half, so the\n"
+                     "powder value is half the isotropic one."]
 
         if spin_states:
             note_list.append(
@@ -1987,6 +2104,71 @@ class IonData:
                   - 4.377) < 5.0e-3)
 
         # ------------------------------------------------------------------
+        # The saturation magnetization, against the g_J J of the trivalent
+        # lanthanides. The tabulated values are those of the textbooks, i.e.
+        # the ones of the approximation g_e = 2.
+        # ------------------------------------------------------------------
+        saturation_list = [('Ce(III)',15.0/7.0), ('Pr(III)',3.2),
+                           ('Nd(III)',36.0/11.0),('Pm(III)',2.4),
+                           ('Sm(III)',5.0/7.0),  ('Eu(III)',0.0),
+                           ('Gd(III)',7.0),      ('Tb(III)',9.0),
+                           ('Dy(III)',10.0),     ('Ho(III)',10.0),
+                           ('Er(III)',9.0),      ('Tm(III)',7.0),
+                           ('Yb(III)',4.0)]
+
+        saturation_ok = True
+        ising_ok      = True
+        for name, value in saturation_list:
+            ion = cls(name)
+
+            if abs(ion.saturation_magnetization(simple_g_factor=True)
+                   - value) > 1.0e-12:
+                saturation_ok = False
+
+            # The Ising value is the powder value of an axial doublet of
+            # M_J = +-J, which is half the isotropic one.
+            if abs(ion.ising_saturation_magnetization(simple_g_factor=True)
+                   - 0.5*value) > 1.0e-12:
+                ising_ok = False
+
+        check('the saturation magnetizations of the lanthanides are correct',
+              saturation_ok)
+        check('the Ising saturation magnetization is half the isotropic one',
+              ising_ok)
+
+        # The saturation magnetization is g_J J, i.e. the magnetization of
+        # the fully polarized ground multiplet.
+        check('the saturation magnetization is g_J J',
+              all(abs(cls(name).saturation_magnetization()
+                      - cls(name).lande_g_factor*cls(name).J/2.0) < 1.0e-12
+                  for name in ('Dy(III)','Gd(III)','Fe(III)','U(III)')))
+        check('the saturation magnetization of Dy(III) is ten Bohr magnetons',
+              (abs(cls('Dy(III)').saturation_magnetization(simple_g_factor=True)
+                   - 10.0) < 1.0e-12)
+              and (abs(cls('Dy(III)').ising_saturation_magnetization(
+                  simple_g_factor=True) - 5.0) < 1.0e-12))
+        check('the saturation magnetization uses the accurate g-factor by default',
+              abs(cls('Dy(III)').saturation_magnetization() - 10.00580) < 5.0e-5)
+
+        # A spin-only ion saturates at 2S, i.e. at the number of its
+        # unpaired electrons: the free Fe(III) ion has L = 0 and J = S = 5/2.
+        check('the spin-only saturation magnetization is the electron count',
+              abs(cls('Fe(III)').saturation_magnetization(simple_g_factor=True)
+                  - 5.0) < 1.0e-12)
+
+        # An ion of J = 0 has no magnetization at all, and the Ising value
+        # follows the chosen g-factor exactly as the isotropic one does.
+        check('an ion of J = 0 has a vanishing saturation magnetization',
+              (abs(cls('Eu(III)').saturation_magnetization()) < 1.0e-12)
+              and (abs(cls('Eu(III)').ising_saturation_magnetization()) < 1.0e-12))
+        check('the saturation magnetization follows the chosen g-factor',
+              all(abs(cls(name).saturation_magnetization()
+                      - cls(name).saturation_magnetization(simple_g_factor=True)
+                        *(cls(name).lande_g_factor
+                          /cls(name).lande_g_factor_simple)) < 1.0e-12
+                  for name in ('Dy(III)','Gd(III)','Ce(III)')))
+
+        # ------------------------------------------------------------------
         # The coefficients of fractional parentage.
         # ------------------------------------------------------------------
         # They are not evaluated upon construction.
@@ -2084,6 +2266,14 @@ class IonData:
               and ('4/3' in ground_table))
         check('the tables state the chiT product with both g-factors',
               ('14.1887' in ground_table) and ('14.1723' in ground_table))
+        check('the tables state the saturation magnetization',
+              ('Saturation M, isotropic' in ground_table)
+              and ('Saturation M, Ising' in ground_table))
+        check('the tables state both saturation magnetizations of Dy(III)',
+              ('10.0058' in ground_table) and ('10.0000' in ground_table)
+              and ('5.0029' in ground_table) and ('5.0000' in ground_table))
+        check('the data table states the saturation magnetization too',
+              'Saturation M, Ising' in table_string)
 
         term_table = dy.term_table().string_table()
         check('the term table lists one term per row',
@@ -2227,6 +2417,8 @@ class MultipleIonData:
     ---------------
     __error(message)
         Report an error and stop.
+    __warning(message)
+        Report a warning and continue.
     __resolve_elements(elements)
         Read the argument naming the elements and store the symbols as an
         attribute.
@@ -2329,15 +2521,26 @@ class MultipleIonData:
 
 
     def __error(self, message):
-        """Report an error and stop. The scope of a table is settled at the
-        beginning of a calculation, so an error is reported the way the
-        other errors of the library are.
+        """Report an error and stop. The message is printed one line at a
+        time, so that every line of a message of several lines is marked as
+        an error, and the header names the class of the instance, so that an
+        error raised in a base class points at the class that was built.
         """
-        print("ERROR in MultipleIonData.")
+        print("ERROR in " + type(self).__name__ + ".")
         for line in message.split("\n"):
-            print("Error: " + line)
+            print("ERROR: " + line)
         print("Error termination.")
         sys.exit(1)
+
+
+    def __warning(self, message):
+        """Report a warning and continue. The message is printed the way the
+        one of __error is, and the calculation goes on.
+        """
+        print("WARNING in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("Warning: " + line)
+        print()
 
 
     @classmethod
@@ -2802,16 +3005,24 @@ class MultipleIonData:
     def ground_magnetism_table(self):
         """Return the magnetism of the ground multiplet of every ion of the
         set as an instance of ResultTable, i.e. the quantum numbers S, L and
-        J, the Lande g-factor of the multiplet and the chiT product the
-        Curie law gives for it.
+        J, the Lande g-factor of the multiplet, the chiT product the Curie
+        law gives for it and the magnetization it saturates at.
 
-        The g-factor and the chiT product are given with both conventions
-        for the g-factor of the free electron: the accurate one, evaluated
-        with the CODATA value, which is the one meant for quantitative work,
-        and the one of the approximation g_e = 2 of the textbooks, which is
-        the convention the tabulated values of the literature are evaluated
-        in. The g-factor of that approximation is a rational number and is
-        given as the exact fraction it is as well.
+        The saturation magnetization is given in the two cases the
+        saturation_magnetization and the ising_saturation_magnetization
+        methods of IonData treat, i.e. for the isotropic ion, whose whole
+        ground multiplet is available to the field, and for an ion whose
+        ground state is a maximally axial doublet of M_J = +-J, the latter
+        as the powder value, which is half the former.
+
+        The g-factor, the chiT product and the two magnetizations are given
+        with both conventions for the g-factor of the free electron: the
+        accurate one, evaluated with the CODATA value, which is the one
+        meant for quantitative work, and the one of the approximation
+        g_e = 2 of the textbooks, which is the convention the tabulated
+        values of the literature are evaluated in. The g-factor of that
+        approximation is a rational number and is given as the exact
+        fraction it is as well.
         """
         from ouluspin import result_table
 
@@ -2820,7 +3031,7 @@ class MultipleIonData:
             data = row['data']
 
             if data is None:
-                row_list.append([row['ion']] + 8*[self.MISSING_TEXT])
+                row_list.append([row['ion']] + 12*[self.MISSING_TEXT])
                 continue
 
             row_list.append([row['ion'],
@@ -2831,19 +3042,40 @@ class MultipleIonData:
                              data.lande_g_factor_simple,
                              data.lande_g_factor_str,
                              data.curie_susceptibility(),
-                             data.curie_susceptibility(simple_g_factor=True)])
+                             data.curie_susceptibility(simple_g_factor=True),
+                             data.saturation_magnetization(),
+                             data.saturation_magnetization(simple_g_factor=True),
+                             data.ising_saturation_magnetization(),
+                             data.ising_saturation_magnetization(
+                                 simple_g_factor=True)])
+
+        # The columns of the two conventions for the g-factor of the free
+        # electron stand under the same quantity, so the header is set on
+        # two lines: the quantity above and the convention below. The units
+        # are stated by the notes, since they would widen the columns of the
+        # table more than they are worth.
+        column_headers = [["Ion","S","L","J","g_J","g_J","Fraction",
+                           "chiT","chiT","M_iso","M_iso","M_Ising","M_Ising"],
+                          ["","","","","","(g_e = 2)","",
+                           "","(g_e = 2)","","(g_e = 2)","","(g_e = 2)"]]
 
         return result_table.ResultTable(
             row_list,
-            column_headers=["Ion","S","L","J",
-                            "g_J","g_J (g_e = 2)","Fraction",
-                            "chiT / cm^3 K mol^-1","chiT, g_e = 2"],
+            column_headers=column_headers,
             title="MAGNETISM OF THE GROUND MULTIPLETS OF THE IONS",
             notes=[self.__scope_note(),
                    "g_J is the Lande g-factor of the ground multiplet and chiT the\n"
                    "product the Curie law gives for that multiplet, i.e.\n"
                    "chi*T = N_A mu_B^2 g_J^2 J(J+1) / (3 k_B), in cm^3 K mol^-1.",
-                   "Both are given with the g-factor of the free electron\n"
+                   "M_iso and M_Ising are the magnetization in the saturation\n"
+                   "limit B/T -> infinity, in units of the Bohr magneton. M_iso is\n"
+                   "the isotropic value g_J J of the free ion, whose whole ground\n"
+                   "multiplet is available to the field, and M_Ising the powder\n"
+                   "value g_J J / 2 of an ion whose ground state is a maximally\n"
+                   "axial doublet of M_J = +-J alone in the low-energy region: only\n"
+                   "the field along the easy axis acts on such a doublet, and the\n"
+                   "average of |cos(theta)| over the sphere is one half.",
+                   "All of them are given with the g-factor of the free electron\n"
                    "({0:.9f}) and in the approximation g_e = 2 of the\n"
                    "textbooks, which is the one the tabulated values of the\n"
                    "literature are evaluated in. The g-factor of that\n"
@@ -2851,10 +3083,13 @@ class MultipleIonData:
                    "fraction it is in the column Fraction."
                    .format(IonData.electron_g_factor()),
                    "The g-factor is not defined for a multiplet of J = 0, where it\n"
-                   "is given as zero; the chiT product vanishes there in any case."]
+                   "is given as zero; the chiT product and the magnetization\n"
+                   "vanish there in any case."]
                   + self.__missing_note(),
-            formats=[None,None,None,None,'.6f','.6f',None,'.4f','.4f'],
-            alignments=['l','r','r','r','r','r','r','r','r'],
+            formats=[None,None,None,None,'.6f','.6f',None,
+                     '.4f','.4f','.4f','.4f','.4f','.4f'],
+            alignments=['l','r','r','r','r','r','r',
+                        'r','r','r','r','r','r'],
             table_type='ion_data')
 
 
@@ -3206,6 +3441,20 @@ class MultipleIonData:
               and ('4/3' in magnetism_string))
         check('the magnetism table states the chiT products',
               ('14.1887' in magnetism_string) and ('14.1723' in magnetism_string))
+        check('the magnetism table states the saturation magnetizations',
+              ('10.0058' in magnetism_string) and ('10.0000' in magnetism_string)
+              and ('5.0029' in magnetism_string) and ('5.0000' in magnetism_string))
+        check('the magnetism table is headed by the two saturation cases',
+              (lanthanides.ground_magnetism_table().column_headers[0][-4:]
+               == ['M_iso','M_iso','M_Ising','M_Ising'])
+              and (lanthanides.ground_magnetism_table().column_headers[1][-1]
+                   == '(g_e = 2)'))
+        check('the magnetization of the table is that of the IonData instance',
+              all(abs(lanthanides.ion(row[0]).saturation_magnetization() - row[9])
+                  < 1.0e-12
+                  and abs(lanthanides.ion(row[0]).ising_saturation_magnetization()
+                          - row[11]) < 1.0e-12
+                  for row in lanthanides.ground_magnetism_table().rows))
         check('the magnetism table covers every ion of the set',
               all(row['ion'] in magnetism_string for row in lanthanides.rows))
 

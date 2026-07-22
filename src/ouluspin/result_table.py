@@ -212,6 +212,10 @@ class ResultTable:
 
     Private methods
     ---------------
+    __error(message)
+        Report an error and stop.
+    __warning(message)
+        Report a warning and continue.
     __resolve_options(...)
         Fill in the options that were not given from the table type preset.
     __table_cells()
@@ -323,6 +327,29 @@ class ResultTable:
         'ion_data':            {'float_format': '.6f', 'indent': 4, 'rule_character': '-'},
     }
 
+    def __error(self, message):
+        """Report an error and stop. The message is printed one line at a
+        time, so that every line of a message of several lines is marked as
+        an error, and the header names the class of the instance, so that an
+        error raised in a base class points at the class that was built.
+        """
+        print("ERROR in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("ERROR: " + line)
+        print("Error termination.")
+        sys.exit(1)
+
+
+    def __warning(self, message):
+        """Report a warning and continue. The message is printed the way the
+        one of __error is, and the calculation goes on.
+        """
+        print("WARNING in " + type(self).__name__ + ".")
+        for line in message.split("\n"):
+            print("Warning: " + line)
+        print()
+
+
     def __resolve_options(self, table_type, indent, rule_character, formats, alignments):
         """Store the table type preset and fill in the options that were not
         given explicitly from it. The number of columns is deduced from the
@@ -333,12 +360,9 @@ class ResultTable:
         elif table_type in self.__TABLE_TYPE_PRESETS:
             self.table_type = table_type
         else:
-            print("ERROR in ResultTable.")
-            print("ERROR: Unknown table type: " + str(table_type) + ".")
-            print("ERROR: The recognized table types are: "
-                  + ", ".join(self.table_types()) + ".")
-            print("Error termination.")
-            sys.exit(1)
+            self.__error("Unknown table type: " + str(table_type) + ".\n"
+                         "The recognized table types are: "
+                         + ", ".join(self.table_types()) + ".")
 
         preset = self.__TABLE_TYPE_PRESETS[self.table_type]
 
