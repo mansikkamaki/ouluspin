@@ -14,7 +14,7 @@ public class carries a detailed docstring documenting its constructor
 arguments, attributes and methods; the docstrings are the authoritative
 reference for the individual classes.
 
-The current version is **1.0.1**; see [Versioning](#versioning).
+The current version is **1.0.2**; see [Versioning](#versioning).
 
 ## Contents
 
@@ -977,6 +977,17 @@ Complete runnable scripts are in the [`examples/`](examples/) folder
 - `average_crystal_field.py` — average the crystal fields of two
   SINGLE_ANISO calculations (one electron removed/added) after rotation
   into a common magnetic frame, and analyze the resulting system.
+- `aniso_analysis.py` — the whole analysis of a single lanthanide(III) ion
+  from an ORCA aniso file, i.e. what SINGLE_ANISO reports: the pseudospin
+  doublets with their g-tensors and principal magnetic axes, the
+  crystal-field parameters and states, the transition magnetic moments and
+  the powder susceptibility and magnetization. The results go to the
+  standard output, into an `.odt`, `.docx` or LaTeX document, and into
+  plots, and the quantization axis is written into a file a molecular
+  viewer reads. It takes the name of the ion as a second argument
+  (`ouluspin-python aniso_analysis.py Dy_complex.anisofile 'Dy(III)'`),
+  from which `IonData` gives the pseudospin and the free-ion values the
+  plots are compared with.
 
 ## Tests
 
@@ -999,7 +1010,7 @@ The version of the library is read from the package:
 
 ```python
 import ouluspin
-ouluspin.__version__        # '1.0.1'
+ouluspin.__version__        # '1.0.2'
 ```
 
 The numbering is [semantic versioning](https://semver.org), i.e.

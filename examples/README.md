@@ -23,3 +23,14 @@ Scripts:
   OpenMolcas / SINGLE_ANISO calculations (one electron removed / added)
   after rotation into a common magnetic frame, and analyze the resulting
   system.
+- `aniso_analysis.py` — the whole analysis of a single lanthanide(III)
+  ion from an ORCA aniso file, i.e. what SINGLE_ANISO reports: the
+  pseudospin doublets with their g-tensors and magnetic axes, the
+  crystal-field parameters, the crystal-field states and their
+  compositions, the transition magnetic moments, and the powder
+  susceptibility and magnetization. Writes the tables into an `.odt`,
+  `.docx` or LaTeX document, the plots as images, and the quantization
+  axis into a file of its own. Takes the name of the ion as a second
+  argument:
+
+      ouluspin-python aniso_analysis.py Dy_complex.anisofile 'Dy(III)'
