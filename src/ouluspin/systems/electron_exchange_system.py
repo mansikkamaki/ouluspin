@@ -3055,14 +3055,16 @@ class AbInitioElectronExchangeSystem(PseudoSpinSystem):
             check('pseudospin_doublet_summary_table has one row per doublet',
                   len(summary_table.rows) == 2)
             check('pseudospin_doublet_summary_table gives the doublet energies',
-                  (abs(summary_table.rows[0][2]) < 1.0e-8)
-                  and (abs(summary_table.rows[1][2] - 2.0*abs(D_f)) < 1.0e-8))
+                  (abs(summary_table.rows[0][1]) < 1.0e-8)
+                  and (abs(summary_table.rows[1][1] - 2.0*abs(D_f)) < 1.0e-8))
             check('pseudospin_doublet_summary_table gives the g values',
-                  np.allclose(sorted(summary_table.rows[0][3:6]),
+                  np.allclose(sorted(summary_table.rows[0][2:5]),
                               [0.0,0.0,6.0],atol=1.0e-8))
             check('pseudospin_doublet_summary_table gives the axis angles',
-                  (abs(summary_table.rows[0][6]) < 1.0e-6)
-                  and (abs(summary_table.rows[1][6] - 90.0) < 1.0e-6))
+                  (abs(summary_table.rows[0][5]) < 1.0e-6)
+                  and (abs(summary_table.rows[1][5] - 90.0) < 1.0e-6))
+            check('pseudospin_doublet_summary_table does not list the states',
+                  not "States" in summary_table.string_table())
 
             # The self-average must reproduce the single-file system.
             average_aa = cls.from_average_aniso_data(filename_a,filename_a,3,g,tmp_units)

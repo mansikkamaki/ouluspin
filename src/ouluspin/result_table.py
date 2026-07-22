@@ -1683,16 +1683,21 @@ class ResultTable:
 
         The structure of the table depends on whether the doublets are
         Kramers doublets. For a Kramers system each line contains the index
-        of the doublet, the indices of the two states spanning it, its
-        energy, the three principal values of its g-tensor and the angle
-        between its principal magnetic axis and that of the lowest-energy
-        doublet. For a non-Kramers system each line contains the index of
-        the quasi-doublet (or singlet), the indices of its states, the
-        energies of the two states, the tunneling splitting, the z
-        principal value of the g-tensor (the x and y principal values
-        vanish by Griffith's theorem) and the same angle as in the Kramers
-        case. The system is treated as a Kramers system when all the
-        tabulated doublets are Kramers doublets.
+        of the doublet, its energy, the three principal values of its
+        g-tensor and the angle between its principal magnetic axis and that
+        of the lowest-energy doublet. For a non-Kramers system each line
+        contains the index of the quasi-doublet (or singlet), the energies
+        of the two states, the tunneling splitting, the z principal value
+        of the g-tensor (the x and y principal values vanish by Griffith's
+        theorem) and the same angle as in the Kramers case. The system is
+        treated as a Kramers system when all the tabulated doublets are
+        Kramers doublets.
+
+        The indices of the states spanning each doublet are not tabulated:
+        the doublets are listed in the order they are given, so the index of
+        the doublet already names it, and the states themselves are stated
+        by the tabulation of the individual doublets. The summary is meant
+        to be read across the doublets.
 
         The g values and the principal magnetic axes are taken from the
         g-tensor of the doublet expressed in the input axis frame, i.e.
@@ -1810,14 +1815,14 @@ class ResultTable:
         rows = []
 
         if kramers_system:
-            column_headers = [["Doublet","States","E / " + energy_unit,
+            column_headers = [["Doublet","E / " + energy_unit,
                                "g_x","g_y","g_z",angle_header]]
             # The energies are given with one decimal, which is the
             # accuracy of the quantum-chemical calculations they come
             # from. The tunneling gap of the non-Kramers table below is a
             # small difference of two energies and is a relative quantity
             # of a higher accuracy, so it keeps its own format.
-            formats        = [None,None,'.1f','.4f','.4f','.4f','.2f']
+            formats        = [None,'.1f','.4f','.4f','.4f','.2f']
 
             for i in range(0,len(doublet_list)):
                 doublet  = doublet_list[i]
@@ -1830,15 +1835,14 @@ class ResultTable:
                     energy = min(energies)
 
                 rows.append([i + 1,
-                             "{0},{1}".format(doublet.states[0],doublet.states[1]),
                              energy,
                              float(g_values[0]),float(g_values[1]),float(g_values[2]),
                              axis_angle(doublet)])
         else:
-            column_headers = [["Doublet","States",
+            column_headers = [["Doublet",
                                "E_1 / " + energy_unit,"E_2 / " + energy_unit,
                                "Gap / " + energy_unit,"g_z",angle_header]]
-            formats        = [None,None,'.1f','.1f','.6e','.4f','.2f']
+            formats        = [None,'.1f','.1f','.6e','.4f','.2f']
 
             for i in range(0,len(doublet_list)):
                 item = doublet_list[i]
@@ -1847,7 +1851,7 @@ class ResultTable:
                     # A singlet state (or an unavailable doublet). Only the
                     # energies, when they were given, can be tabulated.
                     energies = singlet_energies(item)
-                    rows.append([i + 1,"",
+                    rows.append([i + 1,
                                  energies[0] if len(energies) > 0 else None,
                                  energies[1] if len(energies) > 1 else None,
                                  None,None,None])
@@ -1867,7 +1871,6 @@ class ResultTable:
                 g_z = float(item.input_frame_g_tensor.eigenvalues[2])
 
                 rows.append([i + 1,
-                             "{0},{1}".format(item.states[0],item.states[1]),
                              first_energy,second_energy,
                              item.tunneling_gap,
                              g_z,
@@ -2417,9 +2420,11 @@ class ResultTable:
         check('the compound table gives the energies with one decimal',
               "100.0" in table_str)
         check('the angle to the reference doublet vanishes',
-              abs(table.rows[0][6]) < 1.0e-8)
+              abs(table.rows[0][5]) < 1.0e-8)
         check('the angle between perpendicular magnetic axes is 90 degrees',
-              abs(table.rows[1][6] - 90.0) < 1.0e-8)
+              abs(table.rows[1][5] - 90.0) < 1.0e-8)
+        check('the compound table does not list the states of the doublets',
+              (not "States" in table_str) and (len(table.rows[0]) == 6))
 
         # A non-Kramers quasi-doublet together with a singlet state. The
         # quasi-doublet is split, so it is not a Kramers doublet and the
@@ -2443,11 +2448,13 @@ class ResultTable:
         check('the non-Kramers table tabulates only the axial g value',
               ("g_z" in table_str) and (not "g_x" in table_str))
         check('the non-Kramers table gives both state energies',
-              (abs(table.rows[0][2] - 0.0) < 1.0e-8)
-              and (abs(table.rows[0][3] - 5.0) < 1.0e-8))
+              (abs(table.rows[0][1] - 0.0) < 1.0e-8)
+              and (abs(table.rows[0][2] - 5.0) < 1.0e-8))
         check('the tunneling gap is tabulated',
-              abs(table.rows[0][4] - 5.0) < 1.0e-8)
+              abs(table.rows[0][3] - 5.0) < 1.0e-8)
+        check('the non-Kramers table does not list the states either',
+              (not "States" in table_str) and (len(table.rows[0]) == 6))
         check('the singlet state is tabulated on its own line',
-              (len(table.rows) == 2) and (abs(table.rows[1][2] - 200.0) < 1.0e-8))
+              (len(table.rows) == 2) and (abs(table.rows[1][1] - 200.0) < 1.0e-8))
 
         return debug_output.test_summary('ResultTable',result_list,print_output)

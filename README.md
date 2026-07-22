@@ -14,7 +14,7 @@ public class carries a detailed docstring documenting its constructor
 arguments, attributes and methods; the docstrings are the authoritative
 reference for the individual classes.
 
-The current version is **1.0.2**; see [Versioning](#versioning).
+The current version is **1.0.3**; see [Versioning](#versioning).
 
 ## Contents
 
@@ -1010,7 +1010,7 @@ The version of the library is read from the package:
 
 ```python
 import ouluspin
-ouluspin.__version__        # '1.0.2'
+ouluspin.__version__        # '1.0.3'
 ```
 
 The numbering is [semantic versioning](https://semver.org), i.e.
