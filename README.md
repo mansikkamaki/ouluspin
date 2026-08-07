@@ -72,9 +72,18 @@ A typical workflow is:
 ## Requirements
 
 - Python ≥ 3.8 with `numpy` and `scipy`
-- A Fortran compiler (`gfortran`, Intel `ifort`, or Intel `ifx` with
-  numpy ≥ 1.26) for the compiled extension module
+- A Fortran compiler (Intel `ifx`, Intel `ifort` or `gfortran`) for the
+  compiled extension module
 - A LAPACK/BLAS library (Intel MKL, OpenBLAS, or reference LAPACK/BLAS)
+- `meson` and `ninja` when the extension module is built with numpy ≥ 1.26
+  or on Python ≥ 3.12, where f2py uses its meson backend. They are not part
+  of numpy and are installed with
+
+      ouluspin-python -m pip install --user meson ninja
+
+  which puts them in `~/.local/bin`; that directory has to be on `PATH`.
+  `configure` says so if they are missing. Older setups, where f2py still
+  builds with `numpy.distutils`, do not need them.
 
 Optional, needed only by the plotting of the results (`ResultPlot`):
 
@@ -101,9 +110,13 @@ cd src/fortran
 make            # builds and installs fortran_utils.so into the package
 ```
 
-`configure` prefers the Intel toolchain (ifort + MKL + Intel Python) when
-an oneAPI installation is found, and falls back to gfortran + system
-LAPACK otherwise. Everything can be overridden, e.g.:
+`configure` prefers the Intel toolchain (ifx + MKL + Intel Python) when an
+oneAPI installation is found, and falls back to gfortran + system LAPACK
+otherwise. Every versioned directory of the oneAPI installation is searched
+for the Fortran compiler, and not only the one the `latest` symlink points
+at: since oneAPI 2026 the Fortran compiler is a component of its own, so the
+newest release need not be the one that provides `ifx`. Everything can be
+overridden, e.g.:
 
 ```bash
 ./configure --fc=gfortran --python=python3 --lapack-libs='-lopenblas'
@@ -137,9 +150,13 @@ source /path/to/ouluspin/setup.sh
 
 This puts the package on `PYTHONPATH`, selects the Python interpreter
 (exported as `OULUSPIN_PYTHON`, with the `ouluspin-python` convenience
-command) and, if an Intel oneAPI installation is present, adds the MKL and
-Intel Fortran runtime libraries to `LD_LIBRARY_PATH`. Scripts are then run
-with
+command) and adds the runtime libraries the compiled extension module needs
+(the MKL and the Intel Fortran runtime) to `LD_LIBRARY_PATH`. These
+directories are read from `src/fortran/make.inc`, i.e. they are the ones the
+module was actually built against, which matters because an oneAPI
+installation holds several releases side by side; if the module has not been
+built, the newest release of the installation is used instead. Scripts are
+then run with
 
 ```bash
 ouluspin-python my_script.py

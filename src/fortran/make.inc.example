@@ -19,7 +19,20 @@
 #                integration of powder_magnetization_utils is parallelized
 #                over the grid points with OpenMP; leave this empty and drop
 #                the OpenMP flag from F90FLAGS to build a serial module.
+#   FC_RUNTIME_LIBS
+#                Linker flags providing the runtime libraries of the Fortran
+#                compiler. Needed only with the meson backend and an Intel
+#                compiler: meson links the extension module with the C
+#                compiler, which does not find the Intel Fortran runtime on
+#                its own. Leave empty with gfortran and with the distutils
+#                backend, where the Fortran compiler does the linking.
 #   F2PY_FLAGS   Backend-specific flags passed to "python -m numpy.f2py -c".
+#
+# The meson backend, which is the one used with numpy >= 1.26 and on
+# Python >= 3.12, needs the meson and ninja executables on PATH. They are not
+# part of numpy and are installed with
+#
+#     <PYTHON> -m pip install --user meson ninja
 #
 # --- Variant 1: gfortran + system LAPACK, numpy < 1.26 (distutils) --------
 #
@@ -56,3 +69,23 @@
 # OMP_LIBS = -liomp5
 # export PATH := /opt/intel/oneapi/compiler/latest/linux/bin/intel64:$(PATH)
 # F2PY_FLAGS = --fcompiler=intelem --opt="$(OPTFLAGS)" --f90flags="$(F90FLAGS)"
+#
+# --- Variant 4: Intel ifx + MKL, Intel Python (meson) ---------------------
+#
+# The version directory of the compiler is written out instead of the
+# "latest" symlink: since oneAPI 2026 the Fortran compiler is a component of
+# its own, so the newest release of an installation need not be the one that
+# provides ifx and its runtime libraries.
+#
+# FC = /opt/intel/oneapi/compiler/2025.3/bin/ifx
+# PYTHON = /opt/intel/oneapi/intelpython/latest/bin/python3
+# F77FLAGS = -O3
+# F90FLAGS = -heap-arrays -stand f18 -qopenmp
+# OPTFLAGS = -O3 -funroll-loops
+# LAPACK_LIBS = -L/opt/intel/oneapi/mkl/latest/lib/intel64 -lmkl_rt
+# OMP_LIBS = -liomp5
+# FC_RUNTIME_LIBS = -L/opt/intel/oneapi/compiler/2025.3/lib -lifcoremt
+# export LD_LIBRARY_PATH := /opt/intel/oneapi/compiler/2025.3/lib:/opt/intel/oneapi/mkl/latest/lib/intel64:$(LD_LIBRARY_PATH)
+# export FC := /opt/intel/oneapi/compiler/2025.3/bin/ifx
+# export FFLAGS := $(OPTFLAGS) $(F90FLAGS)
+# F2PY_FLAGS = --backend meson

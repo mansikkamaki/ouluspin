@@ -46,7 +46,7 @@ class ChibotaruUngurSphericalTensor:
         A list of the real parameters (the coefficient of the opertor O_n^m in eq. (37) of
         Chibotaru--Ungur 2012) in the ITO decomposition in the same order as in rank_list.
     imag_parameter_list : list of float
-        A list of the imaginary parameters (the coefficients of the operator \Omega_n^m in eq.
+        A list of the imaginary parameters (the coefficients of the operator \\Omega_n^m in eq.
         (37) of Chibotaru--Ungur 2012) in the ITO decomposition in the same order as in
         rank_list.
     pseudospin : int
@@ -66,7 +66,7 @@ class ChibotaruUngurSphericalTensor:
         A list of the real parameters (the coefficient of the opertor O_n^m in eq. (37) of
         Chibotaru--Ungur 2012) in the ITO decomposition in the same order as in rank_list.
     imag_parameter_list : list of float
-        A list of the imaginary parameters (the coefficients of the operator \Omega_n^m in eq.
+        A list of the imaginary parameters (the coefficients of the operator \\Omega_n^m in eq.
         (37) of Chibotaru--Ungur 2012) in the ITO decomposition in the same order as in
         rank_list.
     pseudospin : int

@@ -20,10 +20,17 @@
 #      "import ouluspin" works from anywhere,
 #   2. selects the Python interpreter used to run OuluSpin and exports it
 #      as OULUSPIN_PYTHON, defining the convenience command ouluspin-python,
-#   3. if an Intel oneAPI installation is present (and the compiled Fortran
-#      extension module may therefore be linked against the Intel MKL and
-#      the Intel Fortran runtime), adds the required runtime library
-#      directories to LD_LIBRARY_PATH.
+#   3. adds to LD_LIBRARY_PATH the runtime library directories the compiled
+#      Fortran extension module needs (the Intel MKL and the Intel Fortran
+#      runtime, when the module was built with the Intel toolchain).
+#
+# The runtime library directories of step 3 are taken from
+# src/fortran/make.inc when it exists, i.e. from the directories the
+# configure script of the extension module recorded when the module was
+# built. This is the reliable source, since an Intel oneAPI installation
+# holds several releases side by side and only the one the module was built
+# against will do. If make.inc is absent, the directories of the newest
+# release of the oneAPI installation are used instead.
 #
 # The interpreter is chosen as follows: if OULUSPIN_PYTHON is already set
 # in the environment, it is respected; otherwise, if an Intel Distribution
@@ -80,8 +87,40 @@ ouluspin-python() {
 # 3. Runtime libraries for a fortran_utils.so built with the Intel
 #    toolchain (MKL and the Intel Fortran runtime). These directories are
 #    only added if they exist; on systems without oneAPI this does nothing.
-_ouluspin_prepend_path LD_LIBRARY_PATH "${_ouluspin_oneapi}/mkl/latest/lib/intel64"
-_ouluspin_prepend_path LD_LIBRARY_PATH "${_ouluspin_oneapi}/compiler/latest/linux/compiler/lib/intel64_lin"
+#
+#    The directories recorded in src/fortran/make.inc by the configure
+#    script of the extension module are used when the file is there. The
+#    line it writes has the form
+#
+#        export LD_LIBRARY_PATH := <dir>:<dir>:$(LD_LIBRARY_PATH)
+#
+_ouluspin_make_inc="${_ouluspin_root}/src/fortran/make.inc"
+_ouluspin_libdirs=""
+if [ -f "${_ouluspin_make_inc}" ]; then
+    _ouluspin_libdirs="$(sed -n 's/^export LD_LIBRARY_PATH *:= *\(.*\):\$(LD_LIBRARY_PATH) *$/\1/p' \
+                         "${_ouluspin_make_inc}")"
+fi
+
+if [ -n "${_ouluspin_libdirs}" ]; then
+    # The directories of the build, in the order make.inc lists them. The
+    # last one is prepended first, so that the resulting order is kept.
+    _ouluspin_libdirs="$(echo "${_ouluspin_libdirs}" | tr ':' '\n' | tac)"
+    while IFS= read -r _ouluspin_dir; do
+        [ -n "${_ouluspin_dir}" ] && \
+            _ouluspin_prepend_path LD_LIBRARY_PATH "${_ouluspin_dir}"
+    done <<EOF
+${_ouluspin_libdirs}
+EOF
+else
+    # No make.inc: fall back to the newest release of the oneAPI
+    # installation. Both the directory layout used since oneAPI 2024 and the
+    # older one are covered, since neither is present in every release.
+    _ouluspin_prepend_path LD_LIBRARY_PATH \
+        "${_ouluspin_oneapi}/compiler/latest/linux/compiler/lib/intel64_lin"
+    _ouluspin_prepend_path LD_LIBRARY_PATH "${_ouluspin_oneapi}/compiler/latest/lib"
+    _ouluspin_prepend_path LD_LIBRARY_PATH "${_ouluspin_oneapi}/mkl/latest/lib/intel64"
+    _ouluspin_prepend_path LD_LIBRARY_PATH "${_ouluspin_oneapi}/mkl/latest/lib"
+fi
 
 unset -f _ouluspin_prepend_path
-unset _ouluspin_root _ouluspin_oneapi
+unset _ouluspin_root _ouluspin_oneapi _ouluspin_make_inc _ouluspin_libdirs _ouluspin_dir

@@ -317,7 +317,8 @@ contains
     scalar_operator = cmplx(dp_zero,kind=real64)
     
     do i = 1,3
-       call zgemm('N','N',n_basis,n_basis,n_basis,ALPHA,vector_operator(i,:,:),n_basis,vector_operator(i,:,:),n_basis,BETA,X,n_basis)
+       call zgemm('N','N',n_basis,n_basis,n_basis,ALPHA,vector_operator(i,:,:),n_basis, &
+            vector_operator(i,:,:),n_basis,BETA,X,n_basis)
 
        scalar_operator = scalar_operator + X
     end do

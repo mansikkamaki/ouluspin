@@ -24,10 +24,16 @@
 # parallelized over the grid points with OpenMP, which is enabled by
 # default and can be turned off with --disable-openmp.
 #
-# Supported compilers: ifort (Intel classic), ifx (Intel oneAPI; requires
-# numpy >= 1.26) and gfortran. The generated make.inc is a plain text file
-# and can be edited by hand; see make.inc.example for the documented
-# variables.
+# Supported compilers: ifx (the Intel oneAPI Fortran compiler), ifort (the
+# discontinued Intel classic compiler, still usable where it is installed)
+# and gfortran. The generated make.inc is a plain text file and can be
+# edited by hand; see make.inc.example for the documented variables.
+#
+# Note on the oneAPI layout: from oneAPI 2026 on, the compiler package no
+# longer contains the Fortran compiler, which is shipped as a component of
+# its own. The "latest" symlink of the installation may therefore point to a
+# release without ifx, and the versioned directories under compiler/ are
+# searched as well.
 
 ONEAPI_ROOT="${ONEAPI_ROOT:-/opt/intel/oneapi}"
 FC="${FC:-}"
@@ -40,8 +46,8 @@ usage() {
 Usage: ./configure [options]
 
 Options:
-  --fc=<compiler>       Fortran compiler (default: autodetect ifort,
-                        gfortran, ifx -- in this order)
+  --fc=<compiler>       Fortran compiler (default: autodetect ifx, ifort,
+                        gfortran -- in this order)
   --python=<python3>    Python interpreter providing numpy/f2py (default:
                         \$OULUSPIN_PYTHON, then the Intel Python under the
                         oneAPI installation, then python3)
@@ -90,23 +96,61 @@ fi
 NUMPY_VERSION="$("$PYTHON" -c 'import numpy; print(numpy.__version__)' 2>/dev/null)" \
     || fail "$PYTHON cannot import numpy (numpy provides f2py, which is needed for the build)"
 
-# numpy >= 1.26 builds f2py extensions with meson instead of the removed
-# numpy.distutils; the f2py flags written to make.inc differ accordingly.
-F2PY_BACKEND="$("$PYTHON" -c 'import numpy
+# The backend f2py uses to build the extension module. The old numpy.distutils
+# backend is unavailable both from numpy 1.26 on, where it is deprecated and
+# then removed, and on Python 3.12 on, where the distutils it builds upon is
+# no longer part of the standard library; there the meson backend is used
+# instead. The f2py flags written to make.inc differ accordingly.
+F2PY_BACKEND="$("$PYTHON" -c 'import sys, numpy
 v = tuple(int(x) for x in numpy.__version__.split(".")[:2])
-print("meson" if v >= (1, 26) else "distutils")')"
+print("meson" if v >= (1, 26) or sys.version_info >= (3, 12) else "distutils")')"
+
+# The meson backend calls the meson and ninja executables, which are not part
+# of numpy and are missing from a bare Python installation.
+if [ "$F2PY_BACKEND" = "meson" ]; then
+    MISSING_BUILD_TOOLS=""
+    for tool in meson ninja; do
+        command -v "$tool" >/dev/null 2>&1 || \
+            MISSING_BUILD_TOOLS="${MISSING_BUILD_TOOLS:+$MISSING_BUILD_TOOLS }$tool"
+    done
+    if [ -n "$MISSING_BUILD_TOOLS" ]; then
+        fail "the meson backend of f2py is needed (Python $("$PYTHON" -c \
+'import sys; print("%d.%d" % sys.version_info[:2])'), numpy $NUMPY_VERSION) \
+but the following build tools are not on PATH: $MISSING_BUILD_TOOLS. Install \
+them for the interpreter used here with
+
+    $PYTHON -m pip install --user meson ninja
+
+(they end up in ~/.local/bin, which must be on PATH), or with the package \
+manager of the system."
+    fi
+fi
 
 # ---------------------------------------------------------------------------
 # Fortran compiler.
+#
+# The Intel compilers are looked for both on PATH and inside the oneAPI
+# installation. Every versioned directory under compiler/ is searched, newest
+# first, and not only the one the "latest" symlink points at: since oneAPI
+# 2026 the Fortran compiler is a component of its own, so the newest compiler
+# directory need not be the one that contains ifx.
 # ---------------------------------------------------------------------------
+
+# Print the ifx/ifort executables of the oneAPI installation, newest first.
+# The bin/intel64 subdirectory is the layout of the oneAPI releases before
+# 2024, bin the one used since.
+oneapi_compilers() {
+    # $1 = compiler name (ifx or ifort)
+    ls -d "$ONEAPI_ROOT"/compiler/*/bin/"$1" \
+          "$ONEAPI_ROOT"/compiler/*/linux/bin/intel64/"$1" 2>/dev/null \
+        | sort -Vr 2>/dev/null || true
+}
+
 if [ -z "$FC" ]; then
     for candidate in \
-        ifort \
-        "$ONEAPI_ROOT/compiler/latest/linux/bin/intel64/ifort" \
-        "$ONEAPI_ROOT/compiler/latest/bin/ifort" \
-        gfortran \
-        ifx \
-        "$ONEAPI_ROOT/compiler/latest/bin/ifx"
+        ifx $(oneapi_compilers ifx) \
+        ifort $(oneapi_compilers ifort) \
+        gfortran
     do
         if command -v "$candidate" >/dev/null 2>&1; then
             FC="$candidate"
@@ -114,26 +158,32 @@ if [ -z "$FC" ]; then
         fi
     done
 fi
-[ -n "$FC" ] || fail "no Fortran compiler found (looked for ifort, gfortran, ifx); set FC or use --fc="
+[ -n "$FC" ] || fail "no Fortran compiler found (looked for ifx, ifort, gfortran); set FC or use --fc="
 command -v "$FC" >/dev/null 2>&1 || fail "Fortran compiler not found: $FC"
 
 FC_PATH="$(command -v "$FC")"
 FC_NAME="$(basename "$FC_PATH")"
 FC_DIR="$(dirname "$FC_PATH")"
 
-# The Intel compilers need their own runtime libraries (e.g. libimf.so) on
-# LD_LIBRARY_PATH during linking; locate the directory so that make works
-# without sourcing the oneAPI setvars.sh.
+# The Intel compilers need their own runtime libraries (libimf.so, the
+# Fortran runtime libifcoremt.so and friends) on LD_LIBRARY_PATH during
+# linking and when the built module is imported; locate the directory so
+# that make works without sourcing the oneAPI setvars.sh. The directory
+# belonging to the compiler that is actually used is looked at first, since
+# the "latest" release of an installation need not be the one providing the
+# Fortran compiler. The layouts, newest first: <release>/lib since oneAPI
+# 2024, and <release>/linux/compiler/lib/intel64_lin before that.
 FC_LIBDIR=""
 case $FC_NAME in
     ifort*|ifx*)
         for d in \
+            "$FC_DIR/../lib" \
             "$FC_DIR/../../compiler/lib/intel64_lin" \
             "$FC_DIR/../../compiler/lib/intel64" \
             "$FC_DIR/../../compiler/lib" \
             "$FC_DIR/../../lib" \
-            "$ONEAPI_ROOT/compiler/latest/linux/compiler/lib/intel64_lin" \
-            "$ONEAPI_ROOT/compiler/latest/lib"
+            "$ONEAPI_ROOT/compiler/latest/lib" \
+            "$ONEAPI_ROOT/compiler/latest/linux/compiler/lib/intel64_lin"
         do
             if [ -f "$d/libimf.so" ]; then
                 FC_LIBDIR="$(cd "$d" && pwd)"
@@ -156,6 +206,14 @@ OPTFLAGS="-O3 -funroll-loops"
 # flags on as file names and rejects anything starting with -q or -f.
 OMPFLAGS=""
 OMP_LIBS=""
+
+# Linker flags for the runtime libraries of the Fortran compiler. The meson
+# backend links the extension module with the C compiler rather than with the
+# Fortran one, so the Fortran runtime is not found on its own: the directory
+# of the Intel libraries has to be given explicitly. libifcoremt, the
+# thread-safe Fortran runtime, is linked in place of the libifcore meson asks
+# for, since the powder integration runs the Fortran code on several threads.
+FC_RUNTIME_LIBS=""
 
 case $FC_NAME in
     ifort*)
@@ -196,6 +254,16 @@ f2py (numpy $NUMPY_VERSION); use ifort or gfortran, or a numpy >= 1.26"
 esac
 
 F90FLAGS="$F90FLAGS $OMPFLAGS"
+
+# With the distutils backend the Intel compiler links the module itself and
+# pulls in its own runtime; only the meson backend, which links with the C
+# compiler, needs to be told about it. The runtime of gfortran is in the
+# default search path of the linker and meson names it on its own.
+if [ "$F2PY_BACKEND" = "meson" ] && [ -n "$FC_LIBDIR" ]; then
+    case $FC_NAME in
+        ifort*|ifx*) FC_RUNTIME_LIBS="-L$FC_LIBDIR -lifcoremt" ;;
+    esac
+fi
 
 # ---------------------------------------------------------------------------
 # LAPACK/BLAS libraries (zgemm, zheev, ddot). Preference order: Intel MKL,
@@ -247,6 +315,12 @@ fi
     echo "# The OpenMP runtime library. Empty when the module is built"
     echo "# without OpenMP, i.e. with a serial powder integration."
     echo "OMP_LIBS = $OMP_LIBS"
+    echo ""
+    echo "# The runtime libraries of the Fortran compiler. Empty unless the"
+    echo "# module is linked by a compiler that does not provide them by"
+    echo "# itself, i.e. unless the meson backend is used with an Intel"
+    echo "# Fortran compiler."
+    echo "FC_RUNTIME_LIBS = $FC_RUNTIME_LIBS"
     echo ""
     RUNTIME_LIBDIRS=""
     [ -n "$FC_LIBDIR" ] && RUNTIME_LIBDIRS="$FC_LIBDIR"

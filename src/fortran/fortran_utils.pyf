@@ -30,7 +30,6 @@ python module fortran_utils ! in
             real(kind=8), parameter,optional :: cfp_drop_tolerance=1e-08
         end module num_utils
         module math_utils ! in :fortran_utils:math_utils.f90
-            use num_utils
             function real_close_to(a,b) result (test_result) ! in :fortran_utils:math_utils.f90:math_utils
                 real(kind=8) intent(in) :: a
                 real(kind=8) intent(in) :: b
@@ -85,8 +84,6 @@ python module fortran_utils ! in
             end function levi_civita
         end module math_utils
         module matrix_utils ! in :fortran_utils:matrix_utils.f90
-            use num_utils
-            use math_utils
             subroutine commutator(a,b,c,n_basis) ! in :fortran_utils:matrix_utils.f90:matrix_utils
                 complex(kind=8) dimension(n_basis,n_basis),intent(in) :: a
                 complex(kind=8) dimension(n_basis,n_basis),intent(in),depend(n_basis) :: b
@@ -161,9 +158,6 @@ python module fortran_utils ! in
             end subroutine complex_matrix_product
         end module matrix_utils
         module angm_utils ! in :fortran_utils:angm_utils.f90
-            use num_utils
-            use math_utils
-            use matrix_utils
             function wigner_small_d(j,m1,m2,angle) result (d_value) ! in :fortran_utils:angm_utils.f90:angm_utils
                 integer intent(in) :: j
                 integer intent(in) :: m1
@@ -218,8 +212,6 @@ python module fortran_utils ! in
             end subroutine coupled_basis
         end module angm_utils
         module cg_utils ! in :fortran_utils:cg_utils.f90
-            use num_utils
-            use math_utils
             function old_cg(j1,m1,j2,m2,j,m) result (coeff) ! in :fortran_utils:cg_utils.f90:cg_utils
                 integer intent(in) :: j1
                 integer intent(in) :: m1
@@ -283,10 +275,6 @@ python module fortran_utils ! in
             end function special_cg
         end module cg_utils
         module iwahara_utils ! in :fortran_utils:iwahara_utils.f90
-            use num_utils
-            use math_utils
-            use matrix_utils
-            use cg_utils
             function iwahara_operator(j1,m1,j2,m2,k,q) result (matrix_element) ! in :fortran_utils:iwahara_utils.f90:iwahara_utils
                 integer intent(in) :: j1
                 integer intent(in) :: m1
@@ -310,7 +298,7 @@ python module fortran_utils ! in
                 integer dimension(n_basis,n_sites),intent(in) :: j_array
                 integer dimension(n_basis,n_sites),intent(in),depend(n_basis,n_sites) :: m_array
                 integer dimension(n_ranks,n_sites),intent(in),depend(n_sites) :: k_array
-                integer dimension(n_ranks,n_sites),intent(in),depend(n_sites,n_ranks) :: q_array
+                integer dimension(n_ranks,n_sites),intent(in),depend(n_ranks,n_sites) :: q_array
                 complex(kind=8) dimension(n_ranks),intent(in),depend(n_ranks) :: parameters
                 integer, optional,intent(in),check(shape(j_array, 0) == n_basis),depend(j_array) :: n_basis=shape(j_array, 0)
                 integer, optional,intent(in),check(shape(j_array, 1) == n_sites),depend(j_array) :: n_sites=shape(j_array, 1)
@@ -322,7 +310,7 @@ python module fortran_utils ! in
                 integer dimension(n_basis,n_sites),intent(in) :: j_array
                 integer dimension(n_basis,n_sites),intent(in),depend(n_basis,n_sites) :: m_array
                 integer dimension(n_ranks,n_sites),intent(in),depend(n_sites) :: k_array
-                integer dimension(n_ranks,n_sites),intent(in),depend(n_sites,n_ranks) :: q_array
+                integer dimension(n_ranks,n_sites),intent(in),depend(n_ranks,n_sites) :: q_array
                 complex(kind=8) dimension(n_ranks),intent(in),depend(n_ranks) :: parameters
                 integer, optional,intent(in),check(shape(j_array, 0) == n_basis),depend(j_array) :: n_basis=shape(j_array, 0)
                 integer, optional,intent(in),check(shape(j_array, 1) == n_sites),depend(j_array) :: n_sites=shape(j_array, 1)
@@ -335,7 +323,7 @@ python module fortran_utils ! in
                 integer dimension(n_basis,n_sites),intent(in),depend(n_basis) :: j_array
                 integer dimension(n_basis,n_sites),intent(in),depend(n_basis,n_sites) :: m_array
                 integer dimension(n_ranks,n_sites),intent(in),depend(n_sites) :: k_array
-                integer dimension(n_ranks,n_sites),intent(in),depend(n_sites,n_ranks) :: q_array
+                integer dimension(n_ranks,n_sites),intent(in),depend(n_ranks,n_sites) :: q_array
                 complex(kind=8) dimension(n_ranks),intent(out),depend(n_ranks) :: parameters
                 integer, optional,intent(in),check(shape(matrix, 0) == n_basis),depend(matrix) :: n_basis=shape(matrix, 0)
                 integer, optional,intent(in),check(shape(j_array, 1) == n_sites),depend(j_array) :: n_sites=shape(j_array, 1)
@@ -343,10 +331,6 @@ python module fortran_utils ! in
             end subroutine construct_iwahara_chibotaru_tensor_from_matrix
         end module iwahara_utils
         module cfp_utils ! in :fortran_utils:cfp_utils.f90
-            use num_utils
-            use math_utils
-            use matrix_utils
-            use angm_utils
             integer, private,parameter,optional :: max_shell_l=3
             integer, private,parameter,optional,depend(max_shell_l) :: max_electrons=14
             integer, private,parameter,optional :: max_block_terms=40
@@ -451,9 +435,6 @@ python module fortran_utils ! in
             end subroutine cfp_v11_tensor_matrix
         end module cfp_utils
         module statmech_utils ! in :fortran_utils:statmech_utils.f90
-            use num_utils
-            use math_utils
-            use matrix_utils
             function boltzmann_factor(t,e,k_b) result (factor) ! in :fortran_utils:statmech_utils.f90:statmech_utils
                 real(kind=8) intent(in) :: t
                 real(kind=8) intent(in) :: e
@@ -480,9 +461,6 @@ python module fortran_utils ! in
             end subroutine equilibrium_expectation_value
         end module statmech_utils
         module powder_magnetization_utils ! in :fortran_utils:powder_magnetization_utils.f90
-            use num_utils
-            use matrix_utils
-            use statmech_utils
             subroutine project_magnetic_moment(magnetic_moment,direction,projected_moment,n_basis) ! in :fortran_utils:powder_magnetization_utils.f90:powder_magnetization_utils
                 complex(kind=8) dimension(n_basis,n_basis,3),intent(in) :: magnetic_moment
                 real(kind=8) dimension(3),intent(in) :: direction
@@ -550,9 +528,6 @@ python module fortran_utils ! in
             end subroutine maximum_magnetization
         end module powder_magnetization_utils
         module pseudospin_utils ! in :fortran_utils:pseudospin_utils.f90
-            use num_utils
-            use math_utils
-            use matrix_utils
             subroutine pseudospin_transformation(h_full,mu_full,h_eff,n_full_basis,n_eff_basis) ! in :fortran_utils:pseudospin_utils.f90:pseudospin_utils
                 complex(kind=8) dimension(n_full_basis,n_full_basis),intent(in) :: h_full
                 complex(kind=8) dimension(n_full_basis,n_full_basis),intent(in),depend(n_full_basis) :: mu_full
@@ -562,7 +537,6 @@ python module fortran_utils ! in
             end subroutine pseudospin_transformation
         end module pseudospin_utils
         module grid_utils ! in :fortran_utils:grid_utils.f90
-            use num_utils
             subroutine generate_lebedev_laikov_grid(n_grid_points,vectors,weights) ! in :fortran_utils:grid_utils.f90:grid_utils
                 integer intent(in) :: n_grid_points
                 real(kind=8) dimension(n_grid_points,3),intent(out),depend(n_grid_points) :: vectors
@@ -572,6 +546,6 @@ python module fortran_utils ! in
     end interface 
 end python module fortran_utils
 
-! This file was auto-generated with f2py (version:1.22.3).
+! This file was auto-generated with f2py (version:1.26.4).
 ! See:
 ! https://web.archive.org/web/20140822061353/http://cens.ioc.ee/projects/f2py2e
