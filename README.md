@@ -795,7 +795,9 @@ directly as tensors of `ouluspin.tensors`.
 
 Everything a reader returns is expressed in the input axis frame, i.e. in
 the coordinate frame of the ab initio calculation, which is what the
-`frame` labels of the library refer to.
+`frame` labels of the library refer to. The single exception is a Kuiva
+pseudospin file written in a quantization-axis frame, which says so in its
+header and carries the rotation that was applied to it.
 
 - **`orca.OrcaAnisoFile`** — reads operator matrices from a `.anisofile`
   produced by an ORCA calculation: `hamiltonian()` returns the matrix of
@@ -805,6 +807,29 @@ the coordinate frame of the ab initio calculation, which is what the
   Bohr magneton, which is what the pseudospin analysis takes), and
   `spin()` the three components of the spin. This is the reader the
   examples use.
+- **`kuiva.KuivaPseudospinFile`** — reads a pseudospin file (`.psd`)
+  produced by a Kuiva calculation. Unlike the readers above, a Kuiva file
+  identifies its matrices with a specific pseudospin product basis: it
+  carries the pseudospin of every site, the ordered
+  |*S*<sub>0</sub>,*M*<sub>0</sub>⟩ ⊗ |*S*<sub>1</sub>,*M*<sub>1</sub>⟩ ⊗ …
+  listing of the basis states, the effective Hamiltonian and the three
+  Cartesian components of the magnetic moment over that basis, and the
+  unitary that maps the ab initio states to it. The listing is stored in
+  exactly the order in which `PseudoSpinBasis` constructs the basis, and
+  the reader verifies this upon initiation, so that the matrices can be
+  used with the pseudospin machinery directly and without a reordering of
+  the states. `hamiltonian()` returns the effective Hamiltonian over the
+  product basis (which, unlike the one of a `.anisofile`, is **not**
+  diagonal), `energies()` and `relative_energies()` its eigenvalues,
+  `magnetic_moment()` the three Cartesian components of the magnetic
+  moment, `unitary()` the transformation into the ab initio states,
+  `pseudospin_basis()` the basis as a `PseudoSpinBasis`,
+  `site_moment(site)` the magnetic moment of a single site projected onto
+  the local states of that site, and `common_axis()` the axis along which
+  the states of the sites are labelled by *M* when the sites share one.
+  The phases of the states are arbitrary, as the file canonicalizes none of
+  them, so the time-reversal-proper phase fixing of the library is applied
+  to these matrices in the same way as to those of any other reader.
 - **`molcas.OpenMolcasCalculation`** — reads SINGLE_ANISO data from an
   OpenMolcas output file.
 - **`orca.OrcaCalculation`** — reads data from an ORCA output file.
@@ -897,6 +922,24 @@ the coordinate frame of the ab initio calculation, which is what the
   ground doublet, so the two axis methods return the same vector, and with
   an explicit `R` they differ.
 
+  Three class methods build the system from the output of a calculation
+  instead of from matrices: `from_aniso_data(filename, pseudospin, units)`
+  from a single ORCA `.anisofile`, `from_average_aniso_data(...)` from the
+  average of the crystal fields of two of them, and
+  `from_kuiva_data(filename, units)` from a Kuiva pseudospin file. The last
+  one takes from the file everything the constructor otherwise determines
+  for itself — the pseudospin basis (so no pseudospin argument is given),
+  the transformation into it (so the μ_z component is not diagonalized and
+  the states are neither projected nor reordered) and the quantization
+  axis, which is the axis the states of the file are labelled by *M*
+  along. The Cartesian components of the magnetic moment are rotated into
+  the frame of that axis and the tensors are labelled `'quantization axis
+  frame'`; a multi-site file whose sites are labelled along different axes
+  is refused, as decomposing it would mix tensors written in different
+  quantization frames. The phases of the states, arbitrary in the file, are
+  corrected and the behaviour of the operators under time reversal is
+  checked exactly as for a system built by the constructor.
+
 ### Fortran extension (`ouluspin._fortran`)
 
 The computationally heavy routines live in the compiled extension module
@@ -988,6 +1031,15 @@ Complete runnable scripts are in the [`examples/`](examples/) folder
   (`ouluspin-python aniso_analysis.py Dy_complex.anisofile 'Dy(III)'`),
   from which `IonData` gives the pseudospin and the free-ion values the
   plots are compared with.
+- `kuiva_analysis.py` — the same analysis of a single spin site read from a
+  Kuiva pseudospin file (`.psd`). The pseudospin, the ordering of the
+  states and the quantization axis come from the file, so no pseudospin
+  argument and no reordering of the states is needed, and the script
+  reports both the quantization axis of the file and the magnetic axis of
+  the ground doublet. The name of the ion is an optional second argument
+  and is used only for the reference lines of the plots and for the label
+  of the axis file
+  (`ouluspin-python kuiva_analysis.py ticl3_ground.psd 'Ti(III)'`).
 
 ## Tests
 

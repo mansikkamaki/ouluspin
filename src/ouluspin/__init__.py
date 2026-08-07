@@ -25,7 +25,7 @@ Subpackages and modules
     integration            Spherical integration grids (Lebedev--Laikov,
                            ZCW, simple spherical grids).
     qc                     Interfaces to quantum-chemistry codes
-                           (OpenMolcas, ORCA).
+                           (OpenMolcas, ORCA, Kuiva).
     systems                Higher-level classes for specific types of
                            physical systems.
 
@@ -41,7 +41,7 @@ the compiled extension; an informative error is raised only when a routine
 that needs it is actually called.
 """
 
-__version__ = "1.0.3"
+__version__ = "1.1.0"
 
 from ouluspin import units
 from ouluspin import result_table
@@ -90,6 +90,7 @@ from ouluspin.systems.electron_exchange_system import (
 from ouluspin.data_tables import IonData, MultipleIonData
 from ouluspin.qc.molcas import AnisoCalculation, OpenMolcasCalculation
 from ouluspin.qc.orca import OrcaCalculation, OrcaAnisoOutput, OrcaAnisoFile
+from ouluspin.qc.kuiva import KuivaPseudospinFile
 
 __all__ = [
     "__version__",
@@ -143,4 +144,5 @@ __all__ = [
     "OrcaCalculation",
     "OrcaAnisoOutput",
     "OrcaAnisoFile",
+    "KuivaPseudospinFile",
 ]

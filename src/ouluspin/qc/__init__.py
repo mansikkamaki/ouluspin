@@ -9,7 +9,9 @@ Modules
                OpenMolcasCalculation).
     orca       ORCA outputs and aniso files (OrcaCalculation,
                OrcaAnisoOutput, OrcaAnisoFile).
+    kuiva      Kuiva pseudospin files (KuivaPseudospinFile).
 """
 
 from ouluspin.qc import molcas
 from ouluspin.qc import orca
+from ouluspin.qc import kuiva

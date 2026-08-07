@@ -38,6 +38,7 @@ from ouluspin import integration
 from ouluspin import data_tables
 from ouluspin.qc import molcas
 from ouluspin.qc import orca
+from ouluspin.qc import kuiva
 from ouluspin.systems import electron_exchange_system
 
 
@@ -76,6 +77,7 @@ def main():
         orca.OrcaCalculation,
         orca.OrcaAnisoOutput,
         orca.OrcaAnisoFile,
+        kuiva.KuivaPseudospinFile,
     ]
 
     print()

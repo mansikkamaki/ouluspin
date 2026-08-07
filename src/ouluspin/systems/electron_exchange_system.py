@@ -1486,9 +1486,11 @@ class AbInitioElectronExchangeSystem(PseudoSpinSystem):
         The coordinate frame label attached to the tensors returned by
         hamiltonian_tensor and magnetic_moment_tensor:
         'principal magnetic axis frame' when the frame rotation was
-        determined from the ground doublet (R was not given), and
+        determined from the ground doublet (R was not given),
         'user-defined axis frame' when an explicit R was passed to the
-        constructor.
+        constructor, and 'quantization axis frame' for a system built by
+        from_kuiva_data, whose quantization axis is the axis the states of
+        the file are labelled by M along.
     print_output : boolean
         Whether to print output.
     n_basis : int
@@ -1529,7 +1531,8 @@ class AbInitioElectronExchangeSystem(PseudoSpinSystem):
     base class for their documentation. With no explicit R given to the
     constructor the quantization axis is the principal magnetic axis of the
     ground doublet, so quantization_axis and ground_doublet_magnetic_axis
-    then return the same vector; with an explicit R they differ.
+    then return the same vector; with an explicit R, and for a system built
+    by from_kuiva_data, they differ.
 
     Class methods
     -------------
@@ -1545,6 +1548,14 @@ class AbInitioElectronExchangeSystem(PseudoSpinSystem):
         averaging, the magnetic moment is constructed from the Lande
         g-factor, and the averaged system is finally rotated into the
         principal magnetic frame of its own ground doublet.
+    from_kuiva_data(filename,units,...)
+        Construct the system from a pseudospin file (a .psd file) written by
+        a Kuiva calculation. The pseudospin basis, the transformation into
+        it and the quantization axis all come from the file, so no
+        pseudospin structure is given as an argument and neither the mu_z
+        diagonalization nor the reordering of the states of the constructor
+        is carried out; only the phase correction and the check of the
+        behavior under time reversal are.
     run_tests(print_output=True) : boolean
         Initiate the class and run a set of internal tests. Return True if all
         tests passed.
@@ -1565,6 +1576,11 @@ class AbInitioElectronExchangeSystem(PseudoSpinSystem):
         Normalize a vector representing an axis to unit
         length and giving it the sign convention of the library, i.e.
         making the first component that is not numerically zero positive.
+    __quantization_frame_rotation(axis) : array of float64
+        Return the rotation matrix into a coordinate frame whose z axis lies
+        along the axis given as an argument. Used by from_kuiva_data, where
+        the quantization axis is fixed by the file instead of being
+        determined from the ground doublet.
     __calculate_reorder_matrix() : array of float64
         Calculate and return an orthogonal matrix based on the reorder_list
         attribute that can be used to reorder the states.
@@ -1591,6 +1607,12 @@ class AbInitioElectronExchangeSystem(PseudoSpinSystem):
         value of whether all of the operators (Hamiltonian and magnetic
         moment) pass the test and a string containing a human-readable
         summary of the results.
+    __correct_and_check_phases()
+        Correct the arbitrary phases of the pseudospin basis states and
+        check the behavior of the resulting operators under time reversal,
+        warning when the behavior is not the correct one. This is the last
+        step of the construction and is shared by the constructor and the
+        from_kuiva_data class method.
     """
     
     def __error(self, message):
@@ -1661,6 +1683,50 @@ class AbInitioElectronExchangeSystem(PseudoSpinSystem):
             eigenvectors[:,0] = -eigenvectors[:,0]
 
         self.R = la.inv(eigenvectors)
+
+
+    @classmethod
+    def __quantization_frame_rotation(cls, axis):
+        """Return the rotation matrix into a coordinate frame whose z axis
+        lies along the axis given as an argument, i.e. the matrix R for
+        which R*axis = (0,0,1).
+
+        The rotation is used by from_kuiva_data, where the quantization axis
+        is not determined from the ground doublet but is fixed beforehand:
+        the states of a Kuiva pseudospin file are labelled by the projection
+        M along an axis recorded in the file, and the pseudospin operators
+        of the library are written with that axis as the z axis.
+
+        Only the z axis of the frame is fixed by this requirement. The x and
+        y axes are completed into a right-handed triad in an arbitrary way,
+        which is legitimate: turning them about z is a rotation of the
+        transverse components of the operators that is compensated by the
+        phases of the basis states, and the phases are arbitrary to begin
+        with and are fixed afterwards by __correct_phases. The construction
+        returns the identity matrix for an axis that already is the z axis.
+        """
+        axis = np.array(axis, dtype=np.float64)
+        norm = la.norm(axis)
+
+        if norm <= 0.0:
+            instance = cls.__new__(cls)
+            instance.__error("The quantization axis given for the construction of the\n"
+                             "coordinate frame is a vector of zero length.")
+
+        z_axis = axis/norm
+
+        # A vector that is not parallel to the axis, from which the
+        # transverse axes are built by orthogonalization.
+        if abs(z_axis[0]) < 0.9:
+            reference_vector = np.array([1.0,0.0,0.0], dtype=np.float64)
+        else:
+            reference_vector = np.array([0.0,1.0,0.0], dtype=np.float64)
+
+        x_axis = reference_vector - np.dot(reference_vector,z_axis)*z_axis
+        x_axis = x_axis/la.norm(x_axis)
+        y_axis = np.cross(z_axis,x_axis)
+
+        return np.array([x_axis,y_axis,z_axis], dtype=np.float64)
 
 
     def __calculate_reorder_matrix(self):
@@ -1871,6 +1937,29 @@ class AbInitioElectronExchangeSystem(PseudoSpinSystem):
                 np.dot(D.conj().T,np.dot(self.pseudospin_magnetic_moment_matrix[i],D))
 
 
+    def __correct_and_check_phases(self):
+        """Correct the arbitrary phases of the pseudospin basis states and
+        check the behavior of the resulting operators under time reversal,
+        warning when the behavior is not the correct one.
+
+        This is the last step of the construction of the pseudospin
+        operators and is shared by the class constructor and the
+        from_kuiva_data class method. The two build the pseudospin operator
+        matrices in different ways -- the constructor by diagonalizing the
+        mu_z component of the magnetic moment itself, the class method by
+        taking the basis and the transformation into it from the file it
+        reads -- but the phases of the basis states are arbitrary in both
+        cases and are fixed in the same way.
+        """
+        self.__correct_phases()
+
+        result, result_str = self.__check_time_reversal()
+
+        if not result:
+            self.__warning("Pseudospin operators have incorrect behavior under "
+                           "time reversal.\n" + result_str)
+
+
     def hamiltonian_tensor(self):
         """Construct and return an irreducible tensor representation of
         the Hamiltonian. The tensor carries the coordinate frame label of
@@ -2044,12 +2133,7 @@ class AbInitioElectronExchangeSystem(PseudoSpinSystem):
             self.reorder_list = reorder_list
 
         self.__construct_pseudospin_operator_matrices()
-        self.__correct_phases()
-        result, result_str = self.__check_time_reversal()
-
-        if not result:
-            self.__warning("Pseudospin operators have incorrect behavior under "
-                           "time reversal.\n" + result_str)
+        self.__correct_and_check_phases()
 
 
     @classmethod
@@ -2314,6 +2398,176 @@ class AbInitioElectronExchangeSystem(PseudoSpinSystem):
         if la.det(total_rotation) < 0.0:
             total_rotation = -total_rotation
         system.input_frame_rotation = tensors.Rotation(total_rotation)
+
+        return system
+
+
+    @classmethod
+    def from_kuiva_data(cls, filename, units,
+                        include_bohr_magneton=True,
+                        print_output=False):
+        """Construct the system from a pseudospin file (a .psd file) written
+        by a Kuiva calculation.
+
+        A Kuiva pseudospin file differs from a SINGLE_ANISO datafile in that
+        it has already identified its matrices with a pseudospin product
+        basis: it carries the pseudospin of every site, the ordered listing
+        of the basis states, the effective Hamiltonian and the Cartesian
+        components of the magnetic moment OVER THAT BASIS, and the unitary
+        that maps the ab initio states to it. Everything the constructor of
+        this class determines for itself therefore comes from the file
+        instead:
+
+          - the pseudospin basis is the one of the file (the reader checks
+            that its listing is exactly the ordering of PseudoSpinBasis, so
+            the states need no reordering and the reorder_list of the
+            constructor has no counterpart here);
+          - the transformation into the pseudospin basis is the one of the
+            file, so the mu_z component of the magnetic moment is not
+            diagonalized and the states are not projected onto a subspace:
+            the dimension of the model IS the dimension of the basis;
+          - the quantization axis is the axis along which the states of the
+            file are labelled by M, and not the principal magnetic axis of
+            the ground doublet. The two are usually the same axis for a
+            system of one site, as Kuiva labels the states of a site along
+            its own principal magnetic axis, but for a system of several
+            sites the ground doublet of the coupled system is a property of
+            the whole system and says nothing about how the states of the
+            individual sites were labelled. The axis of the file is the one
+            the basis states refer to and is therefore the one the operators
+            are quantized along.
+
+        The Cartesian components of the magnetic moment are rotated from the
+        frame of the file into the frame whose z axis is that quantization
+        axis; the Hamiltonian is a scalar under this rotation and is used as
+        it stands. A file whose sites are labelled along different axes has
+        no such frame and is refused: decomposing it would mix tensors
+        written in different quantization frames, and the result would be
+        silently wrong. Kuiva can write the model with a common axis
+        (common_axis=..., rotate_frame=True) when this happens.
+
+        The phases of the states of the file are arbitrary, as Kuiva
+        canonicalizes none of them, so the phase correction and the check of
+        the behavior under time reversal are applied exactly as they are for
+        a system built by the constructor.
+
+        Arguments
+        ---------
+        filename : str
+            Name of the Kuiva pseudospin file.
+        units : EnergyUnitSystem
+            The unit system.
+
+        Optional arguments
+        ------------------
+        include_bohr_magneton : boolean
+            Whether the magnetic moment operators read from the file are
+            multiplied by the Bohr magneton of the unit system (so that they
+            are in units of energy per tesla, which is the convention used
+            by the property classes of the library). Default is True.
+        print_output : boolean
+            Whether to print output. The default is False.
+        """
+        from ouluspin.qc import kuiva
+
+        calculation = kuiva.KuivaPseudospinFile(filename,units)
+
+        basis = calculation.pseudospin_basis()
+
+        # The axis the states of the file are labelled by M along, which is
+        # the axis the pseudospin of the system is quantized along.
+        axis = calculation.common_axis()
+
+        if axis is None:
+            instance = cls.__new__(cls)
+            instance.__error("The sites of the file " + filename + " are labelled\n"
+                             "along different axes, so the model has no single "
+                             "quantization\naxis and cannot be decomposed into "
+                             "pseudospin tensors: the tensors\nof the sites would be "
+                             "written in different coordinate frames.\nAsk Kuiva for a "
+                             "model written with a common axis (the arguments\n"
+                             "common_axis=... and rotate_frame=True).")
+
+        rotation_matrix = cls.__quantization_frame_rotation(axis)
+
+        # The operator matrices over the pseudospin product basis, with the
+        # ground state of the Hamiltonian at zero and the Cartesian
+        # components of the magnetic moment rotated into the frame of the
+        # quantization axis. The Hamiltonian is a scalar in the Cartesian
+        # indices and is not affected by the rotation.
+        pseudospin_hamiltonian_matrix = calculation.hamiltonian()
+        moment_matrix_list = calculation.magnetic_moment(
+                                 include_bohr_magneton=include_bohr_magneton)
+
+        pseudospin_magnetic_moment_matrix = list(
+            fu.matrix_utils.rotate_vector_operator_matrix(moment_matrix_list,
+                                                          rotation_matrix))
+
+        # The ab initio operators in the basis of the eigenstates of the
+        # Hamiltonian, which is the form the class documents its hamiltonian
+        # and magnetic_moment attributes in. The transformation into that
+        # basis is the unitary of the file (its columns are the ab initio
+        # states over the product basis) and is not constructed here. The
+        # moment matrices are stored in the frame of the file, as the R
+        # attribute is the rotation that was applied to them.
+        unitary = calculation.unitary()
+
+        hamiltonian = pseudospin_operators\
+                      .GeneralOperatorMatrix(np.diag(calculation.relative_energies()
+                                                     .astype(np.complex128)),
+                                             diagonalize_operator_matrix=True,
+                                             translate_eigenvalues=True)
+        magnetic_moment = pseudospin_operators\
+                          .GeneralVectorOperatorMatrix(
+                              [fu.matrix_utils.basis_transformation(unitary,matrix,0)
+                               for matrix in moment_matrix_list],
+                              diagonalize_operator_matrix=True,
+                              translate_eigenvalues=False)
+
+        # The construction of the pseudospin operators of the class
+        # constructor is replaced by the data of the file, so the instance is
+        # built directly and only the steps that still apply are run on it.
+        system = cls.__new__(cls)
+
+        system.hamiltonian     = hamiltonian
+        system.magnetic_moment = magnetic_moment
+        system.basis           = basis
+        system.units           = units
+        system.print_output    = print_output
+
+        system.n_basis      = basis.n_basis
+        system.n_full_basis = calculation.n_basis
+
+        system.kramers_system = cls.kramers_system_from_basis(basis)
+
+        system.R            = rotation_matrix
+        system.tensor_frame = 'quantization axis frame'
+
+        # The states of the file are in the order of PseudoSpinBasis, which
+        # the reader checks, so no reordering is applied.
+        system.reorder_list = list(range(0,basis.n_basis))
+
+        # The rotation from the ab initio input frame to the frame of the
+        # pseudospin operators: first the rotation the file records from the
+        # input frame into the frame of its own components, then the rotation
+        # from that frame into the frame of the quantization axis.
+        system.input_frame_rotation = tensors.Rotation(
+            np.dot(rotation_matrix,calculation.frame_rotation))
+
+        system.pseudospin_hamiltonian_matrix     = pseudospin_hamiltonian_matrix
+        system.pseudospin_magnetic_moment_matrix = pseudospin_magnetic_moment_matrix
+
+        if print_output:
+            print(calculation)
+            print("    The pseudospin is quantized along the axis the states of the")
+            print("    file are labelled along, which is in the input frame of the")
+            print("    calculation the axis")
+            print()
+            print("      ({0:12.8f},{1:12.8f},{2:12.8f}).".format(
+                *system.quantization_axis()))
+            print()
+
+        system.__correct_and_check_phases()
 
         return system
 
@@ -3168,6 +3422,274 @@ class AbInitioElectronExchangeSystem(PseudoSpinSystem):
             check('the quantization axis of an averaged system follows it',
                   np.allclose(average_fg.quantization_axis(),average_axis,
                               atol=1.0e-6))
+
+            # --------------------------------------------------------------
+            # The from_kuiva_data class method, tested with synthetic Kuiva
+            # pseudospin files. Everything the constructor determines for
+            # itself comes from the file here: the basis, the transformation
+            # into it and the quantization axis. The phases of the basis
+            # states of every file are scrambled with random phase factors,
+            # as a Kuiva file canonicalizes none of them, so that the phase
+            # correction and the check of time reversal are exercised.
+            # --------------------------------------------------------------
+            def kuiva_file_content(hamiltonian_matrix,moment_list,
+                                   pseudospin_list,axis,
+                                   frame_rotation=np.identity(3)):
+                """Synthetic Kuiva pseudospin file of the system given by its
+                Hamiltonian (in the energy unit of the tests) and by its
+                magnetic moment matrices (in units of the Bohr magneton),
+                both written over the pseudospin product basis of the
+                pseudospins given as an argument. The states of every site
+                are labelled along the axis given as an argument, and the
+                file records the given rotation from the ab initio input
+                frame into the frame of its own components. The phases of
+                the basis states are scrambled."""
+                file_basis = pseudospin_operators.PseudoSpinBasis(pseudospin_list)
+                dimension  = file_basis.n_basis
+
+                phase_matrix = np.diag(np.exp(2.0j*np.pi*rng.random(dimension)))
+
+                scrambled_hamiltonian = np.dot(phase_matrix.conj().T,
+                                               np.dot(hamiltonian_matrix/hartree,
+                                                      phase_matrix))
+                scrambled_moment_list = [np.dot(phase_matrix.conj().T,
+                                                np.dot(matrix,phase_matrix))
+                                         for matrix in moment_list]
+
+                energy_list, state_matrix = np.linalg.eigh(scrambled_hamiltonian)
+
+                def matrix_block(tag,matrix):
+                    block_str  = "[" + tag + "]\n"
+                    block_str += "shape  {0} {1}\n".format(matrix.shape[0],
+                                                           matrix.shape[1])
+                    block_str += "unit   arbitrary\n"
+                    for i in range(0,matrix.shape[0]):
+                        for j in range(0,matrix.shape[1]):
+                            block_str += "{0:6d} {1:6d} {2:+.16e} {3:+.16e}\n".format(
+                                i,j,matrix[i][j].real,matrix[i][j].imag)
+                    block_str += "[END]\n\n"
+                    return block_str
+
+                content  = "[HEADER]\n"
+                content += "format          KUIVA_PSEUDOSPIN\n"
+                content += "format_version  1\n"
+                content += "n_sites         {0}\n".format(file_basis.n_sites)
+                content += "model_dim       {0}\n".format(dimension)
+                content += "energy_unit     Eh\n"
+                content += "moment_unit     mu_B\n"
+                content += "energy_shift    +0.0000000000000000e+00\n"
+                content += "basis_order     site 0 slowest; within a site M ascending\n"
+                content += "frame           input frame\n"
+                content += "[END]\n\n"
+                content += "[PROVENANCE]\n{\"code\": \"kuiva\"}\n[END]\n\n"
+                content += "[FRAME]\n"
+                for row in np.array(frame_rotation, dtype=np.float64):
+                    content += "  {0:+.14f} {1:+.14f} {2:+.14f}\n".format(*row)
+                content += "[END]\n\n"
+                content += "[SITES]\n"
+                for site in range(0,file_basis.n_sites):
+                    content += ("{0:6d} {1:4d} {2:4d}"
+                                " {3:+.10f} {4:+.10f} {5:+.10f}"
+                                "  principal_magnetic_axis | 1 | 0\n").format(
+                                    site,pseudospin_list[site],
+                                    pseudospin_list[site] + 1,*axis)
+                content += "[END]\n\n"
+                content += "[BASIS]\n"
+                for i in range(0,dimension):
+                    content += "{0:6d}  ".format(i)
+                    content += " ".join("{0:+d}".format(file_basis
+                                                        .basis_state_list[i][site][1])
+                                        for site in range(0,file_basis.n_sites))
+                    content += "\n"
+                content += "[END]\n\n"
+                content += "[ENERGIES]\n"
+                for i, value in enumerate(energy_list):
+                    content += "{0:6d}  {1:+.16e}  {2:+.8e}\n".format(
+                        i,value,(value - energy_list[0])*hartree)
+                content += "[END]\n\n"
+                content += matrix_block('MATRIX H',scrambled_hamiltonian)
+                content += matrix_block('MATRIX mu_x',scrambled_moment_list[0])
+                content += matrix_block('MATRIX mu_y',scrambled_moment_list[1])
+                content += matrix_block('MATRIX mu_z',scrambled_moment_list[2])
+                content += matrix_block('MATRIX U',state_matrix)
+
+                return content
+
+            # A single S = 3/2 site with the rhombic zero-field splitting
+            # D*S_z^2 + E*(S_x^2 - S_y^2), the states labelled along the z
+            # axis of the file, which is the frame of the ab initio
+            # calculation as well.
+            kuiva_hamiltonian_matrix = D*np.dot(Sz,Sz) \
+                                       + E*(np.dot(Sx,Sx) - np.dot(Sy,Sy))
+            kuiva_moment_list = [-g*Sx,-g*Sy,-g*Sz]
+
+            filename_kuiva = os.path.join(tmp_dir,'single_site.psd')
+            with open(filename_kuiva,'w') as f:
+                f.write(kuiva_file_content(kuiva_hamiltonian_matrix,
+                                           kuiva_moment_list,[3],
+                                           [0.0,0.0,1.0]))
+
+            kuiva_system = cls.from_kuiva_data(filename_kuiva,tmp_units)
+
+            check('from_kuiva_data takes the basis from the file',
+                  kuiva_system.basis.pseudospin_list == [3]
+                  and kuiva_system.basis.n_basis == 4
+                  and kuiva_system.n_basis == 4
+                  and kuiva_system.n_full_basis == 4)
+            check('from_kuiva_data does not reorder the states of the file',
+                  kuiva_system.reorder_list == [0,1,2,3])
+            check('from_kuiva_data tensors carry the quantization frame label',
+                  kuiva_system.tensor_frame == 'quantization axis frame'
+                  and kuiva_system.hamiltonian_tensor().frame
+                      == 'quantization axis frame')
+            check('from_kuiva_data quantizes along the axis of the file',
+                  np.allclose(kuiva_system.quantization_axis(),[0.0,0.0,1.0],
+                              atol=1.0e-10))
+            check('from_kuiva_data reproduces the spectrum of the file',
+                  np.allclose(np.linalg.eigvalsh(kuiva_system
+                                                 .pseudospin_hamiltonian_matrix),
+                              [0.0,0.0,gap,gap]))
+
+            # The phases of the basis states of the file are arbitrary and
+            # must be corrected: the pseudospin Hamiltonian is then even
+            # under time reversal, its ITO decomposition has no odd ranks,
+            # and the matrix itself reproduces the input Hamiltonian up to
+            # the constant shift of the eigenvalues.
+            U = kuiva_system.basis.unitary_part_of_time_reversal_operator()
+            H_ps = kuiva_system.pseudospin_hamiltonian_matrix
+            check('from_kuiva_data corrects the phases of the basis states',
+                  np.allclose(np.dot(U,np.dot(H_ps.conj(),U.T)),H_ps,atol=1.0e-8))
+
+            kuiva_tensor = kuiva_system.hamiltonian_tensor()
+            odd_rank_maximum = max(abs(parameter)
+                                   for rank,parameter in zip(kuiva_tensor.rank_list,
+                                                             kuiva_tensor.parameter_list)
+                                   if (rank[0]//2) % 2 == 1)
+            check('no odd ranks in the Hamiltonian tensor of a Kuiva system',
+                  odd_rank_maximum < 1.0e-8)
+
+            shift = (np.trace(H_ps).real
+                     - np.trace(kuiva_hamiltonian_matrix).real)/4.0
+            check('from_kuiva_data reproduces the input Hamiltonian matrix',
+                  np.allclose(H_ps - shift*np.identity(4),
+                              kuiva_hamiltonian_matrix,atol=1.0e-8))
+
+            # The magnetic moment of the file is in units of the Bohr
+            # magneton and the Bohr magneton is multiplied in by default.
+            plain_system = cls.from_kuiva_data(filename_kuiva,tmp_units,
+                                               include_bohr_magneton=False)
+            check('from_kuiva_data includes the Bohr magneton by default',
+                  np.allclose(kuiva_system.pseudospin_magnetic_moment_matrix[2],
+                              tmp_units.mu_B
+                              *plain_system.pseudospin_magnetic_moment_matrix[2]))
+
+            # The same physics read from a Kuiva file and projected by the
+            # constructor itself must give the same ground doublet: the
+            # system built at the beginning of these tests carries the same
+            # zero-field splitting and the same magnetic moment, quantized
+            # along the same axis.
+            check('from_kuiva_data ground doublet matches the projected system',
+                  np.allclose(np.sort(np.abs(kuiva_system.pseudospin_doublet((0,1))
+                                             .g_tensor.eigenvalues)),
+                              np.sort(np.abs(system.pseudospin_doublet((0,1))
+                                             .g_tensor.eigenvalues)),
+                              atol=1.0e-6))
+
+            # The same system with the states labelled along a tilted axis
+            # and the Cartesian components of the magnetic moment written in
+            # the frame of the file, i.e. the case a real calculation of a
+            # molecule of no symmetry produces. The zero-field splitting is
+            # purely axial here, as the phase correction fixes the
+            # transverse axes only up to a rotation about the quantization
+            # axis, under which the rhombic term is not invariant.
+            axial_hamiltonian_matrix = D*np.dot(Sz,Sz)
+            tilted_moment_list = []
+            for alpha in range(0,3):
+                tilted_moment_list.append(sum(tilt_rotation[alpha][beta]
+                                              *kuiva_moment_list[beta]
+                                              for beta in range(0,3)))
+
+            filename_tilted = os.path.join(tmp_dir,'tilted.psd')
+            with open(filename_tilted,'w') as f:
+                f.write(kuiva_file_content(axial_hamiltonian_matrix,
+                                           tilted_moment_list,[3],tilt_axis))
+
+            tilted_system = cls.from_kuiva_data(filename_tilted,tmp_units)
+            tilted_tensor = tilted_system.hamiltonian_tensor()
+            tilted_tensor.purge_ranks()
+
+            check('from_kuiva_data follows a tilted labelling axis',
+                  np.allclose(tilted_system.quantization_axis(),tilt_axis,
+                              atol=1.0e-8))
+            check('from_kuiva_data recovers the axial ZFS of a tilted system',
+                  ([4,0] in tilted_tensor.rank_list)
+                  and abs(tilted_tensor.parameter_list[tilted_tensor.rank_list
+                                                       .index([4,0])] - D) < 1.0e-8)
+
+            # A file written in a frame of its own: the states are labelled
+            # along the z axis of the file, but the file records a rotation
+            # from the ab initio input frame into its frame. The quantization
+            # axis must then be reported in the input frame, i.e. as the
+            # tilted axis again.
+            filename_rotated = os.path.join(tmp_dir,'rotated_frame.psd')
+            with open(filename_rotated,'w') as f:
+                f.write(kuiva_file_content(axial_hamiltonian_matrix,
+                                           kuiva_moment_list,[3],[0.0,0.0,1.0],
+                                           frame_rotation=tilt_rotation.T))
+
+            rotated_system = cls.from_kuiva_data(filename_rotated,tmp_units)
+
+            check('from_kuiva_data composes the frame rotation of the file',
+                  np.allclose(rotated_system.quantization_axis(),tilt_axis,
+                              atol=1.0e-8))
+            check('the frame of the file does not change the tensors',
+                  np.allclose(rotated_system.pseudospin_hamiltonian_matrix,
+                              tilted_system.pseudospin_hamiltonian_matrix,
+                              atol=1.0e-8))
+
+            # A genuine two-site file: the S = 3/2 ion exchange-coupled to
+            # the S = 1/2 radical of the two-site test above. The product
+            # basis of the file is the coupled basis, which exercises the
+            # time-reversal-based phase correction of the second half of the
+            # basis on data that come from a file.
+            two_site_moment_list = []
+            for alpha in range(0,3):
+                two_site_moment_list.append(
+                    -(g*np.kron(spin_matrix_list[alpha],radical_identity)
+                      + g_radical*np.kron(ion_identity,radical_matrix_list[alpha])))
+
+            filename_two_site = os.path.join(tmp_dir,'two_site.psd')
+            with open(filename_two_site,'w') as f:
+                f.write(kuiva_file_content(two_site_hamiltonian_matrix,
+                                           two_site_moment_list,pseudospin_list,
+                                           [0.0,0.0,1.0]))
+
+            two_site_kuiva = cls.from_kuiva_data(filename_two_site,tmp_units)
+
+            check('from_kuiva_data takes a multi-site basis from the file',
+                  two_site_kuiva.basis.pseudospin_list == pseudospin_list
+                  and two_site_kuiva.basis.n_sites == 2)
+
+            H_ps = two_site_kuiva.pseudospin_hamiltonian_matrix
+            U = two_site_kuiva.basis.unitary_part_of_time_reversal_operator()
+            check('two-site Kuiva Hamiltonian is even under time reversal',
+                  np.allclose(np.dot(U,np.dot(H_ps.conj(),U.T)),H_ps,atol=1.0e-8))
+
+            shift = (np.trace(H_ps).real
+                     - np.trace(two_site_hamiltonian_matrix).real)/n_two_site
+            check('from_kuiva_data reproduces the two-site input Hamiltonian',
+                  np.allclose(H_ps - shift*np.identity(n_two_site),
+                              two_site_hamiltonian_matrix,atol=1.0e-8))
+
+            two_site_kuiva_tensor = two_site_kuiva.hamiltonian_tensor()
+            exchange_ok = True
+            for rank,parameter in zip(reference_tensor.rank_list,
+                                      reference_tensor.parameter_list):
+                i = two_site_kuiva_tensor.rank_list.index(rank)
+                if abs(two_site_kuiva_tensor.parameter_list[i] - parameter) > 1.0e-8:
+                    exchange_ok = False
+            check('isotropic exchange parameters recovered from a Kuiva file',
+                  exchange_ok)
 
         return debug_output.test_summary('AbInitioElectronExchangeSystem',
                                          result_list,print_output)

@@ -34,3 +34,15 @@ Scripts:
   argument:
 
       ouluspin-python aniso_analysis.py Dy_complex.anisofile 'Dy(III)'
+
+- `kuiva_analysis.py` — the same analysis of a single spin site read from
+  a Kuiva pseudospin file (`.psd`) instead of an ORCA aniso file. The
+  pseudospin, the ordering of the states and the quantization axis all
+  come from the file, so no pseudospin argument and no reordering of the
+  states is needed; the script reports both the quantization axis of the
+  file and the magnetic axis of the ground doublet, so that the choice
+  made when the file was written can be seen. The name of the ion is an
+  optional second argument and is used only for the free-ion reference
+  lines of the plots and for the label of the axis file:
+
+      ouluspin-python kuiva_analysis.py ticl3_ground.psd 'Ti(III)'
