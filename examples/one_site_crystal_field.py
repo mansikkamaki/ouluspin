@@ -47,7 +47,7 @@ if __name__ == '__main__':
                                diagonalize_operator_matrix=True,
                                translate_eigenvalues=True)
     magnetic_moment_operator = pseudospin_operators\
-        .GeneralVectorOperatorMatrix(calculation.magnetic_moment(include_bohr_magneton=False),
+        .GeneralVectorOperatorMatrix(calculation.magnetic_moment(include_bohr_magneton=True),
                                      diagonalize_operator_matrix=True,
                                      translate_eigenvalues=False)
 
@@ -74,10 +74,13 @@ if __name__ == '__main__':
                                            rank_threshold=1.0e-6,
                                            half_table=True))
 
+    # ElectronExchangeSystem takes the magnetic moment tensors in the form
+    # of a g-tensor, i.e. divided by -mu_B, and carries out the
+    # multiplication itself.
     pseudospin_system = electron_exchange_system\
         .ElectronExchangeSystem([15],
                                 [(ab_initio_system.hamiltonian_tensor(),0)],
-                                [(magnetic_moment_tensor,0)],
+                                [(ab_initio_system.magnetic_moment_tensor(as_g_tensor=True),0)],
                                 units,
                                 print_output=True)
 

@@ -197,7 +197,7 @@ hamiltonian = pseudospin_operators.GeneralOperatorMatrix(
     calculation.hamiltonian(),
     diagonalize_operator_matrix=True, translate_eigenvalues=True)
 magnetic_moment = pseudospin_operators.GeneralVectorOperatorMatrix(
-    calculation.magnetic_moment(include_bohr_magneton=False),
+    calculation.magnetic_moment(include_bohr_magneton=True),
     diagonalize_operator_matrix=True, translate_eigenvalues=False)
 
 # Project onto a pseudospin S = 15/2 basis and decompose the Hamiltonian
@@ -819,9 +819,10 @@ header and carries the rotation that was applied to it.
 - **`orca.OrcaAnisoFile`** — reads operator matrices from a `.anisofile`
   produced by an ORCA calculation: `hamiltonian()` returns the matrix of
   the spin–orbit-coupled Hamiltonian, `magnetic_moment()` the three
-  Cartesian components of the magnetic moment (with
-  `include_bohr_magneton=False` when the moment is wanted in units of the
-  Bohr magneton, which is what the pseudospin analysis takes), and
+  Cartesian components of the magnetic moment (multiplied by the Bohr
+  magneton by default, which is what the pseudospin analysis and the
+  property classes take; `include_bohr_magneton=False` gives the moment in
+  units of the Bohr magneton), and
   `spin()` the three components of the spin. This is the reader the
   examples use.
 - **`kuiva.KuivaPseudospinFile`** — reads a pseudospin file (`.psd`)
@@ -938,6 +939,14 @@ header and carries the rotation that was applied to it.
   constructor the quantization axis is the principal magnetic axis of the
   ground doublet, so the two axis methods return the same vector, and with
   an explicit `R` they differ.
+
+  The magnetic moment matrices given to the class must include the Bohr
+  magneton, i.e. be in units of energy per tesla; the g values derived
+  from the system are otherwise wrong by the factor 1/μ_B.
+  `magnetic_moment_tensor()` returns the tensor of the magnetic moment
+  itself, and `magnetic_moment_tensor(as_g_tensor=True)` the same tensor
+  divided by −μ_B, which is the form `ElectronExchangeSystem` takes its
+  magnetic moment tensors in.
 
   Three class methods build the system from the output of a calculation
   instead of from matrices: `from_aniso_data(filename, pseudospin, units)`

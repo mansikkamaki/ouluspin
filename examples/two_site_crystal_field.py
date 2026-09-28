@@ -47,7 +47,7 @@ if __name__ == '__main__':
                                diagonalize_operator_matrix=True,
                                translate_eigenvalues=True)
     magnetic_moment_operator = pseudospin_operators\
-        .GeneralVectorOperatorMatrix(calculation.magnetic_moment(include_bohr_magneton=False),
+        .GeneralVectorOperatorMatrix(calculation.magnetic_moment(include_bohr_magneton=True),
                                      diagonalize_operator_matrix=True,
                                      translate_eigenvalues=False)
 

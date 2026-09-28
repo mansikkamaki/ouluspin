@@ -1408,7 +1408,14 @@ class AbInitioElectronExchangeSystem(PseudoSpinSystem):
         SINGLE_ANISO datafile, where they are given together with the
         spin-orbit energies. The class uses these matrices as they are,
         both in the construction of the pseudospin operators and in the
-        determination of the frame rotation.
+        determination of the frame rotation. The matrices must INCLUDE
+        the Bohr magneton, i.e. be in units of energy per tesla of the
+        unit system, which is the convention of the property classes of
+        the library and the default of the readers of the qc package
+        (include_bohr_magneton=True). The class cannot tell the unit of
+        the matrices it is given; with matrices in units of the Bohr
+        magneton every g value derived from the system is wrong by the
+        factor 1/mu_B.
     basis : PseudoSpinBasis
         The basis defining the pseudospin system.
     units : EnergyUnitSystem
@@ -1445,7 +1452,14 @@ class AbInitioElectronExchangeSystem(PseudoSpinSystem):
         SINGLE_ANISO datafile, where they are given together with the
         spin-orbit energies. The class uses these matrices as they are,
         both in the construction of the pseudospin operators and in the
-        determination of the frame rotation.
+        determination of the frame rotation. The matrices must INCLUDE
+        the Bohr magneton, i.e. be in units of energy per tesla of the
+        unit system, which is the convention of the property classes of
+        the library and the default of the readers of the qc package
+        (include_bohr_magneton=True). The class cannot tell the unit of
+        the matrices it is given; with matrices in units of the Bohr
+        magneton every g value derived from the system is wrong by the
+        factor 1/mu_B.
     basis : PseudoSpinBasis
         The basis defining the pseudospin system.
     units : EnergyUnitSystem
@@ -1511,10 +1525,12 @@ class AbInitioElectronExchangeSystem(PseudoSpinSystem):
     hamiltonian_tensor() : IwaharaChibotaruSphericalTensor
         Construct and return an irreducible tensor representation of
         the Hamiltonian.
-    magnetic_moment_tensor() : MixedCartesianIwaharaChibotaruSphericalTensor
+    magnetic_moment_tensor(as_g_tensor=False) : MixedCartesianIwaharaChibotaruSphericalTensor
         Construct and return a mixed Cartesian--spherical tensor
         representation of the magnetic moment operator containing the
-        three Cartesian components.
+        three Cartesian components. With as_g_tensor=True the tensor is
+        divided by -mu_B, which is the form in which
+        ElectronExchangeSystem takes the magnetic moment tensors.
     hamiltonian_operator() : PseudoSpinOperator
         Construct and return the pseudospin Hamiltonian of the system as
         a PseudoSpinOperator instance.
@@ -1972,15 +1988,35 @@ class AbInitioElectronExchangeSystem(PseudoSpinSystem):
         return hamiltonian_tensor
 
     
-    def magnetic_moment_tensor(self):
+    def magnetic_moment_tensor(self, as_g_tensor=False):
         """Construct and return a mixed Cartesian--spherical tensor representation
         of the magnetic moment operator containing the three Cartesian components.
+
+        By default the tensor is the magnetic moment itself, in the unit
+        of the matrices given to the class (energy per tesla of the unit
+        system; see the class documentation).
+
+        Optional arguments
+        ------------------
+        as_g_tensor : boolean
+            If True, the tensor is divided by the negative Bohr magneton
+            of the unit system, i.e. the dimensionless tensor g of
+            mu = -mu_B * g is returned instead of mu. This is the form in
+            which ElectronExchangeSystem takes its magnetic moment
+            tensors, which it multiplies by -mu_B, so that a tensor
+            returned with as_g_tensor=True and handed on to it reproduces
+            the magnetic moment of this system, sign included. The
+            default is False.
         """
         vector_operator = pseudospin_operators\
                           .GeneralVectorOperatorMatrix(self.pseudospin_magnetic_moment_matrix)
 
         moment_tensor = tensors.MixedCartesianIwaharaChibotaruSphericalTensor\
                       .from_general_vector_operator_matrix(vector_operator,self.basis)
+
+        if as_g_tensor:
+            moment_tensor = (-1.0/self.units.mu_B) * moment_tensor
+
         moment_tensor.frame = self.tensor_frame
         for component in moment_tensor.component_list:
             component.frame = self.tensor_frame
@@ -2810,6 +2846,34 @@ class AbInitioElectronExchangeSystem(PseudoSpinSystem):
         check('mixed magnetic moment tensor equals the isotropic reference',
               (moment_tensor == reference_moment)
               or (moment_tensor == rotated_reference))
+
+        # The tensor in the form of a g-tensor is the magnetic moment
+        # divided by -mu_B, and handed on to ElectronExchangeSystem, which
+        # multiplies it by -mu_B, it must reproduce the magnetic moment of
+        # this system, sign included, and therefore the g-tensor of the
+        # ground doublet as well.
+        g_form_tensor = system.magnetic_moment_tensor(as_g_tensor=True)
+        check('magnetic moment tensor in the g-tensor form',
+              g_form_tensor == (-1.0/tmp_units.mu_B)*moment_tensor)
+        check('as_g_tensor leaves the default tensor unchanged',
+              system.magnetic_moment_tensor() == moment_tensor)
+
+        handed_on_system = ElectronExchangeSystem(
+            [pseudospin],
+            [(system.hamiltonian_tensor(),0)],
+            [(g_form_tensor,0)],
+            tmp_units)
+        check('g-tensor form handed on reproduces the magnetic moment',
+              all(np.allclose(handed_on_system.magnetic_moment
+                              .operator_list[alpha].matrix,
+                              system.pseudospin_magnetic_moment_matrix[alpha])
+                  for alpha in range(0,3)))
+        check('g-tensor form handed on reproduces the ground doublet',
+              np.allclose(np.sort(np.abs(handed_on_system.pseudospin_doublet((0,1))
+                                         .g_tensor.eigenvalues)),
+                          np.sort(np.abs(system.pseudospin_doublet((0,1))
+                                         .g_tensor.eigenvalues)),
+                          atol=1.0e-8))
 
         # ------------------------------------------------------------------
         # Two-site test: the same S = 3/2 ion exchange-coupled to an
