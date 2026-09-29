@@ -58,7 +58,13 @@ __MATPLOTLIB_MESSAGE = (
 LEVEL_COLOR      = 'black'
 TRANSITION_COLOR = 'red'
 LEVEL_WIDTH      = 2.5
-LEVEL_HALF_WIDTH = 0.35
+
+# The bars of an effective barrier. The half-width of a bar is given as a
+# fraction of the span of the magnetic moment projections, so that the bars
+# keep their size against the plot whatever the size of the moments, with
+# a lower limit for the plots whose moments are all nearly equal.
+BARRIER_LEVEL_HALF_FRACTION = 0.03
+BARRIER_LEVEL_HALF_MINIMUM  = 0.35
 
 # The bars of an energy level diagram, in units of the spacing of the
 # columns. The bars are narrow, as is usual in an energy level diagram,
@@ -108,9 +114,15 @@ LINE_STYLE_ALIASES = {
 }
 
 # The width of the arrows of an effective barrier, in points, between the
-# weakest and the strongest transition drawn.
-MIN_ARROW_WIDTH = 0.4
-MAX_ARROW_WIDTH = 4.0
+# weakest and the strongest transition drawn. The arrows are kept thinner
+# than the bars of the states, since the transitions along the pathway are
+# all of comparable strength and heavy arrows would bury the states. The
+# size of the arrow head follows the width of the arrow, as the base size
+# plus the given multiple of the width, both in points.
+MIN_ARROW_WIDTH  = 0.3
+MAX_ARROW_WIDTH  = 1.5
+ARROW_HEAD_BASE  = 4.0
+ARROW_HEAD_SCALE = 2.5
 
 # The transitions weaker than this fraction of the strongest one are not
 # drawn at all, so that the plot does not fill with arrows that carry no
@@ -561,13 +573,18 @@ def draw_effective_barrier(axes, content):
                                   'color':           TRANSITION_COLOR,
                                   'alpha':           opacity,
                                   'linewidth':       width,
-                                  'mutation_scale':  8.0 + 4.0*width,
+                                  'mutation_scale':  ARROW_HEAD_BASE
+                                                     + ARROW_HEAD_SCALE*width,
                                   'shrinkA':         0.0,
                                   'shrinkB':         0.0})
 
+    half_width = max(BARRIER_LEVEL_HALF_MINIMUM,
+                     BARRIER_LEVEL_HALF_FRACTION*(max(moment_list)
+                                                  - min(moment_list)))
+
     for level in level_list:
-        axes.plot([level['moment'] - LEVEL_HALF_WIDTH,
-                   level['moment'] + LEVEL_HALF_WIDTH],
+        axes.plot([level['moment'] - half_width,
+                   level['moment'] + half_width],
                   [level['energy'],level['energy']],
                   color=LEVEL_COLOR,
                   linewidth=LEVEL_WIDTH,
