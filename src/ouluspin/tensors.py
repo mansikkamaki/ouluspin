@@ -482,6 +482,11 @@ class IwaharaChibotaruSphericalTensor:
         Rotate the tensor using the Rotation instance given as an argument.
     ITO_table(symbol="X",title=None,order_of_magnitude=0,rank_threshold=0.0,half_table=False) : ResultTable
         Return a listing of all ITO expansions parameters.
+    exchange_decomposition_table(pseudospin_A,pseudospin_B,prefactor=1.0,title=None,order_of_magnitude=0) : ResultTable
+        Return the decomposition of the k1 = 1, k2 = 1 terms of a two-site tensor into
+        the isotropic exchange parameter, the independent components of the symmetric
+        traceless anisotropic exchange and the Dzyaloshinskii--Moriya vector, in the
+        convention of the Hamiltonian set by the prefactor (e.g. -1 or -2).
     inflate_dimension(site_list)
         Inflate the tensor IN PLACE so that it corresponds to a tensor acting on a
         system with more spin sites than included in this tensor. The tensor
@@ -916,6 +921,162 @@ class IwaharaChibotaruSphericalTensor:
                                         title=title,
                                         notes=notes,
                                         formats=formats,
+                                        table_type='spherical_tensor')
+
+
+    def exchange_decomposition_table(self, pseudospin_A, pseudospin_B, prefactor=1.0,
+                                     title=None, order_of_magnitude=0):
+        """Return the decomposition of the bilinear exchange interaction of a
+        two-site tensor as an instance of ResultTable. Printing the returned
+        instance, or converting it into a str, gives the human-readable table.
+
+        Only the nine terms with the ranks k1 = 1 and k2 = 1 are used; all
+        the other terms of the tensor are ignored. The terms are first
+        converted into the Cartesian exchange tensor J of the operator
+        S_A . J . S_B (see two_site_cartesian_tensor), which is then
+        decomposed in the usual way as
+
+            S_A . J . S_B = J_iso S_A . S_B + S_A . D . S_B + d . (S_A x S_B)
+
+        where J_iso is one third of the trace of J (the isotropic, Heisenberg
+        exchange parameter), D is the symmetric traceless part of J (the
+        anisotropic symmetric exchange) and d is the Dzyaloshinskii--Moriya
+        vector, d_x = (J_yz - J_zy)/2, d_y = (J_zx - J_xz)/2 and
+        d_z = (J_xy - J_yx)/2, of the antisymmetric part of J. Site A is the
+        first spin site of the tensor and site B the second one; note that
+        the sign of d changes when the order of the sites is swapped.
+
+        The conventions of the exchange Hamiltonian differ in the factor
+        written in front of it (e.g. H = -2 J_iso S_A . S_B or
+        H = -J_iso S_A . S_B). The factor is chosen with the optional
+        argument prefactor, and the tabulated parameters are those of
+
+            H = prefactor * (J_iso S_A . S_B + S_A . D . S_B + d . (S_A x S_B)),
+
+        i.e. all the parameters of the decomposition above are divided by
+        the prefactor. With the default prefactor 1.0 the parameters are the
+        coefficients of the operator itself.
+
+        The table lists the isotropic parameter, the five independent
+        components D_xx, D_yy, D_xy, D_xz and D_yz of D (D_zz follows from
+        the vanishing trace as -(D_xx + D_yy) and is reported below the
+        table) and the three components of d.
+
+        The Cartesian tensor is real only when the k1 = k2 = 1 terms form a
+        Hermitian operator; a warning is issued if they do not, in which case
+        the table contains the decomposition of the real part of the
+        Cartesian tensor only.
+
+        Arguments
+        ---------
+        pseudospin_A : int
+            The pseudospin of the first site, as a multiple of two.
+        pseudospin_B : int
+            The pseudospin of the second site, as a multiple of two.
+
+        Optional arguments
+        ------------------
+        prefactor : float
+            The factor written in front of the exchange Hamiltonian, e.g. -1.0
+            or -2.0 for the conventions H = -J S_A . S_B and
+            H = -2J S_A . S_B. The tabulated parameters are divided by it.
+            Must be non-zero. Default is 1.0.
+        title : str
+            A title of the table used in the output. Default is None, in which
+            case the title 'DECOMPOSITION OF THE BILINEAR EXCHANGE INTERACTION'
+            is used.
+        order_of_magnitude : int
+            Before printing, the values of the parameters will be multiplied by
+            10^order_of_magnitude. Default is 0.
+        """
+        if not self.n_sites == 2:
+            self.__error("The exchange decomposition is defined only for a two-site tensor.\n"
+                         + "The tensor acts on {0} spin site(s).".format(self.n_sites))
+
+        prefactor = float(prefactor)
+        if prefactor == 0.0:
+            self.__error("The prefactor of the exchange Hamiltonian must be non-zero.")
+
+        # The k1 = k2 = 1 terms are Hermitian when
+        # X_(1,-q1,1,-q2) = (-1)^(q1+q2) * conjugate(X_(1,q1,1,q2)).
+        # The ranks and the components are stored as multiples of two.
+        def parameter(q1,q2):
+            if [2,q1,2,q2] in self.rank_list:
+                return self.parameter_list[self.rank_list.index([2,q1,2,q2])]
+            return complex(0.0,0.0)
+
+        largest_deviation = 0.0
+        largest_magnitude = 0.0
+        for q1 in (-2,0,2):
+            for q2 in (-2,0,2):
+                sign = (-1)**((q1 + q2)//2)
+                largest_deviation = max(largest_deviation,
+                                        abs(parameter(-q1,-q2)
+                                            - sign*parameter(q1,q2).conjugate()))
+                largest_magnitude = max(largest_magnitude,abs(parameter(q1,q2)))
+
+        if largest_deviation > 1.0e-6*max(1.0,largest_magnitude):
+            self.__warning("The k1 = k2 = 1 terms of the tensor are not Hermitian.\n"
+                           + "Largest deviation from Hermiticity: {0:.3e}\n".format(largest_deviation)
+                           + "Only the real part of the Cartesian exchange tensor is decomposed.")
+
+        exchange_tensor = self.two_site_cartesian_tensor(pseudospin_A,pseudospin_B)
+
+        J = exchange_tensor.tensor
+        D = exchange_tensor.symmetric_part()
+
+        # The parameters are reported in the convention chosen by the
+        # prefactor, and scaled for printing.
+        factor = 10.0**(order_of_magnitude) / prefactor
+
+        # Adding 0.0 turns the -0.0 of a vanishing parameter divided by a
+        # negative prefactor into 0.0, so that it is not printed with a sign.
+        def value(x):
+            return factor*x + 0.0
+
+        rows        = []
+        row_headers = []
+
+        rows.append("Isotropic exchange")
+        rows.append([value(exchange_tensor.isotropic_part())])
+        row_headers.append("J_iso")
+
+        rows.append("Symmetric traceless anisotropic exchange")
+        for label, i, j in (("D_xx",0,0),("D_yy",1,1),("D_xy",0,1),
+                            ("D_xz",0,2),("D_yz",1,2)):
+            rows.append([value(D[i][j])])
+            row_headers.append(label)
+
+        rows.append("Antisymmetric (Dzyaloshinskii--Moriya) exchange")
+        for label, i, j in (("d_x",1,2),("d_y",2,0),("d_z",0,1)):
+            rows.append([value(0.5*(J[i][j] - J[j][i]))])
+            row_headers.append(label)
+
+        notes = []
+        if self.frame is None:
+            notes.append("Coordinate frame: unspecified")
+        else:
+            notes.append("Coordinate frame: " + self.frame)
+        notes.append("H = {0} * (J_iso S_A.S_B + S_A.D.S_B + d.(S_A x S_B)),\n"
+                     "where A is the first and B the second spin site."
+                     .format(format(prefactor,'g')))
+        notes.append("Only the k1 = 1, k2 = 1 terms of the tensor are included.")
+        if not order_of_magnitude == 0:
+            notes.append("The parameters are multiplied by 10^{0}."
+                         .format(order_of_magnitude))
+
+        summary = ["D_zz = -(D_xx + D_yy): {0:.6f}".format(value(D[2][2]))]
+
+        if title is None:
+            title = "DECOMPOSITION OF THE BILINEAR EXCHANGE INTERACTION"
+
+        return result_table.ResultTable(rows,
+                                        column_headers=["Value"],
+                                        row_headers=row_headers,
+                                        row_header_label="Parameter",
+                                        title=title,
+                                        notes=notes,
+                                        summary=summary,
                                         table_type='spherical_tensor')
 
 
@@ -1751,6 +1912,62 @@ class IwaharaChibotaruSphericalTensor:
                       [complex(1.0,0.0),complex(0.5,0.5),complex(-0.5,0.5)])
         check('ITO table half_table with q1 = 0',
               len(table_rows(t_table.ITO_table(half_table=True))) == 2)
+
+        # Exchange decomposition: an exchange tensor assembled from known
+        # isotropic, symmetric traceless and Dzyaloshinskii--Moriya parts
+        # must be decomposed back into them. A rank k1 = k2 = 2 term and a
+        # one-site term are added to check that only the k1 = k2 = 1 terms
+        # are used.
+        J_iso = -1.7
+        D_ref = np.array([[ 0.4, 0.3,-0.2],
+                          [ 0.3,-0.9, 0.5],
+                          [-0.2, 0.5, 0.5]])
+        d_ref = np.array([0.25,-0.6,0.35])
+        A_ref = np.array([[ 0.0,      d_ref[2],-d_ref[1]],
+                          [-d_ref[2], 0.0,      d_ref[0]],
+                          [ d_ref[1],-d_ref[0], 0.0     ]])
+        J_ref = J_iso*np.identity(3) + D_ref + A_ref
+
+        # The d.(S_A x S_B) convention is checked against explicit spin
+        # matrices before the decomposition itself.
+        M_A = sum(A_ref[a][b]*np.kron(SA[a],SB[b])
+                  for a in range(0,3) for b in range(0,3))
+        M_d = (d_ref[0]*(np.kron(SA[1],SB[2]) - np.kron(SA[2],SB[1]))
+               + d_ref[1]*(np.kron(SA[2],SB[0]) - np.kron(SA[0],SB[2]))
+               + d_ref[2]*(np.kron(SA[0],SB[1]) - np.kron(SA[1],SB[0])))
+        check('antisymmetric exchange tensor equals d.(S_A x S_B)',
+              np.allclose(M_A,M_d))
+
+        t_exchange = (cls.from_two_site_cartesian_tensor(J_ref,pseudospin_A,pseudospin_B)
+                      + cls([[4,2,4,-2],[4,0,0,0]],[complex(0.7,0.2),complex(1.1,0.0)]))
+        exchange_table = t_exchange.exchange_decomposition_table(pseudospin_A,pseudospin_B)
+        exchange_values = [row[0] for row in table_rows(exchange_table)
+                           if not isinstance(row,str)]
+        check('exchange decomposition is a ResultTable',
+              isinstance(exchange_table,result_table.ResultTable))
+        check('exchange decomposition recovers the parameters',
+              np.allclose(exchange_values,
+                          [J_iso,
+                           D_ref[0][0],D_ref[1][1],D_ref[0][1],D_ref[0][2],D_ref[1][2],
+                           d_ref[0],d_ref[1],d_ref[2]]))
+        check('exchange decomposition row headers',
+              exchange_table.row_headers == ['J_iso','D_xx','D_yy','D_xy','D_xz','D_yz',
+                                             'd_x','d_y','d_z'])
+        scaled_values = [row[0] for row in
+                         table_rows(t_exchange.exchange_decomposition_table(
+                             pseudospin_A,pseudospin_B,order_of_magnitude=3))
+                         if not isinstance(row,str)]
+        check('exchange decomposition order_of_magnitude',
+              np.allclose(scaled_values,1.0e3*np.array(exchange_values)))
+        # In the -2J convention the same operator gives the parameters
+        # divided by -2.
+        prefactor_values = [row[0] for row in
+                            table_rows(t_exchange.exchange_decomposition_table(
+                                pseudospin_A,pseudospin_B,prefactor=-2.0))
+                            if not isinstance(row,str)]
+        check('exchange decomposition prefactor',
+              np.allclose(prefactor_values,-0.5*np.array(exchange_values)))
+        check('exchange decomposition renders', len(str(exchange_table)) > 0)
 
         # Coordinate frame labels: the default frame is unspecified, an
         # attached label is printed, addition keeps the label only when

@@ -455,6 +455,25 @@ has arrived in.
   parts as a `CartesianTensor`, and `two_site_cartesian_tensor(S_A, S_B)`
   the same for a two-site tensor.
 
+  The bilinear exchange of a two-site tensor is decomposed by
+  `exchange_decomposition_table(S_A, S_B, prefactor=1.0, title=None,
+  order_of_magnitude=0)`, which uses only the nine *k*<sub>1</sub> =
+  *k*<sub>2</sub> = 1 terms and returns a `ResultTable` of the isotropic
+  parameter *J*<sub>iso</sub>, the independent components *D*<sub>xx</sub>,
+  *D*<sub>yy</sub>, *D*<sub>xy</sub>, *D*<sub>xz</sub>, *D*<sub>yz</sub> of
+  the symmetric traceless part and the Dzyaloshinskii–Moriya vector
+  **d**, following
+  **S̃**<sub>A</sub>·**J**·**S̃**<sub>B</sub> =
+  *J*<sub>iso</sub> **S̃**<sub>A</sub>·**S̃**<sub>B</sub> +
+  **S̃**<sub>A</sub>·**D**·**S̃**<sub>B</sub> +
+  **d**·(**S̃**<sub>A</sub>×**S̃**<sub>B</sub>). The factor in front of the
+  exchange Hamiltonian is chosen with `prefactor`: the parameters are
+  tabulated for *H* = prefactor × (*J*<sub>iso</sub>
+  **S̃**<sub>A</sub>·**S̃**<sub>B</sub> + …), so e.g. `prefactor=-2.0`
+  gives the parameters of the −2*J* convention. The default 1.0 gives the
+  coefficients of the operator itself. Calling it on a tensor of any other
+  number of sites is an error.
+
 - **`ChibotaruUngurSphericalTensor`** — a single-site ITO expansion in the
   Chibotaru–Ungur notation [1], which is the notation SINGLE_ANISO prints
   its crystal-field parameters in. The expansion is given as the real
