@@ -41,7 +41,7 @@ the compiled extension; an informative error is raised only when a routine
 that needs it is actually called.
 """
 
-__version__ = "1.3.0"
+__version__ = "1.4.0"
 
 from ouluspin import units
 from ouluspin import result_table

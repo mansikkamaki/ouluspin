@@ -33,6 +33,9 @@ items:
     x_label     : the label of the horizontal axis
     y_label     : the label of the vertical axis
     y_from_zero : whether the vertical axis is drawn from zero
+    energy_axis_top : the energy at the top of the vertical axis of an
+                  effective barrier, or None, in which case the axis
+                  follows the drawn states
     title       : the title of the plot, or None
     legend      : whether the legends of the data sets are drawn
 """
@@ -594,12 +597,32 @@ def draw_effective_barrier(axes, content):
     # A margin is left around the states so that the bars and the arrow
     # heads are not cut by the frame of the plot.
     moment_margin = 0.1*(max(moment_list) - min(moment_list) + 1.0)
-    energy_margin = 0.1*(max(energy_list) - min(energy_list) + 1.0)
 
     axes.set_xlim(min(moment_list) - moment_margin,
                   max(moment_list) + moment_margin)
-    axes.set_ylim(min(energy_list) - energy_margin,
-                  max(energy_list) + energy_margin)
+    axes.set_ylim(*barrier_energy_limits(content))
+
+
+def barrier_energy_limits(content):
+    """Return the lower and the upper limit of the vertical axis of an
+    effective barrier plot.
+
+    A margin is left around the states so that the bars and the arrow
+    heads are not cut by the frame of the plot. When the top of the axis
+    is given (the item 'energy_axis_top' of the content), the axis ends
+    there instead of above the highest state.
+    """
+    energy_list = [level['energy'] for level in content['levels']]
+
+    energy_margin = 0.1*(max(energy_list) - min(energy_list) + 1.0)
+
+    bottom = min(energy_list) - energy_margin
+    top    = max(energy_list) + energy_margin
+
+    if content.get('energy_axis_top') is not None:
+        top = content['energy_axis_top']
+
+    return bottom, top
 
 
 def write_plot(content, filename, file_format,

@@ -108,6 +108,12 @@ class ResultPlot:
         together with the transitions involving them. Default is None, in
         which case the cutoff is deduced from the pathway itself (see the
         __barrier_cutoff private method).
+    energy_axis_top : float or None
+        The energy at the top of the vertical axis of an effective barrier
+        plot, in the energy unit of the source. It sets only the height of
+        the plot and not the states that are drawn, which are chosen by
+        energy_cutoff. Default is None, in which case the height follows
+        the drawn states, with a margin above the highest of them.
     degeneracy_tolerance : float or None
         The energy separation, in the energy unit of the source, below
         which two states of an energy level diagram are considered
@@ -142,6 +148,14 @@ class ResultPlot:
         The energy level structures of an energy level diagram, each with
         the items 'energies' and 'label'. Empty for the other kinds of
         plots.
+    energy_cutoff : float or None
+        The highest energy drawn in an effective barrier plot, either the
+        one given or the one deduced from the pathway. None for the other
+        kinds of plots.
+    energy_axis_top : float or None
+        The energy at the top of the vertical axis of an effective barrier
+        plot. None when it was not given and for the other kinds of plots,
+        in which case the vertical axis follows the drawn states.
     degeneracy_tolerance : float
         The separation below which two states of an energy level diagram
         are drawn beside each other as a degenerate group.
@@ -181,7 +195,7 @@ class ResultPlot:
         Build the data sets of a magnetization plot.
     __from_susceptibility(source,...)
         Build the data sets of a susceptibility plot.
-    __from_transition_moments(source,...)
+    __from_transition_moments(source,...,energy_cutoff,energy_axis_top)
         Build the levels and the transitions of an effective barrier.
     __from_eigenvalues(source,label,n_states,degeneracy_tolerance)
         Build the column of an energy level diagram.
@@ -434,7 +448,8 @@ class ResultPlot:
         return max(energy_list)
 
 
-    def __from_transition_moments(self, source, style, label, energy_cutoff):
+    def __from_transition_moments(self, source, style, label, energy_cutoff,
+                                  energy_axis_top):
         """Build the levels and the transitions of an effective barrier
         plot of the reversal of the magnetization.
         """
@@ -471,6 +486,29 @@ class ResultPlot:
         for i in index_list:
             self.levels.append({'moment': moment_list[i],
                                 'energy': energy_list[i]})
+
+        # The top of the vertical axis only sets the height of the plot;
+        # an axis ending below the lowest state would draw nothing, and
+        # one ending below the highest state cuts the states above it.
+        if energy_axis_top is not None:
+            self.energy_axis_top = float(energy_axis_top)
+
+            drawn_energies = [level['energy'] for level in self.levels]
+
+            if len(drawn_energies) > 0:
+                if self.energy_axis_top <= min(drawn_energies):
+                    self.__error("The top of the vertical axis ("
+                                 + str(self.energy_axis_top) + ") lies at or "
+                                 "below the lowest drawn state ("
+                                 + str(min(drawn_energies)) + ").")
+
+                if self.energy_axis_top < max(drawn_energies):
+                    self.__warning("The top of the vertical axis ("
+                                   + str(self.energy_axis_top) + ") lies below "
+                                   "the highest drawn state ("
+                                   + str(max(drawn_energies)) + ").\n"
+                                   "The states above it fall outside the plot; "
+                                   "lower energy_cutoff to leave them out.")
 
         # The transitions between the drawn states, pointed along the
         # relaxation pathway.
@@ -568,6 +606,7 @@ class ResultPlot:
                  label=None,
                  n_states=None,
                  energy_cutoff=None,
+                 energy_axis_top=None,
                  degeneracy_tolerance=None,
                  title=None):
         """Upon class initiation store the data of the source and the
@@ -589,6 +628,7 @@ class ResultPlot:
         self.title                = title
         self.legend               = False
         self.energy_cutoff        = None
+        self.energy_axis_top      = None
         self.degeneracy_tolerance = 0.0
         self.x_label              = ""
         self.y_label              = ""
@@ -599,7 +639,8 @@ class ResultPlot:
         elif isinstance(source,properties.StaticMagneticSusceptibility):
             self.__from_susceptibility(source,style,label)
         elif isinstance(source,properties.StaticTransitionMagneticMoments):
-            self.__from_transition_moments(source,style,label,energy_cutoff)
+            self.__from_transition_moments(source,style,label,energy_cutoff,
+                                           energy_axis_top)
         elif hasattr(source,'eigenvalues') and len(source.eigenvalues) > 0:
             self.__from_eigenvalues(source,label,n_states,degeneracy_tolerance)
         else:
@@ -675,6 +716,7 @@ class ResultPlot:
         instance.y_from_zero          = False
         instance.legend               = False
         instance.energy_cutoff        = None
+        instance.energy_axis_top      = None
         instance.degeneracy_tolerance = 0.0
 
         return instance
@@ -698,6 +740,7 @@ class ResultPlot:
                 'y_from_zero':          self.y_from_zero,
                 'title':                self.title,
                 'legend':               self.legend,
+                'energy_axis_top':      self.energy_axis_top,
                 'degeneracy_tolerance': self.degeneracy_tolerance}
 
 
@@ -1097,6 +1140,7 @@ class ResultPlot:
         result.y_label       = self.y_label
         result.y_from_zero   = self.y_from_zero or other.y_from_zero
         result.energy_cutoff = None
+        result.energy_axis_top = None
 
         # The summed diagram holds the levels of both, so the wider of the
         # two tolerances is the one that groups them all.
@@ -1347,6 +1391,29 @@ class ResultPlot:
                     route_ok = False
 
         check('the arrows of the barrier follow the relaxation pathway',route_ok)
+
+        # The top of the vertical axis is set apart from the energy cutoff:
+        # it changes the height of the plot but not the states drawn.
+        highest_energy = max([level['energy'] for level in barrier.levels])
+        lowest_energy  = min([level['energy'] for level in barrier.levels])
+        axis_top       = highest_energy + 10.0*(highest_energy
+                                                - lowest_energy + 1.0)
+
+        tall_barrier   = cls(transition_moments,energy_axis_top=axis_top)
+        tall_limits    = _images.barrier_energy_limits(
+                             tall_barrier._ResultPlot__plot_content())
+        default_limits = _images.barrier_energy_limits(
+                             barrier._ResultPlot__plot_content())
+
+        check('by default the axis follows the drawn states',
+              barrier.energy_axis_top is None
+              and highest_energy < default_limits[1] < axis_top)
+        check('the given top of the axis sets the height of the barrier',
+              abs(tall_limits[1] - axis_top) < 1.0e-12
+              and abs(tall_limits[0] - default_limits[0]) < 1.0e-12)
+        check('the top of the axis leaves the drawn states alone',
+              tall_barrier.levels == barrier.levels
+              and tall_barrier.energy_cutoff == barrier.energy_cutoff)
 
         # The sizes of an image. A plain number is read as centimetres and
         # a string carries its own unit; a size in pixels is a physical
