@@ -14,7 +14,7 @@ public class carries a detailed docstring documenting its constructor
 arguments, attributes and methods; the docstrings are the authoritative
 reference for the individual classes.
 
-The current version is **1.5.0**; see [Versioning](#versioning).
+The current version is **1.6.0**; see [Versioning](#versioning).
 
 ## Contents
 
@@ -512,6 +512,19 @@ has arrived in.
   table. Note that the division into axial and non-axial terms depends on
   the coordinate frame of the tensor, whereas the isotropic exchange and
   the total do not.
+
+  After the classes the same table lists a second, independent division
+  of the total: the Λ, Λ<sup>2</sup> and the fraction of each *set of
+  ranks*, i.e. of all the terms with the same ranks *k*<sub>1</sub>,
+  *k*<sub>2</sub>, … on the sites whatever their components *q* are. For
+  a two-site tensor the rows are those of *k*<sub>1</sub> = 1,
+  *k*<sub>2</sub> = 0; *k*<sub>1</sub> = 1, *k*<sub>2</sub> = 1;
+  *k*<sub>1</sub> = 2, *k*<sub>2</sub> = 0 and so on for every
+  combination of ranks the tensor has terms of, the one-site sets first
+  (a rank zero means that the terms do not act on the site). The squares
+  of these measures add up to the total as well, and they depend neither
+  on the coordinate frame nor on `axial_sites`. The `threshold` applies
+  to them as it does to the classes.
 
 - **`ChibotaruUngurSphericalTensor`** — a single-site ITO expansion in the
   Chibotaru–Ungur notation [1], which is the notation SINGLE_ANISO prints
@@ -1146,7 +1159,7 @@ The version of the library is read from the package:
 
 ```python
 import ouluspin
-ouluspin.__version__        # '1.5.0'
+ouluspin.__version__        # '1.6.0'
 ```
 
 The numbering is [semantic versioning](https://semver.org), i.e.

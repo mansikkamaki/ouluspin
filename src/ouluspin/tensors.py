@@ -471,9 +471,9 @@ class IwaharaChibotaruSphericalTensor:
     __norm_weight(k,pseudospin) : float or None
         Return the norm weight Tr(O_kq^H O_kq)/(2S + 1) of the operators of the rank k
         of a pseudospin S, or None when the rank exceeds 2S.
-    __lambda_measures(pseudospin_list,axial_sites) : list of tuple, float
+    __lambda_measures(pseudospin_list,axial_sites) : list of tuple, list of tuple, float
         Calculate the squares of the Lambda measures of the classes of terms of the
-        tensor and of the whole tensor.
+        tensor, of the sets of ranks of the tensor and of the whole tensor.
 
     Public methods
     --------------
@@ -499,7 +499,9 @@ class IwaharaChibotaruSphericalTensor:
         crystal field and the odd-rank terms of each site, the isotropic, the axial and
         the other exchange and the non-exchange terms of each pair of sites, and the
         terms of more than two sites, together with the total and the fractions of it.
-        The classes of terms the tensor does not contain are left out.
+        The classes of terms the tensor does not contain are left out. As an independent
+        division of the same total, the table also lists the measures of the sets of
+        ranks, i.e. of all the terms with the same ranks k1, k2, ... on the sites.
     inflate_dimension(site_list)
         Inflate the tensor IN PLACE so that it corresponds to a tensor acting on a
         system with more spin sites than included in this tensor. The tensor
@@ -632,8 +634,9 @@ class IwaharaChibotaruSphericalTensor:
 
     def __lambda_measures(self, pseudospin_list, axial_sites):
         """Calculate the squares of the Lambda measures of the classes of
-        terms of the tensor; see lambda_measure_table for the definition of
-        the measures and of the classes.
+        terms and of the sets of ranks of the tensor; see
+        lambda_measure_table for the definition of the measures, of the
+        classes and of the sets of ranks.
 
         Arguments
         ---------
@@ -654,6 +657,13 @@ class IwaharaChibotaruSphericalTensor:
             'one_site_other', 'isotropic', 'axial_first', 'axial_second',
             'axial_both', 'exchange_other', 'two_site_other' and
             'multi_site', and measure is Lambda^2 of the class.
+        rank_measure_list : list of tuple
+            The sets of ranks the tensor has terms of, in the order they
+            are tabulated, each as a tuple (rank_set, measure), where
+            rank_set holds the ranks k1, k2, ... of the sites as real
+            integers (not as multiples of two) and measure is Lambda^2 of
+            all the terms with these ranks. The constant term, i.e. the
+            set with all ranks zero, is not included.
         total : float
             Lambda^2 of the whole tensor without its constant term.
         """
@@ -683,6 +693,9 @@ class IwaharaChibotaruSphericalTensor:
         # sites and the rank as the pair [weight, {q: parameter}].
         scalar_blocks = {}
 
+        # The measures of the sets of ranks, by the ranks of all the sites.
+        rank_measures = {}
+
         total = 0.0
 
         for i in range(0,self.n_ranks):
@@ -710,6 +723,9 @@ class IwaharaChibotaruSphericalTensor:
 
             value  = W * abs(X)**2
             total += value
+
+            rank_set = tuple(rank_tuple[2*n]//2 for n in range(0,self.n_sites))
+            rank_measures[rank_set] = rank_measures.get(rank_set,0.0) + value
 
             # The ranks and the components as real integers.
             k_list = [rank_tuple[2*n]//2   for n in active_sites]
@@ -769,7 +785,18 @@ class IwaharaChibotaruSphericalTensor:
 
         measure_list.sort(key=order)
 
-        return measure_list, total
+        # The sets of ranks follow the order of the classes: the sets with
+        # a non-zero rank on one site come first, then those of two sites
+        # and so on, each ordered by the sites and then by the ranks.
+        def rank_order(entry):
+            rank_set, measure = entry
+            active_sites = tuple(n for n in range(0,self.n_sites)
+                                 if rank_set[n] != 0)
+            return (len(active_sites),active_sites,rank_set)
+
+        rank_measure_list = sorted(rank_measures.items(),key=rank_order)
+
+        return measure_list, rank_measure_list, total
 
 
     def cartesian_vector(self,pseudospin):
@@ -1334,6 +1361,27 @@ class IwaharaChibotaruSphericalTensor:
         sums of the classes of each site and of each pair of sites, and the
         total do not.
 
+        After the classes the table lists a second, independent division
+        of the same total: the measures of the sets of ranks. A set of
+        ranks (k1,k2,...) gathers all the terms with the rank k1 on the
+        first site, k2 on the second site and so on, whatever their
+        components q are,
+
+            Lambda_(k1,k2,...)^2 = W sum_{q1,q2,...} |X_k1q1,k2q2,...|^2,
+
+        so that for a two-site tensor the rows are those of k1 = 1, k2 = 0;
+        k1 = 1, k2 = 1; k1 = 2, k2 = 0 and so on for all the combinations
+        of ranks the tensor has terms of. A rank zero means that the terms
+        do not act on the site, and the set with all ranks zero is the
+        constant term, which is left out. The sets are listed in the order
+        of the classes: those with a non-zero rank on one site first, then
+        those of two sites and so on, each ordered by the sites and then
+        by the ranks. The squares of the measures of the sets add up to
+        the total just as those of the classes do, and they do not depend
+        on the coordinate frame of the tensor, since a rotation only mixes
+        the components of a rank with each other. The division does not
+        depend on axial_sites either.
+
         Arguments
         ---------
         pseudospin_list : list of int
@@ -1364,10 +1412,10 @@ class IwaharaChibotaruSphericalTensor:
             10^order_of_magnitude and those of Lambda^2 by its square.
             Default is 0.
         threshold : float
-            The classes with Lambda_C not larger than threshold times the
-            total Lambda are left out of the table, as are the classes the
-            tensor has no terms of. The total always includes all terms.
-            Default is 1.0e-6.
+            The classes and the sets of ranks with Lambda not larger than
+            threshold times the total Lambda are left out of the table, as
+            are the classes and the sets of ranks the tensor has no terms
+            of. The total always includes all terms. Default is 1.0e-6.
         """
         if isinstance(pseudospin_list,(int,np.integer)):
             pseudospin_list = [pseudospin_list]
@@ -1393,7 +1441,8 @@ class IwaharaChibotaruSphericalTensor:
                                  + "The sites are numbered from 0 to {0}.".format(self.n_sites - 1))
             axial_sites = sorted(set(axial_sites))
 
-        measure_list, total = self.__lambda_measures(pseudospin_list,axial_sites)
+        measure_list, rank_measure_list, total = self.__lambda_measures(pseudospin_list,
+                                                                        axial_sites)
 
         factor = 10.0**(order_of_magnitude)
 
@@ -1445,6 +1494,27 @@ class IwaharaChibotaruSphericalTensor:
             rows.append([factor*sqrt(measure),factor**2*measure,100.0*measure/total])
             row_headers.append(label(site_tuple,class_name))
 
+        # The sets of ranks, which divide the total independently of the
+        # classes and are therefore separated from them by a rule.
+        rank_rows        = []
+        rank_row_headers = []
+        for rank_set, measure in rank_measure_list:
+            if sqrt(measure) <= threshold*sqrt(total):
+                continue
+
+            rank_rows.append([factor*sqrt(measure),factor**2*measure,100.0*measure/total])
+            rank_row_headers.append(", ".join("k{0} = {1}".format(n + 1,rank_set[n])
+                                              for n in range(0,self.n_sites)))
+
+        if len(rank_rows) > 0:
+            rows.append(None)
+            if self.n_sites == 1:
+                rows.append("Terms of each rank")
+            else:
+                rows.append("Terms of each set of ranks")
+            rows.extend(rank_rows)
+            row_headers.extend(rank_row_headers)
+
         rows.append(None)
         if total > 0.0:
             rows.append([factor*sqrt(total),factor**2*total,100.0])
@@ -1468,6 +1538,9 @@ class IwaharaChibotaruSphericalTensor:
                      "Lambda^2 = Tr(X_C^H X_C)/d, where d is the dimension of the space.\n"
                      "The constant term is left out. The fractions are those of Lambda^2,\n"
                      "which is additive over the classes.")
+        notes.append("The sets of ranks divide the total independently of the classes of\n"
+                     "terms: each gathers the terms of all components q with the given\n"
+                     "ranks on the sites.")
         if self.n_sites > 1:
             if len(axial_sites) == 0:
                 notes.append("The axial character of the exchange is not analysed.")
@@ -2388,6 +2461,15 @@ class IwaharaChibotaruSphericalTensor:
             return dict((header,row[1]) for header, row
                         in zip(table.row_headers,value_rows))
 
+        # The table holds two divisions of the total, the classes of terms
+        # and the sets of ranks, whose rows are told apart by the header.
+        def class_squares(squares):
+            return dict((header,value) for header, value in squares.items()
+                        if not (header == 'Total' or header.startswith('k1 = ')))
+        def rank_squares(squares):
+            return dict((header,value) for header, value in squares.items()
+                        if header.startswith('k1 = '))
+
         # The total of a tensor against the trace of the square of its
         # operator matrix without the constant term. The operator matrices
         # are constructed for Hermitian tensors only.
@@ -2427,7 +2509,8 @@ class IwaharaChibotaruSphericalTensor:
         check('Lambda measure norm weights of J = 15/2', weights_ok)
 
         # A one-site tensor: the classes are told apart by the parity of
-        # the rank and by q, and the constant term is left out.
+        # the rank and by q, the terms of each rank are gathered into the
+        # set of the rank, and the constant term is left out.
         t_local = cls([[0,0],[2,0],[4,0],[4,2],[4,-2],[8,6],[8,-6]],
                       [complex(5.0,0.0),complex(0.3,0.0),complex(1.1,0.0),
                        complex(0.4,-0.2),complex(-0.4,-0.2),
@@ -2440,29 +2523,45 @@ class IwaharaChibotaruSphericalTensor:
         check('Lambda measures of a one-site tensor',
               (local_table.row_headers == ['Site 1: axial crystal field',
                                            'Site 1: non-axial crystal field',
-                                           'Site 1: odd-rank terms','Total'])
+                                           'Site 1: odd-rank terms',
+                                           'k1 = 1','k1 = 2','k1 = 4','Total'])
               and np.isclose(squares['Site 1: axial crystal field'],w(2)*1.1**2)
               and np.isclose(squares['Site 1: non-axial crystal field'],
                              w(2)*2.0*0.2 + w(4)*2.0*0.49)
               and np.isclose(squares['Site 1: odd-rank terms'],w(1)*0.09))
+        check('Lambda measures of the ranks of a one-site tensor',
+              np.isclose(squares['k1 = 1'],w(1)*0.09)
+              and np.isclose(squares['k1 = 2'],w(2)*(1.1**2 + 2.0*0.2))
+              and np.isclose(squares['k1 = 4'],w(4)*2.0*0.49))
         check('Lambda measure total matches the operator norm (one site)',
               np.isclose(squares['Total'],trace_norm(t_local,[5])))
+        # The fractions of the classes and those of the sets of ranks add
+        # up to 100 % separately.
         fractions = [row[2] for row in table_rows(local_table) if isinstance(row,list)]
         check('Lambda measure fractions add up to 100 %',
-              np.isclose(sum(fractions[:-1]),100.0) and np.isclose(fractions[-1],100.0))
+              np.isclose(sum(fractions[0:3]),100.0)
+              and np.isclose(sum(fractions[3:6]),100.0)
+              and np.isclose(fractions[-1],100.0))
         scaled_row = [row for row in table_rows(t_local.lambda_measure_table(
                           [5],order_of_magnitude=2)) if isinstance(row,list)][-1]
         check('Lambda measure order_of_magnitude',
               np.isclose(scaled_row[0],1.0e2*sqrt(squares['Total']))
               and np.isclose(scaled_row[1],1.0e4*squares['Total'])
               and np.isclose(scaled_row[2],100.0))
-        # A class below the threshold is left out of the table but not of
-        # the total.
+        # A class and a set of ranks below the threshold are left out of
+        # the table but not of the total.
         t_small = cls([[4,0],[2,0]],[complex(1.0,0.0),complex(1.0e-9,0.0)])
         check('Lambda measure threshold',
               (t_small.lambda_measure_table(5).row_headers
-               == ['Site 1: axial crystal field','Total'])
-              and (len(t_small.lambda_measure_table(5,threshold=0.0).row_headers) == 3))
+               == ['Site 1: axial crystal field','k1 = 2','Total'])
+              and (t_small.lambda_measure_table(5,threshold=0.0).row_headers
+                   == ['Site 1: axial crystal field','Site 1: odd-rank terms',
+                       'k1 = 1','k1 = 2','Total']))
+        # A tensor of the constant term alone has neither classes nor sets
+        # of ranks.
+        check('Lambda measures of a constant term',
+              cls([[0,0]],[complex(1.0,0.0)]).lambda_measure_table(5).row_headers
+              == ['Total'])
 
         # A pseudospin J = 5/2 coupled to a spin S = 1/2: a random Hermitian
         # tensor of all the ranks against the explicit expressions of the
@@ -2507,16 +2606,37 @@ class IwaharaChibotaruSphericalTensor:
               and np.isclose(squares['Sites 1-2: other exchange'],ex_other))
         check('Lambda measure total matches the operator norm (two sites)',
               np.isclose(squares['Total'],trace_norm(t_JS,[5,1]))
-              and np.isclose(squares['Total'],
-                             sum(value for header, value in squares.items()
-                                 if not header == 'Total')))
+              and np.isclose(squares['Total'],sum(class_squares(squares).values())))
         check('Lambda measure classes outside the crystal field and the exchange',
               ('Site 1: odd-rank terms' in squares)
               and ('Site 2: odd-rank terms' in squares)
               and ('Sites 1-2: non-exchange terms' in squares))
 
+        # The sets of ranks: every combination of the ranks of the two
+        # sites except the constant term, each gathering all the components
+        # of its ranks, the one-site sets before the two-site ones.
+        rank_set_list = ([(k1,0) for k1 in range(1,6)] + [(0,1)]
+                         + [(k1,1) for k1 in range(1,6)])
+        rank_sets_ok  = True
+        for k1, k2 in rank_set_list:
+            rank_sets_ok = rank_sets_ok and np.isclose(
+                squares['k1 = {0}, k2 = {1}'.format(k1,k2)],
+                W(k1,k2)*sum(abs(X(k1,q1,k2,q2))**2
+                             for q1 in range(-k1,k1+1) for q2 in range(-k2,k2+1)))
+        check('Lambda measures of the sets of ranks of a J-S system',
+              rank_sets_ok
+              and (list(rank_squares(squares).keys())
+                   == ['k1 = {0}, k2 = {1}'.format(k1,k2) for k1, k2 in rank_set_list])
+              and np.isclose(squares['Total'],sum(rank_squares(squares).values())))
+        check('Lambda measures of the sets of ranks match those of the classes',
+              np.isclose(squares['k1 = 2, k2 = 0'] + squares['k1 = 4, k2 = 0'],
+                         cf_axial + cf_other)
+              and np.isclose(sum(squares['k1 = {0}, k2 = 1'.format(k)] for k in (1,3,5)),
+                             ex_isotropic + ex_axial + ex_other))
+
         # With both sites analysed the axial exchange is divided into three
-        # classes, which add up to the same exchange as before.
+        # classes, which add up to the same exchange as before. The sets of
+        # ranks do not depend on the sites analysed.
         squares_both = lambda_squares(t_JS.lambda_measure_table([5,1],axial_sites=[0,1]))
         check('Lambda measures with the axial character analysed on both sites',
               np.isclose(squares_both['Sites 1-2: exchange axial on site 1 only']
@@ -2524,9 +2644,11 @@ class IwaharaChibotaruSphericalTensor:
                          ex_axial)
               and np.isclose(squares_both['Sites 1-2: exchange axial on site 2 only']
                              + squares_both['Sites 1-2: other exchange'],ex_other)
-              and np.isclose(squares_both['Sites 1-2: isotropic exchange'],ex_isotropic))
+              and np.isclose(squares_both['Sites 1-2: isotropic exchange'],ex_isotropic)
+              and (rank_squares(squares_both) == rank_squares(squares)))
 
-        # The isotropic exchange and the total do not depend on the frame.
+        # The isotropic exchange, the sets of ranks and the total do not
+        # depend on the frame.
         t_JS_rotated = deepcopy(t_JS)
         t_JS_rotated.rotate(rotation)
         squares_rotated = lambda_squares(t_JS_rotated.lambda_measure_table([5,1]))
@@ -2534,22 +2656,27 @@ class IwaharaChibotaruSphericalTensor:
               np.isclose(squares_rotated['Sites 1-2: isotropic exchange'],ex_isotropic)
               and np.isclose(squares_rotated['Total'],squares['Total'])
               and not np.isclose(squares_rotated['Sites 1-2: other exchange'],ex_other))
+        check('sets of ranks are invariant in a rotation',
+              (rank_squares(squares_rotated).keys() == rank_squares(squares).keys())
+              and all(np.isclose(squares_rotated[header],value)
+                      for header, value in rank_squares(squares).items()))
 
         # The Heisenberg operator is purely isotropic, and the Ising
         # operator is one third isotropic and two thirds axial.
         check('Lambda measures of the Heisenberg operator',
               t_isotropic.lambda_measure_table([pseudospin_A,pseudospin_B]).row_headers
-              == ['Sites 1-2: isotropic exchange','Total'])
+              == ['Sites 1-2: isotropic exchange','k1 = 1, k2 = 1','Total'])
         squares = lambda_squares(t_ising.lambda_measure_table([pseudospin_A,pseudospin_B]))
         check('Lambda measures of the Ising operator',
-              (len(squares) == 3)
+              (len(class_squares(squares)) == 2)
+              and np.isclose(squares['k1 = 1, k2 = 1'],squares['Total'])
               and np.isclose(squares['Sites 1-2: isotropic exchange'],squares['Total']/3.0)
               and np.isclose(squares['Sites 1-2: exchange axial on site 1'],
                              2.0*squares['Total']/3.0))
         squares = lambda_squares(t_ising.lambda_measure_table([pseudospin_A,pseudospin_B],
                                                               axial_sites=[]))
         check('Lambda measures without the axial classes',
-              (len(squares) == 3)
+              (len(class_squares(squares)) == 2)
               and np.isclose(squares['Sites 1-2: other exchange'],2.0*squares['Total']/3.0))
 
         # The scalar product of the rank-3 operators of two spins 3/2 is
@@ -2558,10 +2685,12 @@ class IwaharaChibotaruSphericalTensor:
                        [complex((-1.0)**abs(q),0.0) for q in range(-3,4)])
         check('Lambda measures of a rank-3 scalar product',
               t_scalar.lambda_measure_table([3,3]).row_headers
-              == ['Sites 1-2: isotropic exchange','Total'])
+              == ['Sites 1-2: isotropic exchange','k1 = 3, k2 = 3','Total'])
 
         # A three-site tensor: each pair of sites is analysed on its own,
-        # and the terms of more than two sites form a single class.
+        # and the terms of more than two sites form a single class. The
+        # sets of ranks follow the order of the classes: one site, each
+        # pair of sites and all three sites.
         t_three = hermitian_tensor([[2,0,0,0,0,0],[4,2,0,0,0,0],[0,0,4,0,0,0],
                                     [2,0,2,0,0,0],[4,0,4,2,0,0],[2,2,0,0,2,-2],
                                     [0,0,2,2,2,0],[2,0,2,2,2,-2],[4,0,2,0,2,0]],
@@ -2581,12 +2710,26 @@ class IwaharaChibotaruSphericalTensor:
                   'Sites 1-3: exchange axial on site 1',
                   'Sites 1-3: other exchange',
                   'Sites 2-3: other exchange',
-                  'Terms of more than two sites','Total'])
+                  'Terms of more than two sites',
+                  'k1 = 1, k2 = 0, k3 = 0','k1 = 2, k2 = 0, k3 = 0',
+                  'k1 = 0, k2 = 2, k3 = 0',
+                  'k1 = 1, k2 = 1, k3 = 0','k1 = 2, k2 = 2, k3 = 0',
+                  'k1 = 1, k2 = 0, k3 = 1',
+                  'k1 = 0, k2 = 1, k3 = 1',
+                  'k1 = 1, k2 = 1, k3 = 1','k1 = 2, k2 = 1, k3 = 1','Total'])
+        check('Lambda measures of the sets of ranks of a three-site tensor',
+              np.isclose(squares['k1 = 1, k2 = 1, k3 = 1'] + squares['k1 = 2, k2 = 1, k3 = 1'],
+                         squares['Terms of more than two sites'])
+              and np.isclose(squares['k1 = 1, k2 = 0, k3 = 1'],
+                             squares['Sites 1-3: isotropic exchange']
+                             + squares['Sites 1-3: exchange axial on site 1']
+                             + squares['Sites 1-3: other exchange'])
+              and np.isclose(squares['k1 = 0, k2 = 2, k3 = 0'],
+                             squares['Site 2: axial crystal field']))
         check('Lambda measure total matches the operator norm (three sites)',
               np.isclose(squares['Total'],trace_norm(t_three,[2,2,1]))
-              and np.isclose(squares['Total'],
-                             sum(value for header, value in squares.items()
-                                 if not header == 'Total')))
+              and np.isclose(squares['Total'],sum(class_squares(squares).values()))
+              and np.isclose(squares['Total'],sum(rank_squares(squares).values())))
         check('Lambda measure table renders', len(str(three_table)) > 0)
 
         # Coordinate frame labels: the default frame is unspecified, an
