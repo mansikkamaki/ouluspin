@@ -14,7 +14,7 @@ public class carries a detailed docstring documenting its constructor
 arguments, attributes and methods; the docstrings are the authoritative
 reference for the individual classes.
 
-The current version is **1.4.0**; see [Versioning](#versioning).
+The current version is **1.5.0**; see [Versioning](#versioning).
 
 ## Contents
 
@@ -473,6 +473,45 @@ has arrived in.
   gives the parameters of the −2*J* convention. The default 1.0 gives the
   coefficients of the operator itself. Calling it on a tensor of any other
   number of sites is an error.
+
+  The relative weights of the different contributions to a tensor of any
+  number of sites are given by `lambda_measure_table(pseudospin_list,
+  axial_sites=None, title=None, order_of_magnitude=0, threshold=1.0e-6)`,
+  which returns a `ResultTable` of the Λ measures. The measure
+  Λ<sub>C</sub> of a class C of terms is the root-mean-square norm of the
+  part of the operator the terms make up,
+  Λ<sub>C</sub><sup>2</sup> = Tr(*X*<sub>C</sub><sup>†</sup>*X*<sub>C</sub>)/*d*,
+  where *d* is the dimension of the product space; unlike the bare
+  parameters, the measures of terms of different ranks can be compared
+  with each other, and their squares add up to that of the whole operator
+  (without its constant term). The method works out which classes the
+  tensor contains and tabulates Λ, Λ<sup>2</sup> and the fraction of the
+  total Λ<sup>2</sup> for each of them and for the total:
+
+  - for each site, the *axial crystal field* (even rank, *q* = 0), the
+    *non-axial crystal field* (even rank, *q* ≠ 0) and the *odd-rank
+    terms*, which vanish in a time-reversal invariant operator;
+  - for each pair of sites, the *isotropic exchange* (the part invariant
+    under a simultaneous rotation of the two pseudospins, i.e. the scalar
+    products of the odd ranks), the *axial exchange* (*q* = 0 on a site),
+    the *other exchange* and the *non-exchange terms*; the exchange terms
+    are those of odd rank on both sites;
+  - the *terms of more than two sites* as a single class.
+
+  The pseudospins of the sites are given as multiples of two (a single
+  int will do for a one-site tensor). `axial_sites` lists the sites
+  (numbered from zero) with respect to which the axial character of the
+  exchange is analysed; by default these are the sites with a pseudospin
+  larger than 1/2, so that a *J* multiplet coupled to a spin 1/2 has a
+  single class of exchange axial on the multiplet, and when both sites of
+  a pair are listed the terms axial on the first site only, on the second
+  only and on both are tabulated separately. The isotropic exchange is
+  projected out first, which divides e.g. the Ising interaction into one
+  third of isotropic and two thirds of axial exchange. The classes with
+  Λ<sub>C</sub> below `threshold` times the total are left out of the
+  table. Note that the division into axial and non-axial terms depends on
+  the coordinate frame of the tensor, whereas the isotropic exchange and
+  the total do not.
 
 - **`ChibotaruUngurSphericalTensor`** — a single-site ITO expansion in the
   Chibotaru–Ungur notation [1], which is the notation SINGLE_ANISO prints
@@ -1107,7 +1146,7 @@ The version of the library is read from the package:
 
 ```python
 import ouluspin
-ouluspin.__version__        # '1.4.0'
+ouluspin.__version__        # '1.5.0'
 ```
 
 The numbering is [semantic versioning](https://semver.org), i.e.

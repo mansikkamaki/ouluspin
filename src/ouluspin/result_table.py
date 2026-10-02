@@ -1454,11 +1454,13 @@ class ResultTable:
         # trailing symbol is a single capital letter, so it cannot be
         # confused with the continuation of an ordinary word: the 'nu' of
         # 'number' is still not taken for a symbol, since it is followed by
-        # a lower-case letter.
+        # a lower-case letter. The letter may also carry a superscript, as
+        # the 'Lambda^2' of the Lambda measures of a tensor.
         greek_str = ("(?<![A-Za-z])(?P<greek>"
                      + "|".join(sorted(cls.GREEK_LETTERS.keys(),
                                        key=len,reverse=True))
                      + r")(?:_(?P<greek_sub>" + index_str + r"))?"
+                     r"(?:\^(?P<greek_sup>-?[A-Za-z0-9]+))?"
                      r"(?P<greek_tail>[A-Z](?![A-Za-z0-9]))?(?![A-Za-z])")
 
         # The magnitude of a quantity, such as the '|X_k1q1|' of the tensor
@@ -1513,7 +1515,8 @@ class ResultTable:
                     as in 'chiT', the atom of that symbol as well.
                     """
                     atom_list.append(quantity(match.group('greek'),
-                                              match.group('greek_sub'),None))
+                                              match.group('greek_sub'),
+                                              match.group('greek_sup')))
                     if match.group('greek_tail') is not None:
                         atom_list.append(quantity(match.group('greek_tail'),
                                                   None,None))
@@ -2132,6 +2135,9 @@ class ResultTable:
               == ['μ','B'])
         check('an index of several parts is kept together',
               latex_markup('mu_z,i') == "$\\mu_{z,i}$")
+        check('a Greek letter carries its superscript',
+              (segment_of('Lambda^2','2')['position'] == 'super')
+              and (latex_markup('Lambda^2') == "$\\Lambda^{2}$"))
 
         # A header that states a plain number, e.g. the projection of a
         # basis state, is set as a number, so that a negative value carries

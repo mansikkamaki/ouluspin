@@ -468,6 +468,12 @@ class IwaharaChibotaruSphericalTensor:
     __reorder_parameter_list()
         Order the parameter_list and rank_list so that lowest ranks are listed first in
         ascending order.
+    __norm_weight(k,pseudospin) : float or None
+        Return the norm weight Tr(O_kq^H O_kq)/(2S + 1) of the operators of the rank k
+        of a pseudospin S, or None when the rank exceeds 2S.
+    __lambda_measures(pseudospin_list,axial_sites) : list of tuple, float
+        Calculate the squares of the Lambda measures of the classes of terms of the
+        tensor and of the whole tensor.
 
     Public methods
     --------------
@@ -487,6 +493,13 @@ class IwaharaChibotaruSphericalTensor:
         the isotropic exchange parameter, the independent components of the symmetric
         traceless anisotropic exchange and the Dzyaloshinskii--Moriya vector, in the
         convention of the Hamiltonian set by the prefactor (e.g. -1 or -2).
+    lambda_measure_table(pseudospin_list,axial_sites=None,title=None,order_of_magnitude=0,threshold=1.0e-6) : ResultTable
+        Return the Lambda measures, i.e. the root-mean-square norms, of the different
+        contributions to a tensor of any number of sites: the axial and the non-axial
+        crystal field and the odd-rank terms of each site, the isotropic, the axial and
+        the other exchange and the non-exchange terms of each pair of sites, and the
+        terms of more than two sites, together with the total and the fractions of it.
+        The classes of terms the tensor does not contain are left out.
     inflate_dimension(site_list)
         Inflate the tensor IN PLACE so that it corresponds to a tensor acting on a
         system with more spin sites than included in this tensor. The tensor
@@ -587,7 +600,178 @@ class IwaharaChibotaruSphericalTensor:
         self.parameter_list = [self.parameter_list[i] for i in order]
         self.rank_list      = [self.rank_list[i] for i in order]
 
-    
+
+    def __norm_weight(self, k, pseudospin):
+        """Return the norm weight w_k(S) of the Iwahara--Chibotaru operators
+        of the rank k of a pseudospin S, both given as multiples of two.
+
+        The weight is the squared norm of the operator per state of the
+        multiplet,
+
+            w_k(S) = Tr(O_kq^H O_kq) / (2S + 1) = 1 / ((2k + 1) * C^2),
+
+        where C is the Clebsch--Gordan coefficient <S S k 0|S S> the
+        operators are normalized with,
+
+            C^2 = prod_{j=0}^{k-1} (2S - j) / (2S + j + 2).
+
+        The weight does not depend on the component q, and w_0 = 1. The
+        operators of the ranks k > 2S vanish, and None is returned for them.
+        """
+        k = k // 2
+
+        if k > pseudospin:
+            return None
+
+        cg_squared = 1.0
+        for j in range(0,k):
+            cg_squared *= float(pseudospin - j) / float(pseudospin + j + 2)
+
+        return 1.0 / ((2*k + 1) * cg_squared)
+
+
+    def __lambda_measures(self, pseudospin_list, axial_sites):
+        """Calculate the squares of the Lambda measures of the classes of
+        terms of the tensor; see lambda_measure_table for the definition of
+        the measures and of the classes.
+
+        Arguments
+        ---------
+        pseudospin_list : list of int
+            The pseudospins of the sites, as multiples of two.
+        axial_sites : list of int
+            The indices of the sites with respect to which the axial
+            character of the exchange terms is analysed.
+
+        Returns
+        -------
+        measure_list : list of tuple
+            The classes the tensor has terms of, in the order they are
+            tabulated, each as a tuple (site_tuple, class_name, measure),
+            where site_tuple holds the indices of the sites the terms of
+            the class act on (empty for the terms of more than two sites),
+            class_name is one of 'cf_axial', 'cf_non_axial',
+            'one_site_other', 'isotropic', 'axial_first', 'axial_second',
+            'axial_both', 'exchange_other', 'two_site_other' and
+            'multi_site', and measure is Lambda^2 of the class.
+        total : float
+            Lambda^2 of the whole tensor without its constant term.
+        """
+        class_order = ('cf_axial','cf_non_axial','one_site_other',
+                       'isotropic','axial_first','axial_second','axial_both',
+                       'exchange_other','two_site_other','multi_site')
+
+        measures = {}
+        def add(site_tuple,class_name,value):
+            key = (site_tuple,class_name)
+            measures[key] = measures.get(key,0.0) + value
+
+        def exchange_class(site_tuple,q_list):
+            axial_first  = (site_tuple[0] in axial_sites) and (q_list[0] == 0)
+            axial_second = (site_tuple[1] in axial_sites) and (q_list[1] == 0)
+
+            if axial_first and axial_second:
+                return 'axial_both'
+            elif axial_first:
+                return 'axial_first'
+            elif axial_second:
+                return 'axial_second'
+            return 'exchange_other'
+
+        # The terms with the components (q,-q) of equal odd ranks k on two
+        # sites, which hold the isotropic exchange. They are stored by the
+        # sites and the rank as the pair [weight, {q: parameter}].
+        scalar_blocks = {}
+
+        total = 0.0
+
+        for i in range(0,self.n_ranks):
+            rank_tuple = self.rank_list[i]
+            X          = self.parameter_list[i]
+
+            if X == 0.0:
+                continue
+
+            active_sites = tuple(n for n in range(0,self.n_sites)
+                                 if rank_tuple[2*n] != 0)
+
+            # The constant term is not a part of any class.
+            if len(active_sites) == 0:
+                continue
+
+            W = 1.0
+            for n in active_sites:
+                w = self.__norm_weight(rank_tuple[2*n],pseudospin_list[n])
+                if w is None:
+                    self.__error("The rank k = {0} of a term exceeds 2S = {1} of the site {2}.\n"
+                                 .format(rank_tuple[2*n]//2,pseudospin_list[n],n + 1)
+                                 + "The tensor does not belong to the given pseudospins.")
+                W *= w
+
+            value  = W * abs(X)**2
+            total += value
+
+            # The ranks and the components as real integers.
+            k_list = [rank_tuple[2*n]//2   for n in active_sites]
+            q_list = [rank_tuple[2*n+1]//2 for n in active_sites]
+
+            if len(active_sites) == 1:
+                if k_list[0] % 2 == 1:
+                    add(active_sites,'one_site_other',value)
+                elif q_list[0] == 0:
+                    add(active_sites,'cf_axial',value)
+                else:
+                    add(active_sites,'cf_non_axial',value)
+
+            elif len(active_sites) == 2:
+                if (k_list[0] % 2 == 0) or (k_list[1] % 2 == 0):
+                    add(active_sites,'two_site_other',value)
+                    continue
+
+                if (k_list[0] == k_list[1]) and (q_list[0] == -q_list[1]):
+                    block = scalar_blocks.setdefault((active_sites,k_list[0]),[W,{}])
+                    block[1][q_list[0]] = X
+                else:
+                    add(active_sites,exchange_class(active_sites,q_list),value)
+
+            else:
+                add((),'multi_site',value)
+
+        # Divide the (q,-q) terms between the classes. In the space of these
+        # terms the scalar product is the unit vector e_q = (-1)^q/sqrt(2k+1),
+        # and the component of the terms along it is the isotropic exchange.
+        # The (0,0) direction made orthogonal to e belongs to the class of
+        # the (0,0) term, and the rest of the space is other exchange. Note
+        # that the terms have a component along the orthogonalized (0,0)
+        # direction even when the (0,0) parameter itself is zero.
+        for (site_tuple, k), (W, block) in scalar_blocks.items():
+            c = 1.0/sqrt(2.0*k + 1.0)
+
+            block_norm  = sum(abs(X)**2 for X in block.values())
+            a_isotropic = sum((-1)**abs(q) * c * X for q, X in block.items())
+
+            isotropic = abs(a_isotropic)**2
+            axial     = abs(block.get(0,0.0) - c*a_isotropic)**2 / (1.0 - c**2)
+
+            add(site_tuple,'isotropic',W*isotropic)
+            add(site_tuple,exchange_class(site_tuple,[0,0]),W*axial)
+            add(site_tuple,'exchange_other',W*max(0.0,block_norm - isotropic - axial))
+
+        measure_list = []
+        for (site_tuple, class_name), measure in measures.items():
+            measure_list.append((site_tuple,class_name,measure))
+
+        def order(entry):
+            site_tuple, class_name, measure = entry
+            if class_name == 'multi_site':
+                return (3,site_tuple,class_order.index(class_name))
+            return (len(site_tuple),site_tuple,class_order.index(class_name))
+
+        measure_list.sort(key=order)
+
+        return measure_list, total
+
+
     def cartesian_vector(self,pseudospin):
         """Return a Cartesian vector (rank one tensor) representation of the rank k=1
         parameters.
@@ -1077,6 +1261,234 @@ class IwaharaChibotaruSphericalTensor:
                                         title=title,
                                         notes=notes,
                                         summary=summary,
+                                        table_type='spherical_tensor')
+
+
+    def lambda_measure_table(self, pseudospin_list, axial_sites=None, title=None,
+                             order_of_magnitude=0, threshold=1.0e-6):
+        """Return the Lambda measures of the different contributions to the
+        tensor as an instance of ResultTable. Printing the returned
+        instance, or converting it into a str, gives the human-readable
+        table.
+
+        The measure Lambda_C of a class C of terms is the root-mean-square
+        norm of the part X_C of the operator that the terms of the class
+        make up,
+
+            Lambda_C^2 = Tr(X_C^H X_C) / d = sum_{terms of C} W |X_k1q1,k2q2,...|^2,
+
+        where d is the dimension of the product space of the pseudospins
+        and W = w_k1(S_1) w_k2(S_2) ... is the product of the norm weights
+        w_k(S) = Tr(O_kq^H O_kq)/(2S + 1) of the Iwahara--Chibotaru
+        operators (see __norm_weight). The operators of different ranks and
+        components are orthogonal to each other, so that the squares
+        Lambda_C^2 of the classes add up to that of the whole operator, and
+        the measures of terms of different ranks can be compared with each
+        other, unlike the bare parameters. The constant term (all ranks
+        zero) only shifts the energies and is left out, so that the total is
+
+            Lambda^2 = Tr[(X - Tr(X)/d)^H (X - Tr(X)/d)] / d.
+
+        The method finds out which classes of terms the tensor contains and
+        tabulates those. The classes are:
+
+        One-site terms (a non-zero rank on exactly one site), for each site:
+          - the axial crystal field: the terms of even rank that commute
+            with the projection of the pseudospin of the site, i.e. q = 0;
+          - the non-axial crystal field: the terms of even rank with q != 0;
+          - the odd-rank terms, which are not crystal-field-like and which
+            vanish in a time-reversal invariant operator.
+
+        Two-site terms (non-zero ranks on exactly two sites), for each pair
+        of sites:
+          - the isotropic exchange: the part of the exchange terms that is
+            invariant under a simultaneous rotation of the two pseudospins,
+            i.e. the scalar products sum_q (-1)^q O_kq(A) O_k,-q(B) of the
+            odd ranks k (the Heisenberg exchange S_A . S_B for k = 1);
+          - the axial exchange: the exchange terms with q = 0 on a site
+            with respect to which the axial character is analysed (see
+            axial_sites). When it is analysed with respect to both sites of
+            the pair, the terms axial on the first site only, on the second
+            site only and on both sites are tabulated separately;
+          - the other exchange: the remaining exchange terms;
+          - the non-exchange terms: the two-site terms in which at least
+            one of the two ranks is even.
+        The exchange terms are those with odd ranks on both sites.
+
+        Terms acting on more than two sites form a single class.
+
+        The scalar product of an odd rank k consists of the terms with the
+        components (q,-q), of which the (0,0) term is axial and the others
+        are not, so the isotropic exchange cuts across the classes. It is
+        therefore projected out first. Of what remains of the (q,-q) terms,
+        the part along the (0,0) term with its isotropic part removed is
+        counted in the class of the (0,0) term, and the rest as other
+        exchange. For k = 1 this divides the Ising interaction S_A,z S_B,z
+        into its isotropic part S_A . S_B / 3 and the axial anisotropic
+        exchange (2 S_A,z S_B,z - S_A,x S_B,x - S_A,y S_B,y)/3, and counts
+        the z component of the Dzyaloshinskii--Moriya interaction as other
+        exchange.
+
+        The division into axial and non-axial terms depends on the
+        coordinate frame of the tensor, whereas the isotropic exchange, the
+        sums of the classes of each site and of each pair of sites, and the
+        total do not.
+
+        Arguments
+        ---------
+        pseudospin_list : list of int
+            The pseudospins of the sites of the tensor, as multiples of
+            two, in the order of the sites. For a one-site tensor a single
+            int is also accepted.
+
+        Optional arguments
+        ------------------
+        axial_sites : list of int or None
+            The indices (starting from zero) of the sites with respect to
+            which the axial character of the exchange terms is analysed.
+            Default is None, in which case the sites with a pseudospin
+            larger than 1/2 are used: a pseudospin 1/2 has no crystal
+            field, i.e. nothing in the operator singles out an axis of
+            that site for q = 0 to refer to, as is the case for an
+            isotropic spin 1/2 coupled to a J multiplet. When a pseudospin
+            1/2 stands for an anisotropic doublet whose axis is the z axis
+            of the frame, the site must be listed explicitly. An empty
+            list leaves the axial exchange out altogether. The argument
+            does not affect the crystal-field classes.
+        title : str
+            A title of the table used in the output. Default is None, in which
+            case the title 'LAMBDA MEASURES OF THE CONTRIBUTIONS TO THE TENSOR'
+            is used.
+        order_of_magnitude : int
+            Before printing, the values of Lambda will be multiplied by
+            10^order_of_magnitude and those of Lambda^2 by its square.
+            Default is 0.
+        threshold : float
+            The classes with Lambda_C not larger than threshold times the
+            total Lambda are left out of the table, as are the classes the
+            tensor has no terms of. The total always includes all terms.
+            Default is 1.0e-6.
+        """
+        if isinstance(pseudospin_list,(int,np.integer)):
+            pseudospin_list = [pseudospin_list]
+        pseudospin_list = list(pseudospin_list)
+
+        if not len(pseudospin_list) == self.n_sites:
+            self.__error("The number of pseudospins does not match the number of spin sites.\n"
+                         + "The tensor acts on {0} spin site(s) and {1} pseudospin(s) were given."
+                         .format(self.n_sites,len(pseudospin_list)))
+
+        for pseudospin in pseudospin_list:
+            if (not isinstance(pseudospin,(int,np.integer))) or (pseudospin < 0):
+                self.__error("The pseudospins must be given as non-negative integers (multiples of two).\n"
+                             + "Unknown pseudospin: " + str(pseudospin) + ".")
+
+        if axial_sites is None:
+            axial_sites = [n for n in range(0,self.n_sites) if pseudospin_list[n] > 1]
+        else:
+            axial_sites = list(axial_sites)
+            for site in axial_sites:
+                if (not isinstance(site,(int,np.integer))) or (not 0 <= site < self.n_sites):
+                    self.__error("Unknown site index in axial_sites: " + str(site) + ".\n"
+                                 + "The sites are numbered from 0 to {0}.".format(self.n_sites - 1))
+            axial_sites = sorted(set(axial_sites))
+
+        measure_list, total = self.__lambda_measures(pseudospin_list,axial_sites)
+
+        factor = 10.0**(order_of_magnitude)
+
+        def site_str(site_tuple):
+            return "-".join(str(n + 1) for n in site_tuple)
+
+        def label(site_tuple,class_name):
+            if class_name == 'multi_site':
+                return "Terms of more than two sites"
+
+            if len(site_tuple) == 1:
+                prefix = "Site " + site_str(site_tuple) + ": "
+                return prefix + {'cf_axial':       "axial crystal field",
+                                 'cf_non_axial':   "non-axial crystal field",
+                                 'one_site_other': "odd-rank terms"}[class_name]
+
+            prefix = "Sites " + site_str(site_tuple) + ": "
+            a, b   = site_tuple
+            # The word 'only' is needed when the axial character is
+            # analysed with respect to both sites of the pair.
+            if (a in axial_sites) and (b in axial_sites):
+                only = " only"
+            else:
+                only = ""
+            return prefix + {'isotropic':      "isotropic exchange",
+                             'axial_first':    "exchange axial on site {0}".format(a + 1) + only,
+                             'axial_second':   "exchange axial on site {0}".format(b + 1) + only,
+                             'axial_both':     "exchange axial on sites {0} and {1}".format(a + 1,b + 1),
+                             'exchange_other': "other exchange",
+                             'two_site_other': "non-exchange terms"}[class_name]
+
+        section_titles = {1: "One-site terms",
+                          2: "Two-site terms",
+                          3: "Terms of more than two sites"}
+
+        rows        = []
+        row_headers = []
+
+        current_section = None
+        for site_tuple, class_name, measure in measure_list:
+            if sqrt(measure) <= threshold*sqrt(total):
+                continue
+
+            section = 3 if class_name == 'multi_site' else len(site_tuple)
+            if not section == current_section:
+                rows.append(section_titles[section])
+                current_section = section
+
+            rows.append([factor*sqrt(measure),factor**2*measure,100.0*measure/total])
+            row_headers.append(label(site_tuple,class_name))
+
+        rows.append(None)
+        if total > 0.0:
+            rows.append([factor*sqrt(total),factor**2*total,100.0])
+        else:
+            rows.append([0.0,0.0,None])
+        row_headers.append("Total")
+
+        def pseudospin_str(pseudospin):
+            if pseudospin % 2 == 0:
+                return str(pseudospin//2)
+            return str(pseudospin) + "/2"
+
+        notes = []
+        if self.frame is None:
+            notes.append("Coordinate frame: unspecified")
+        else:
+            notes.append("Coordinate frame: " + self.frame)
+        notes.append("Pseudospins of the sites: "
+                     + ", ".join(pseudospin_str(pseudospin) for pseudospin in pseudospin_list))
+        notes.append("Lambda is the root-mean-square norm of a part X_C of the operator,\n"
+                     "Lambda^2 = Tr(X_C^H X_C)/d, where d is the dimension of the space.\n"
+                     "The constant term is left out. The fractions are those of Lambda^2,\n"
+                     "which is additive over the classes.")
+        if self.n_sites > 1:
+            if len(axial_sites) == 0:
+                notes.append("The axial character of the exchange is not analysed.")
+            else:
+                notes.append("The axial character of the exchange (q = 0 on the site) is analysed\n"
+                             "with respect to the site(s): "
+                             + ", ".join(str(n + 1) for n in axial_sites) + ".")
+        if not order_of_magnitude == 0:
+            notes.append("Lambda is multiplied by 10^{0} and Lambda^2 by 10^{1}."
+                         .format(order_of_magnitude,2*order_of_magnitude))
+
+        if title is None:
+            title = "LAMBDA MEASURES OF THE CONTRIBUTIONS TO THE TENSOR"
+
+        return result_table.ResultTable(rows,
+                                        column_headers=["Lambda","Lambda^2","Fraction / %"],
+                                        row_headers=row_headers,
+                                        row_header_label="Contribution",
+                                        title=title,
+                                        notes=notes,
+                                        formats=['.6f','.6f','.2f'],
                                         table_type='spherical_tensor')
 
 
@@ -1968,6 +2380,214 @@ class IwaharaChibotaruSphericalTensor:
         check('exchange decomposition prefactor',
               np.allclose(prefactor_values,-0.5*np.array(exchange_values)))
         check('exchange decomposition renders', len(str(exchange_table)) > 0)
+
+        # Lambda measures. The squares of the measures are read from the
+        # second column of the table by the header of the row.
+        def lambda_squares(table):
+            value_rows = [row for row in table_rows(table) if isinstance(row,list)]
+            return dict((header,row[1]) for header, row
+                        in zip(table.row_headers,value_rows))
+
+        # The total of a tensor against the trace of the square of its
+        # operator matrix without the constant term. The operator matrices
+        # are constructed for Hermitian tensors only.
+        def trace_norm(tensor,pseudospin_list):
+            M = debug_output.operator_matrix_from_tensor(tensor,pseudospin_list)
+            d = M.shape[0]
+            M = M - np.trace(M)/d * np.identity(d)
+            return np.trace(np.dot(M.conj().T,M)).real / d
+
+        # The norm weight of the rank k from the matrix of the operator.
+        def norm_weight(k,pseudospin):
+            if k == 0:
+                return 1.0
+            return trace_norm(cls([[2*k,0]],[1.0]),[pseudospin])
+
+        # A Hermitian tensor out of the given terms: the terms with the
+        # components inverted are added and the Hermitian conjugate of the
+        # result is added to it.
+        def hermitian_tensor(rank_list,parameter_list):
+            full_rank_list      = [list(rank_tuple) for rank_tuple in rank_list]
+            full_parameter_list = list(parameter_list)
+            for rank_tuple in rank_list:
+                inverse = [-rank_tuple[i] if i % 2 == 1 else rank_tuple[i]
+                           for i in range(0,len(rank_tuple))]
+                if inverse not in full_rank_list:
+                    full_rank_list.append(inverse)
+                    full_parameter_list.append(complex(0.0,0.0))
+            tensor = cls(full_rank_list,full_parameter_list)
+            return tensor + tensor.hermitian_conjugate()
+
+        # The norm weights of J = 15/2 against their exact values.
+        weights_ok = True
+        for k, exact_weight in ((1,17.0/45.0),(2,51.0/175.0),
+                                (7,7429.0/2925.0),(15,9694845.0)):
+            squares = lambda_squares(cls([[2*k,0]],[1.0]).lambda_measure_table(15))
+            weights_ok = weights_ok and np.isclose(squares['Total'],exact_weight)
+        check('Lambda measure norm weights of J = 15/2', weights_ok)
+
+        # A one-site tensor: the classes are told apart by the parity of
+        # the rank and by q, and the constant term is left out.
+        t_local = cls([[0,0],[2,0],[4,0],[4,2],[4,-2],[8,6],[8,-6]],
+                      [complex(5.0,0.0),complex(0.3,0.0),complex(1.1,0.0),
+                       complex(0.4,-0.2),complex(-0.4,-0.2),
+                       complex(0.0,0.7),complex(0.0,0.7)])
+        local_table = t_local.lambda_measure_table(5)
+        squares     = lambda_squares(local_table)
+        w = lambda k: norm_weight(k,5)
+        check('Lambda measures are a ResultTable',
+              isinstance(local_table,result_table.ResultTable))
+        check('Lambda measures of a one-site tensor',
+              (local_table.row_headers == ['Site 1: axial crystal field',
+                                           'Site 1: non-axial crystal field',
+                                           'Site 1: odd-rank terms','Total'])
+              and np.isclose(squares['Site 1: axial crystal field'],w(2)*1.1**2)
+              and np.isclose(squares['Site 1: non-axial crystal field'],
+                             w(2)*2.0*0.2 + w(4)*2.0*0.49)
+              and np.isclose(squares['Site 1: odd-rank terms'],w(1)*0.09))
+        check('Lambda measure total matches the operator norm (one site)',
+              np.isclose(squares['Total'],trace_norm(t_local,[5])))
+        fractions = [row[2] for row in table_rows(local_table) if isinstance(row,list)]
+        check('Lambda measure fractions add up to 100 %',
+              np.isclose(sum(fractions[:-1]),100.0) and np.isclose(fractions[-1],100.0))
+        scaled_row = [row for row in table_rows(t_local.lambda_measure_table(
+                          [5],order_of_magnitude=2)) if isinstance(row,list)][-1]
+        check('Lambda measure order_of_magnitude',
+              np.isclose(scaled_row[0],1.0e2*sqrt(squares['Total']))
+              and np.isclose(scaled_row[1],1.0e4*squares['Total'])
+              and np.isclose(scaled_row[2],100.0))
+        # A class below the threshold is left out of the table but not of
+        # the total.
+        t_small = cls([[4,0],[2,0]],[complex(1.0,0.0),complex(1.0e-9,0.0)])
+        check('Lambda measure threshold',
+              (t_small.lambda_measure_table(5).row_headers
+               == ['Site 1: axial crystal field','Total'])
+              and (len(t_small.lambda_measure_table(5,threshold=0.0).row_headers) == 3))
+
+        # A pseudospin J = 5/2 coupled to a spin S = 1/2: a random Hermitian
+        # tensor of all the ranks against the explicit expressions of the
+        # measures of this system. The spin 1/2 is by default not a site the
+        # axial character is analysed with respect to.
+        random_state = np.random.RandomState(20260711)
+        JS_rank_list = [[2*k1,2*q1,2*k2,2*q2]
+                        for k1 in range(0,6) for q1 in range(-k1,k1+1)
+                        for k2 in range(0,2) for q2 in range(-k2,k2+1)]
+        t_JS = cls(JS_rank_list,[complex(random_state.normal(),random_state.normal())
+                                 for rank_tuple in JS_rank_list])
+        t_JS = t_JS + t_JS.hermitian_conjugate()
+
+        def X(k1,q1,k2,q2):
+            return t_JS.parameter_list[t_JS.rank_list.index([2*k1,2*q1,2*k2,2*q2])]
+        def W(k1,k2):
+            return norm_weight(k1,5)*norm_weight(k2,1)
+
+        cf_axial = sum(W(k,0)*abs(X(k,0,0,0))**2 for k in (2,4))
+        cf_other = sum(W(k,0)*abs(X(k,q,0,0))**2
+                       for k in (2,4) for q in range(-k,k+1) if not q == 0)
+        ex_axial = sum(W(k,1)*abs(X(k,0,1,q2))**2 for k in (3,5) for q2 in (-1,0,1))
+        ex_other = sum(W(k,1)*abs(X(k,q1,1,q2))**2 for k in (3,5)
+                       for q1 in range(-k,k+1) if not q1 == 0 for q2 in (-1,0,1))
+        X_u = X(1,0,1,0).real
+        X_r = X(1,1,1,-1).real
+        X_d = X(1,1,1,-1).imag
+        X_s = (X_u - 2.0*X_r)/3.0
+        X_t = 2.0*(X_u + X_r)/3.0
+        ex_isotropic = 3.0*W(1,1)*X_s**2
+        ex_axial += W(1,1)*(1.5*X_t**2 + abs(X(1,0,1,1))**2 + abs(X(1,0,1,-1))**2)
+        ex_other += W(1,1)*(sum(abs(X(1,q,1,0))**2 + abs(X(1,q,1,q))**2 for q in (-1,1))
+                            + 2.0*X_d**2)
+
+        squares = lambda_squares(t_JS.lambda_measure_table([5,1]))
+        check('Lambda measures of the crystal field of a J-S system',
+              np.isclose(squares['Site 1: axial crystal field'],cf_axial)
+              and np.isclose(squares['Site 1: non-axial crystal field'],cf_other))
+        check('Lambda measures of the exchange of a J-S system',
+              np.isclose(squares['Sites 1-2: isotropic exchange'],ex_isotropic)
+              and np.isclose(squares['Sites 1-2: exchange axial on site 1'],ex_axial)
+              and np.isclose(squares['Sites 1-2: other exchange'],ex_other))
+        check('Lambda measure total matches the operator norm (two sites)',
+              np.isclose(squares['Total'],trace_norm(t_JS,[5,1]))
+              and np.isclose(squares['Total'],
+                             sum(value for header, value in squares.items()
+                                 if not header == 'Total')))
+        check('Lambda measure classes outside the crystal field and the exchange',
+              ('Site 1: odd-rank terms' in squares)
+              and ('Site 2: odd-rank terms' in squares)
+              and ('Sites 1-2: non-exchange terms' in squares))
+
+        # With both sites analysed the axial exchange is divided into three
+        # classes, which add up to the same exchange as before.
+        squares_both = lambda_squares(t_JS.lambda_measure_table([5,1],axial_sites=[0,1]))
+        check('Lambda measures with the axial character analysed on both sites',
+              np.isclose(squares_both['Sites 1-2: exchange axial on site 1 only']
+                         + squares_both['Sites 1-2: exchange axial on sites 1 and 2'],
+                         ex_axial)
+              and np.isclose(squares_both['Sites 1-2: exchange axial on site 2 only']
+                             + squares_both['Sites 1-2: other exchange'],ex_other)
+              and np.isclose(squares_both['Sites 1-2: isotropic exchange'],ex_isotropic))
+
+        # The isotropic exchange and the total do not depend on the frame.
+        t_JS_rotated = deepcopy(t_JS)
+        t_JS_rotated.rotate(rotation)
+        squares_rotated = lambda_squares(t_JS_rotated.lambda_measure_table([5,1]))
+        check('isotropic exchange and total are invariant in a rotation',
+              np.isclose(squares_rotated['Sites 1-2: isotropic exchange'],ex_isotropic)
+              and np.isclose(squares_rotated['Total'],squares['Total'])
+              and not np.isclose(squares_rotated['Sites 1-2: other exchange'],ex_other))
+
+        # The Heisenberg operator is purely isotropic, and the Ising
+        # operator is one third isotropic and two thirds axial.
+        check('Lambda measures of the Heisenberg operator',
+              t_isotropic.lambda_measure_table([pseudospin_A,pseudospin_B]).row_headers
+              == ['Sites 1-2: isotropic exchange','Total'])
+        squares = lambda_squares(t_ising.lambda_measure_table([pseudospin_A,pseudospin_B]))
+        check('Lambda measures of the Ising operator',
+              (len(squares) == 3)
+              and np.isclose(squares['Sites 1-2: isotropic exchange'],squares['Total']/3.0)
+              and np.isclose(squares['Sites 1-2: exchange axial on site 1'],
+                             2.0*squares['Total']/3.0))
+        squares = lambda_squares(t_ising.lambda_measure_table([pseudospin_A,pseudospin_B],
+                                                              axial_sites=[]))
+        check('Lambda measures without the axial classes',
+              (len(squares) == 3)
+              and np.isclose(squares['Sites 1-2: other exchange'],2.0*squares['Total']/3.0))
+
+        # The scalar product of the rank-3 operators of two spins 3/2 is
+        # isotropic exchange as well.
+        t_scalar = cls([[6,2*q,6,-2*q] for q in range(-3,4)],
+                       [complex((-1.0)**abs(q),0.0) for q in range(-3,4)])
+        check('Lambda measures of a rank-3 scalar product',
+              t_scalar.lambda_measure_table([3,3]).row_headers
+              == ['Sites 1-2: isotropic exchange','Total'])
+
+        # A three-site tensor: each pair of sites is analysed on its own,
+        # and the terms of more than two sites form a single class.
+        t_three = hermitian_tensor([[2,0,0,0,0,0],[4,2,0,0,0,0],[0,0,4,0,0,0],
+                                    [2,0,2,0,0,0],[4,0,4,2,0,0],[2,2,0,0,2,-2],
+                                    [0,0,2,2,2,0],[2,0,2,2,2,-2],[4,0,2,0,2,0]],
+                                   [complex(0.3,0.0),complex(0.2,0.1),complex(-0.8,0.0),
+                                    complex(1.2,0.0),complex(0.0,0.5),complex(0.6,-0.3),
+                                    complex(0.4,0.4),complex(0.7,0.0),complex(-0.2,0.9)])
+        three_table = t_three.lambda_measure_table([2,2,1])
+        squares     = lambda_squares(three_table)
+        check('Lambda measure classes of a three-site tensor',
+              three_table.row_headers
+              == ['Site 1: non-axial crystal field','Site 1: odd-rank terms',
+                  'Site 2: axial crystal field',
+                  'Sites 1-2: isotropic exchange',
+                  'Sites 1-2: exchange axial on sites 1 and 2',
+                  'Sites 1-2: non-exchange terms',
+                  'Sites 1-3: isotropic exchange',
+                  'Sites 1-3: exchange axial on site 1',
+                  'Sites 1-3: other exchange',
+                  'Sites 2-3: other exchange',
+                  'Terms of more than two sites','Total'])
+        check('Lambda measure total matches the operator norm (three sites)',
+              np.isclose(squares['Total'],trace_norm(t_three,[2,2,1]))
+              and np.isclose(squares['Total'],
+                             sum(value for header, value in squares.items()
+                                 if not header == 'Total')))
+        check('Lambda measure table renders', len(str(three_table)) > 0)
 
         # Coordinate frame labels: the default frame is unspecified, an
         # attached label is printed, addition keeps the label only when
